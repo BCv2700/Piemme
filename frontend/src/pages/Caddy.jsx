@@ -9,7 +9,8 @@ export default function Caddy() {
   const [table, setTable] = useState(null);
   const [articles, setArticles] = useState([]);
   const [lignes, setLignes] = useState([]);
-  const [typeArticle, setTypeArticle] = useState(null);
+  const [codeVente, setCodeVente] = useState(null); // niveau 1 : code_vente (Boissons Alcools, Nourriture...)
+  const [categorie, setCategorie] = useState(null); // niveau 2 : type_article (2. APERITIF, VIN ROUGE...)
   const [emporte, setEmporte] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -33,14 +34,42 @@ export default function Caddy() {
 
   useEffect(() => { load(); }, [tableId]);
 
-  // Liste des types d'article présents, dans l'ordre d'apparition
-  const types = [...new Set(articles.map(a => a.type_article || 'Sans type'))];
+  const LIBELLES_CODE_VENTE = {
+    7001: 'Boissons Alcools',
+    7002: 'Nourriture',
+    7003: 'Boissons Softs',
+    7004: 'Boissons Vins',
+    7005: 'Divers',
+  };
+
+  // Niveau 1 : codes de vente présents (Boissons Alcools, Nourriture...), dans l'ordre des codes
+  const codesVente = [...new Set(articles.map(a => a.code_vente))]
+    .filter(c => c != null)
+    .sort((a, b) => a - b);
 
   useEffect(() => {
-    if (!typeArticle && types.length > 0) setTypeArticle(types[0]);
-  }, [types, typeArticle]);
+    if (!codeVente && codesVente.length > 0) setCodeVente(codesVente[0]);
+  }, [codesVente, codeVente]);
 
-  const articlesAffiches = articles.filter(a => (a.type_article || 'Sans type') === typeArticle);
+  // Niveau 2 : types précis disponibles pour le code de vente sélectionné (2. APERITIF, VIN ROUGE, 4A. PÂTES...)
+  const typesNiveau2 = [...new Set(
+    articles
+      .filter(a => a.code_vente === codeVente)
+      .map(a => a.type_article || 'Sans type')
+  )];
+
+  // Quand on change de code de vente (niveau 1), on resélectionne le premier type disponible
+  useEffect(() => {
+    if (typesNiveau2.length > 0 && !typesNiveau2.includes(categorie)) {
+      setCategorie(typesNiveau2[0]);
+    }
+  }, [typesNiveau2, categorie]);
+
+  // Niveau 3 : articles du type sélectionné
+  const articlesAffiches = articles.filter(a =>
+    a.code_vente === codeVente &&
+    (a.type_article || 'Sans type') === categorie
+  );
 
   const ajouterArticle = async (article) => {
     setError('');
@@ -136,26 +165,68 @@ export default function Caddy() {
           </label>
         </div>
 
-        <div style={{ display: 'flex', gap: 20 }}>
+        <div style={{ display: 'flex', gap: 16 }}>
 
-          {/* Colonne gauche : types d'article + articles */}
+          {/* Colonne 1 : codes de vente (Boissons Alcools, Nourriture, Boissons Softs, Boissons Vins, Divers) */}
+          <div style={{ width: 150, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {codesVente.map(code => (
+              <button
+                key={code}
+                className="btn"
+                style={{
+                  background: codeVente === code ? '#111' : 'white',
+                  color: codeVente === code ? 'white' : '#333',
+                  fontWeight: 600,
+                  padding: '14px 10px',
+                }}
+                onClick={() => setCodeVente(code)}
+              >
+                {LIBELLES_CODE_VENTE[code] || code}
+              </button>
+            ))}
+          </div>
+
+          {/* Colonne 2 : types précis (liste verticale) */}
+          <div style={{
+            width: 170,
+            flexShrink: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+            background: 'white',
+            border: '1px solid #e5e5e0',
+            borderRadius: 10,
+            padding: 8,
+            height: 'fit-content',
+            maxHeight: 560,
+            overflowY: 'auto',
+          }}>
+            {typesNiveau2.map(t => (
+              <button
+                key={t}
+                onClick={() => setCategorie(t)}
+                style={{
+                  textAlign: 'left',
+                  padding: '10px 12px',
+                  borderRadius: 6,
+                  border: 'none',
+                  fontSize: 13,
+                  fontWeight: categorie === t ? 600 : 400,
+                  background: categorie === t ? '#f0f0ee' : 'transparent',
+                  color: '#222',
+                  cursor: 'pointer',
+                }}
+              >
+                {t}
+              </button>
+            ))}
+            {typesNiveau2.length === 0 && (
+              <div style={{ color: '#888', fontSize: 13, padding: 8 }}>Aucun type</div>
+            )}
+          </div>
+
+          {/* Colonne 3 : articles de la catégorie sélectionnée */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-              {types.map(type => (
-                <button
-                  key={type}
-                  className="btn"
-                  style={{
-                    background: typeArticle === type ? '#111' : 'white',
-                    color: typeArticle === type ? 'white' : '#333',
-                  }}
-                  onClick={() => setTypeArticle(type)}
-                >
-                  {type}
-                </button>
-              ))}
-            </div>
-
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
@@ -183,14 +254,14 @@ export default function Caddy() {
                 );
               })}
               {articlesAffiches.length === 0 && (
-                <div style={{ color: '#888', fontSize: 13 }}>Aucun article dans ce type</div>
+                <div style={{ color: '#888', fontSize: 13 }}>Aucun article dans cette catégorie</div>
               )}
             </div>
           </div>
 
-          {/* Colonne droite : ticket de caisse */}
+          {/* Colonne 4 : ticket de caisse */}
           <div style={{
-            width: 320,
+            width: 300,
             flexShrink: 0,
             background: 'white',
             border: '1px solid #e5e5e0',

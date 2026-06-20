@@ -6,6 +6,7 @@ class ArticleBase(BaseModel):
     nom: str
     categorie: Optional[str] = None
     type_article: Optional[str] = None
+    code_vente: Optional[int] = None
     tva: Decimal = Decimal("21")
     tva_away: Optional[Decimal] = None
     prix_achat: Decimal = Decimal("0")
@@ -26,6 +27,7 @@ class ArticleUpdate(BaseModel):
     nom: Optional[str] = None
     categorie: Optional[str] = None
     type_article: Optional[str] = None
+    code_vente: Optional[int] = None
     tva: Optional[Decimal] = None
     tva_away: Optional[Decimal] = None
     prix_achat: Optional[Decimal] = None
