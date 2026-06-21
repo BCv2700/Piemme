@@ -156,103 +156,99 @@ export default function PlanSalle() {
           <span style={{ marginLeft: 'auto' }}>Glissez une table pour la déplacer · Cliquez pour ouvrir le caddy</span>
         </div>
 
-        <div style={{ display: 'flex', gap: 16 }}>
-          <div
-            ref={roomRef}
-            style={{
-              position: 'relative',
-              flex: 1,
-              height: 560,
-              background: 'white',
-              border: '1px solid #e5e5e0',
-              borderRadius: 10,
-              overflow: 'hidden',
-            }}
-          >
-            {tables.map(table => (
+        <div
+          ref={roomRef}
+          style={{
+            position: 'relative',
+            width: '100%',
+            height: 560,
+            background: 'white',
+            border: '1px solid #e5e5e0',
+            borderRadius: 10,
+            overflow: 'hidden',
+            marginBottom: 16,
+          }}
+        >
+          {tables.map(table => (
+            <div
+              key={table.id}
+              id={'table-' + table.id}
+              onMouseDown={(e) => handleMouseDown(e, table)}
+              style={{
+                position: 'absolute',
+                left: table.pos_x,
+                top: table.pos_y,
+                width: table.forme === 'rond' ? 64 : (table.capacite >= 6 ? 100 : 80),
+                height: table.forme === 'rond' ? 64 : 56,
+                borderRadius: table.forme === 'rond' ? '50%' : 10,
+                background: STATUT_COLOR[table.statut] || '#9ca3af',
+                color: 'white',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: table.statut === 'indisponible' ? 'not-allowed' : 'grab',
+                opacity: table.statut === 'indisponible' ? 0.6 : 1,
+                userSelect: 'none',
+                WebkitTouchCallout: 'none',
+                fontSize: 13,
+                fontWeight: 600,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+              }}
+              title={table.nom + ' — ' + STATUT_LABEL[table.statut]}
+            >
+              <span>{table.nom}</span>
+              <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>{table.capacite}p</span>
+            </div>
+          ))}
+        </div>
+
+        <div
+          style={{
+            background: 'white',
+            border: '1px solid #e5e5e0',
+            borderRadius: 10,
+            padding: 16,
+          }}
+        >
+          <div style={{ fontSize: 12, color: '#888', fontWeight: 600, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+            Statut des tables
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            {[...tables].sort((a, b) => a.nom.localeCompare(b.nom, undefined, { numeric: true })).map(table => (
               <div
                 key={table.id}
-                id={'table-' + table.id}
-                onMouseDown={(e) => handleMouseDown(e, table)}
                 style={{
-                  position: 'absolute',
-                  left: table.pos_x,
-                  top: table.pos_y,
-                  width: table.forme === 'rond' ? 64 : (table.capacite >= 6 ? 100 : 80),
-                  height: table.forme === 'rond' ? 64 : 56,
-                  borderRadius: table.forme === 'rond' ? '50%' : 10,
-                  background: STATUT_COLOR[table.statut] || '#9ca3af',
-                  color: 'white',
                   display: 'flex',
-                  flexDirection: 'column',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: table.statut === 'indisponible' ? 'not-allowed' : 'grab',
-                  opacity: table.statut === 'indisponible' ? 0.6 : 1,
-                  userSelect: 'none',
-                  WebkitTouchCallout: 'none',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: '1px solid #eee',
+                  borderRadius: 8,
+                  minWidth: 150,
                 }}
-                title={table.nom + ' — ' + STATUT_LABEL[table.statut]}
               >
-                <span>{table.nom}</span>
-                <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>{table.capacite}p</span>
-              </div>
-            ))}
-          </div>
-
-          <div
-            style={{
-              width: 260,
-              flexShrink: 0,
-              background: 'white',
-              border: '1px solid #e5e5e0',
-              borderRadius: 10,
-              padding: 12,
-              height: 560,
-              overflowY: 'auto',
-            }}
-          >
-            <div style={{ fontSize: 12, color: '#888', fontWeight: 600, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-              Statut des tables
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[...tables].sort((a, b) => a.nom.localeCompare(b.nom, undefined, { numeric: true })).map(table => (
-                <div
-                  key={table.id}
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>{table.nom}</span>
+                <select
+                  value={table.statut}
+                  onChange={(e) => changerStatut(table.id, e.target.value)}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 8,
-                    padding: '8px 10px',
-                    border: '1px solid #eee',
-                    borderRadius: 8,
+                    fontSize: 12,
+                    padding: '4px 6px',
+                    borderRadius: 6,
+                    border: '1px solid #ddd',
+                    color: STATUT_COLOR[table.statut] || '#555',
+                    fontWeight: 600,
+                    background: 'white',
+                    flex: 1,
                   }}
                 >
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>{table.nom}</span>
-                  <select
-                    value={table.statut}
-                    onChange={(e) => changerStatut(table.id, e.target.value)}
-                    style={{
-                      fontSize: 12,
-                      padding: '4px 6px',
-                      borderRadius: 6,
-                      border: '1px solid #ddd',
-                      color: STATUT_COLOR[table.statut] || '#555',
-                      fontWeight: 600,
-                      background: 'white',
-                    }}
-                  >
-                    {Object.entries(STATUT_LABEL).map(([key, label]) => (
-                      <option key={key} value={key}>{label}</option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-            </div>
+                  {Object.entries(STATUT_LABEL).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
           </div>
         </div>
       </div>
