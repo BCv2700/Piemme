@@ -7,9 +7,17 @@ from app.models.encaissement import Encaissement
 from app.models.encaissement_ligne import EncaissementLigne
 from app.models.commande import Commande
 from app.models.table import Table
-from app.schemas.encaissement import EncaissementOut, EncaissementCreate
+from app.schemas.encaissement import (
+    EncaissementOut,
+    EncaissementCreate,
+    EncaissementUpdate,
+    EncaissementLigneOut,
+    EncaissementLigneCreate,
+    EncaissementLigneUpdate,
+)
 
 router = APIRouter(prefix="/encaissements", tags=["Encaissements"])
+
 
 @router.get("/", response_model=list[EncaissementOut])
 def list_encaissements(
@@ -24,12 +32,14 @@ def list_encaissements(
         query = query.filter(Encaissement.date_encaissement <= date_fin)
     return query.order_by(Encaissement.date_encaissement.desc()).all()
 
+
 @router.get("/{encaissement_id}", response_model=EncaissementOut)
 def get_encaissement(encaissement_id: int, db: Session = Depends(get_db)):
     enc = db.query(Encaissement).filter(Encaissement.id == encaissement_id).first()
     if not enc:
         raise HTTPException(status_code=404, detail="Encaissement introuvable")
     return enc
+
 
 @router.post("/", response_model=EncaissementOut)
 def create_encaissement(payload: EncaissementCreate, db: Session = Depends(get_db)):
@@ -56,3 +66,76 @@ def create_encaissement(payload: EncaissementCreate, db: Session = Depends(get_d
     db.commit()
     db.refresh(db_encaissement)
     return db_encaissement
+
+
+@router.patch("/{encaissement_id}", response_model=EncaissementOut)
+def update_encaissement(encaissement_id: int, payload: EncaissementUpdate, db: Session = Depends(get_db)):
+    """
+    Modifie les champs d'un encaissement (montants, date, table, remarque...),
+    sans toucher aux lignes. Utiliser les endpoints /lignes pour le détail des articles.
+    """
+    db_encaissement = db.query(Encaissement).filter(Encaissement.id == encaissement_id).first()
+    if not db_encaissement:
+        raise HTTPException(status_code=404, detail="Encaissement introuvable")
+    for key, value in payload.dict(exclude_unset=True).items():
+        setattr(db_encaissement, key, value)
+    db.commit()
+    db.refresh(db_encaissement)
+    return db_encaissement
+
+
+@router.delete("/{encaissement_id}")
+def delete_encaissement(encaissement_id: int, db: Session = Depends(get_db)):
+    """
+    Supprime un encaissement et toutes ses lignes (cascade défini sur le modèle).
+    """
+    db_encaissement = db.query(Encaissement).filter(Encaissement.id == encaissement_id).first()
+    if not db_encaissement:
+        raise HTTPException(status_code=404, detail="Encaissement introuvable")
+    db.delete(db_encaissement)
+    db.commit()
+    return {"message": "Encaissement supprimé"}
+
+
+@router.post("/{encaissement_id}/lignes", response_model=EncaissementLigneOut)
+def add_ligne(encaissement_id: int, payload: EncaissementLigneCreate, db: Session = Depends(get_db)):
+    """
+    Ajoute une ligne (article) à un encaissement existant.
+    """
+    db_encaissement = db.query(Encaissement).filter(Encaissement.id == encaissement_id).first()
+    if not db_encaissement:
+        raise HTTPException(status_code=404, detail="Encaissement introuvable")
+    db_ligne = EncaissementLigne(encaissement_id=encaissement_id, **payload.dict())
+    db.add(db_ligne)
+    db.commit()
+    db.refresh(db_ligne)
+    return db_ligne
+
+
+@router.patch("/lignes/{ligne_id}", response_model=EncaissementLigneOut)
+def update_ligne(ligne_id: int, payload: EncaissementLigneUpdate, db: Session = Depends(get_db)):
+    """
+    Modifie une ligne (article, quantité, prix, tva) sans toucher aux autres lignes
+    ni au montant_total de l'encaissement parent.
+    """
+    db_ligne = db.query(EncaissementLigne).filter(EncaissementLigne.id == ligne_id).first()
+    if not db_ligne:
+        raise HTTPException(status_code=404, detail="Ligne introuvable")
+    for key, value in payload.dict(exclude_unset=True).items():
+        setattr(db_ligne, key, value)
+    db.commit()
+    db.refresh(db_ligne)
+    return db_ligne
+
+
+@router.delete("/lignes/{ligne_id}")
+def delete_ligne(ligne_id: int, db: Session = Depends(get_db)):
+    """
+    Supprime une ligne individuelle d'un encaissement.
+    """
+    db_ligne = db.query(EncaissementLigne).filter(EncaissementLigne.id == ligne_id).first()
+    if not db_ligne:
+        raise HTTPException(status_code=404, detail="Ligne introuvable")
+    db.delete(db_ligne)
+    db.commit()
+    return {"message": "Ligne supprimée"}

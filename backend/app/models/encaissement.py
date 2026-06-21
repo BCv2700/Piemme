@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Boolean, Numeric, DateTime, Text, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -16,3 +17,10 @@ class Encaissement(Base):
     serveur             = Column(String(50))
     date_encaissement   = Column(DateTime, server_default=func.now())
     remarque            = Column(Text)
+
+    lignes = relationship(
+        "EncaissementLigne",
+        backref="encaissement",
+        cascade="all, delete-orphan",
+        lazy="joined",
+    )

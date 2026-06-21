@@ -17,6 +17,16 @@ class EncaissementLigneOut(EncaissementLigneBase):
     class Config:
         from_attributes = True
 
+class EncaissementLigneUpdate(BaseModel):
+    article_id: Optional[int] = None
+    article_nom: Optional[str] = None
+    quantite: Optional[Decimal] = None
+    prix_vente: Optional[Decimal] = None
+    tva: Optional[Decimal] = None
+
+class EncaissementLigneCreate(EncaissementLigneBase):
+    pass
+
 class EncaissementBase(BaseModel):
     table_nom: Optional[str] = None
     client_id: Optional[int] = None
@@ -31,6 +41,19 @@ class EncaissementBase(BaseModel):
 
 class EncaissementCreate(EncaissementBase):
     lignes: List[EncaissementLigneBase] = []
+
+class EncaissementUpdate(BaseModel):
+    table_nom: Optional[str] = None
+    client_id: Optional[int] = None
+    montant_carte: Optional[Decimal] = None
+    montant_cash: Optional[Decimal] = None
+    montant_total: Optional[Decimal] = None
+    nb_personnes: Optional[int] = None
+    emporte: Optional[bool] = None
+    depenses: Optional[bool] = None
+    serveur: Optional[str] = None
+    remarque: Optional[str] = None
+    date_encaissement: Optional[datetime] = None
 
 class EncaissementOut(EncaissementBase):
     id: int
