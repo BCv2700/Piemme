@@ -20,10 +20,8 @@ export default function PlanSalle() {
   const [tables, setTables] = useState([]);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
-  const [selected, setSelected] = useState(null);
   const roomRef = useRef(null);
   const dragRef = useRef(null);
-  const longPressRef = useRef(null);
   const navigate = useNavigate();
 
   const load = () => api.get('/tables/').then(r => setTables(r.data)).catch(() => setError('Impossible de charger le plan de salle'));
@@ -89,51 +87,10 @@ export default function PlanSalle() {
     window.addEventListener('mouseup', onUp);
   };
 
-  const handleContextMenu = (e, table) => {
-    e.preventDefault();
-    setSelected(table);
-  };
-
-  const handleTouchStart = (e, table) => {
-    longPressRef.current = {
-      triggered: false,
-      startX: e.touches[0].clientX,
-      startY: e.touches[0].clientY,
-    };
-    const timer = setTimeout(() => {
-      if (longPressRef.current) {
-        longPressRef.current.triggered = true;
-        setSelected(table);
-      }
-    }, 550);
-    longPressRef.current.timer = timer;
-  };
-
-  const handleTouchMove = (e) => {
-    if (!longPressRef.current) return;
-    const dx = Math.abs(e.touches[0].clientX - longPressRef.current.startX);
-    const dy = Math.abs(e.touches[0].clientY - longPressRef.current.startY);
-    if (dx > 10 || dy > 10) {
-      clearTimeout(longPressRef.current.timer);
-      longPressRef.current = null;
-    }
-  };
-
-  const handleTouchEnd = (e) => {
-    if (longPressRef.current) {
-      clearTimeout(longPressRef.current.timer);
-      if (longPressRef.current.triggered) {
-        e.preventDefault();
-      }
-      longPressRef.current = null;
-    }
-  };
-
   const changerStatut = async (id, statut) => {
     try {
       await api.patch('/tables/' + id, { statut });
       setMsg({ type: 'success', text: 'Statut mis à jour' });
-      setSelected(null);
       load();
     } catch (e) {
       setMsg({ type: 'error', text: e.response?.data?.detail || 'Erreur' });
@@ -196,95 +153,109 @@ export default function PlanSalle() {
               {label}
             </span>
           ))}
-          <span style={{ marginLeft: 'auto' }}>Glissez une table pour la déplacer · Clic gauche pour ouvrir le caddy · Clic droit ou appui long pour changer le statut</span>
+          <span style={{ marginLeft: 'auto' }}>Glissez une table pour la déplacer · Cliquez pour ouvrir le caddy</span>
         </div>
 
-        <div
-          ref={roomRef}
-          style={{
-            position: 'relative',
-            width: '100%',
-            height: 560,
-            background: 'white',
-            border: '1px solid #e5e5e0',
-            borderRadius: 10,
-            overflow: 'hidden',
-          }}
-        >
-          {tables.map(table => (
-            <div
-              key={table.id}
-              id={'table-' + table.id}
-              onMouseDown={(e) => handleMouseDown(e, table)}
-              onContextMenu={(e) => handleContextMenu(e, table)}
-              onTouchStart={(e) => handleTouchStart(e, table)}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
-              style={{
-                position: 'absolute',
-                left: table.pos_x,
-                top: table.pos_y,
-                width: table.forme === 'rond' ? 64 : (table.capacite >= 6 ? 100 : 80),
-                height: table.forme === 'rond' ? 64 : 56,
-                borderRadius: table.forme === 'rond' ? '50%' : 10,
-                background: STATUT_COLOR[table.statut] || '#9ca3af',
-                color: 'white',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: table.statut === 'indisponible' ? 'not-allowed' : 'grab',
-                opacity: table.statut === 'indisponible' ? 0.6 : 1,
-                userSelect: 'none',
-                WebkitTouchCallout: 'none',
-                fontSize: 13,
-                fontWeight: 600,
-                boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
-              }}
-              title={table.nom + ' — ' + STATUT_LABEL[table.statut]}
-            >
-              <span>{table.nom}</span>
-              <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>{table.capacite}p</span>
+        <div style={{ display: 'flex', gap: 16 }}>
+          <div
+            ref={roomRef}
+            style={{
+              position: 'relative',
+              flex: 1,
+              height: 560,
+              background: 'white',
+              border: '1px solid #e5e5e0',
+              borderRadius: 10,
+              overflow: 'hidden',
+            }}
+          >
+            {tables.map(table => (
+              <div
+                key={table.id}
+                id={'table-' + table.id}
+                onMouseDown={(e) => handleMouseDown(e, table)}
+                style={{
+                  position: 'absolute',
+                  left: table.pos_x,
+                  top: table.pos_y,
+                  width: table.forme === 'rond' ? 64 : (table.capacite >= 6 ? 100 : 80),
+                  height: table.forme === 'rond' ? 64 : 56,
+                  borderRadius: table.forme === 'rond' ? '50%' : 10,
+                  background: STATUT_COLOR[table.statut] || '#9ca3af',
+                  color: 'white',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: table.statut === 'indisponible' ? 'not-allowed' : 'grab',
+                  opacity: table.statut === 'indisponible' ? 0.6 : 1,
+                  userSelect: 'none',
+                  WebkitTouchCallout: 'none',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                }}
+                title={table.nom + ' — ' + STATUT_LABEL[table.statut]}
+              >
+                <span>{table.nom}</span>
+                <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>{table.capacite}p</span>
+              </div>
+            ))}
+          </div>
+
+          <div
+            style={{
+              width: 260,
+              flexShrink: 0,
+              background: 'white',
+              border: '1px solid #e5e5e0',
+              borderRadius: 10,
+              padding: 12,
+              height: 560,
+              overflowY: 'auto',
+            }}
+          >
+            <div style={{ fontSize: 12, color: '#888', fontWeight: 600, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+              Statut des tables
             </div>
-          ))}
-        </div>
-      </div>
-
-      {selected && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
-        }}>
-          <div style={{ background: 'white', borderRadius: 10, padding: 24, width: 320 }}>
-            <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 4 }}>{selected.nom}</div>
-            <div style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>{selected.capacite} places</div>
-
-            <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>Changer le statut</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
-              {Object.entries(STATUT_LABEL).map(([key, label]) => (
-                <button
-                  key={key}
-                  className="btn"
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[...tables].sort((a, b) => a.nom.localeCompare(b.nom, undefined, { numeric: true })).map(table => (
+                <div
+                  key={table.id}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'flex-start',
-                    borderColor: selected.statut === key ? STATUT_COLOR[key] : '#ddd',
-                    color: selected.statut === key ? STATUT_COLOR[key] : '#555',
-                    fontWeight: selected.statut === key ? 600 : 400,
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    padding: '8px 10px',
+                    border: '1px solid #eee',
+                    borderRadius: 8,
                   }}
-                  onClick={() => changerStatut(selected.id, key)}
                 >
-                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: STATUT_COLOR[key], display: 'inline-block', marginRight: 8 }} />
-                  {label}
-                </button>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>{table.nom}</span>
+                  <select
+                    value={table.statut}
+                    onChange={(e) => changerStatut(table.id, e.target.value)}
+                    style={{
+                      fontSize: 12,
+                      padding: '4px 6px',
+                      borderRadius: 6,
+                      border: '1px solid #ddd',
+                      color: STATUT_COLOR[table.statut] || '#555',
+                      fontWeight: 600,
+                      background: 'white',
+                    }}
+                  >
+                    {Object.entries(STATUT_LABEL).map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </select>
+                </div>
               ))}
             </div>
-
-            <button className="btn" style={{ width: '100%' }} onClick={() => setSelected(null)}>Fermer</button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
