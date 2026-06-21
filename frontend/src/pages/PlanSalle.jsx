@@ -214,43 +214,53 @@ export default function PlanSalle() {
             marginBottom: 16,
           }}
         >
-          {tables.map(table => (
-            <div
-              key={table.id}
-              id={'table-' + table.id}
-              onMouseDown={(e) => handleMouseDown(e, table)}
-              onDoubleClick={(e) => handleDoubleClick(e, table)}
-              style={{
-                position: 'absolute',
-                left: table.pos_x,
-                top: table.pos_y,
-                width: table.forme === 'rond' ? 64 : (table.capacite >= 6 ? 100 : 80),
-                height: table.forme === 'rond' ? 64 : 56,
-                borderRadius: table.forme === 'rond' ? '50%' : 10,
-                background: STATUT_COLOR[table.statut] || '#9ca3af',
-                color: 'white',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: table.statut === 'indisponible' ? 'not-allowed' : 'grab',
-                opacity: table.statut === 'indisponible' ? 0.6 : 1,
-                userSelect: 'none',
-                WebkitTouchCallout: 'none',
-                fontSize: 13,
-                fontWeight: 600,
-                boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
-              }}
-              title={table.nom + ' — ' + STATUT_LABEL[table.statut] + (table.nom_reservation ? ' — ' + table.nom_reservation : '')}
-            >
-              <span>{table.nom}</span>
-              {table.nom_reservation ? (
-                <span style={{ fontSize: 9, fontWeight: 500, opacity: 0.9, maxWidth: '90%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{table.nom_reservation}</span>
-              ) : (
-                <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>{table.capacite}p</span>
-              )}
-            </div>
-          ))}
+          {tables.map(table => {
+            const heure = table.heure_arrivee
+              ? new Date(table.heure_arrivee).toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' })
+              : null;
+            const hasReservation = !!(table.nom_reservation || heure);
+            return (
+              <div
+                key={table.id}
+                id={'table-' + table.id}
+                onMouseDown={(e) => handleMouseDown(e, table)}
+                onDoubleClick={(e) => handleDoubleClick(e, table)}
+                style={{
+                  position: 'absolute',
+                  left: table.pos_x,
+                  top: table.pos_y,
+                  width: table.forme === 'rond' ? 64 : (table.capacite >= 6 ? 100 : 80),
+                  height: table.forme === 'rond' ? 64 : (hasReservation ? 70 : 56),
+                  borderRadius: table.forme === 'rond' ? '50%' : 10,
+                  background: STATUT_COLOR[table.statut] || '#9ca3af',
+                  color: 'white',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: table.statut === 'indisponible' ? 'not-allowed' : 'grab',
+                  opacity: table.statut === 'indisponible' ? 0.6 : 1,
+                  userSelect: 'none',
+                  WebkitTouchCallout: 'none',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                  padding: '2px 4px',
+                }}
+                title={table.nom + ' — ' + STATUT_LABEL[table.statut] + (table.nom_reservation ? ' — ' + table.nom_reservation : '') + (heure ? ' — arrivée ' + heure : '')}
+              >
+                <span>{table.nom}</span>
+                <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>
+                  {table.capacite}p{heure ? ' · ' + heure : ''}
+                </span>
+                {table.nom_reservation && (
+                  <span style={{ fontSize: 9, fontWeight: 500, opacity: 0.9, maxWidth: '95%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {table.nom_reservation}
+                  </span>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <div
