@@ -16,22 +16,77 @@ const STATUT_LABEL = {
   indisponible: 'Indisponible',
 };
 
+function toDateKey(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export default function PlanSalle() {
-  const [tables, setTables] = useState([]);
+  const todayKey = toDateKey(new Date());
+
+  const [selectedDate, setSelectedDate] = useState(todayKey);
+  const [tablesRef, setTablesRef] = useState([]); // disposition de référence (Table.pos_x/pos_y/statut...)
+  const [positionsJour, setPositionsJour] = useState([]); // exceptions de position pour le jour affiché
+  const [reservationsJour, setReservationsJour] = useState([]); // réservations confirmées du jour affiché
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [definirReference, setDefinirReference] = useState(false);
   const roomRef = useRef(null);
   const dragRef = useRef(null);
   const clickTimerRef = useRef(null);
   const navigate = useNavigate();
 
-  const load = () => api.get('/tables/').then(r => setTables(r.data)).catch(() => setError('Impossible de charger le plan de salle'));
-  useEffect(() => { load(); }, []);
+  const isToday = selectedDate === todayKey;
+
+  const load = () => {
+    Promise.all([
+      api.get('/tables/'),
+      api.get('/table-positions-jour/', { params: { date_jour: selectedDate } }),
+      api.get('/reservations/', { params: { date_reservation: selectedDate } }),
+    ])
+      .then(([tablesRes, positionsRes, reservationsRes]) => {
+        setTablesRef(tablesRes.data);
+        setPositionsJour(positionsRes.data);
+        setReservationsJour(reservationsRes.data.filter(r => r.statut !== 'annulee'));
+      })
+      .catch(() => setError('Impossible de charger le plan de salle'));
+  };
+
+  useEffect(() => { load(); }, [selectedDate]);
+
+  // Fusionne la disposition de référence avec les exceptions du jour affiché,
+  // et calcule pour chaque table sa réservation du jour (s'il y en a une) et son statut effectif.
+  const tables = tablesRef.map(t => {
+    const exception = positionsJour.find(p => p.table_id === t.id);
+    const reservation = reservationsJour.find(r => r.table_id === t.id);
+    let statutEffectif = 'libre';
+    if (reservation) {
+      statutEffectif = 'reservee';
+    } else if (isToday) {
+      statutEffectif = t.statut;
+    }
+    return {
+      ...t,
+      pos_x: exception ? exception.pos_x : t.pos_x,
+      pos_y: exception ? exception.pos_y : t.pos_y,
+      statutEffectif,
+      reservation,
+    };
+  });
 
   const savePosition = async (id, pos_x, pos_y) => {
     try {
-      await api.patch('/tables/' + id, { pos_x, pos_y });
+      await api.put('/table-positions-jour/', {
+        table_id: id,
+        date: selectedDate,
+        pos_x,
+        pos_y,
+        definir_reference: definirReference,
+      });
+      if (definirReference) load();
     } catch (e) {
       setError(e.response?.data?.detail || 'Erreur lors du déplacement');
     }
@@ -59,22 +114,25 @@ export default function PlanSalle() {
       if (Math.abs(newX - dragRef.current.startX) > 4 || Math.abs(newY - dragRef.current.startY) > 4) {
         dragRef.current.moved = true;
       }
-      setTables(prev => prev.map(t => t.id === draggedId ? { ...t, pos_x: newX, pos_y: newY } : t));
+      setPositionsJour(prev => {
+        const others = prev.filter(p => p.table_id !== draggedId);
+        return [...others, { table_id: draggedId, date: selectedDate, pos_x: newX, pos_y: newY }];
+      });
     };
 
     const onUp = () => {
       if (dragRef.current) {
         const { id, moved } = dragRef.current;
         if (moved) {
-          setTables(prev => {
-            const updated = prev.find(t => t.id === id);
-            if (updated) savePosition(id, updated.pos_x, updated.pos_y);
+          setPositionsJour(prev => {
+            const current = prev.find(p => p.table_id === id);
+            if (current) savePosition(id, current.pos_x, current.pos_y);
             return prev;
           });
         } else {
           if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
           clickTimerRef.current = setTimeout(() => {
-            if (table.statut === 'indisponible') {
+            if (table.statutEffectif === 'indisponible') {
               setMsg({ type: 'error', text: 'Cette table est indisponible' });
               setTimeout(() => setMsg(null), 3000);
             } else {
@@ -98,20 +156,37 @@ export default function PlanSalle() {
       clearTimeout(clickTimerRef.current);
       clickTimerRef.current = null;
     }
+    const resa = table.reservation;
     setEditing({
-      id: table.id,
-      nom_reservation: table.nom_reservation || '',
-      heure_arrivee: table.heure_arrivee ? table.heure_arrivee.slice(0, 16) : '',
+      tableId: table.id,
+      reservationId: resa ? resa.id : null,
+      nom_client: resa ? resa.nom_client : '',
+      heure: resa ? resa.heure.slice(0, 5) : '12:00',
+      nb_personnes: resa ? resa.nb_personnes : table.capacite,
     });
   };
 
   const saveReservation = async () => {
+    if (!editing.nom_client.trim()) {
+      setMsg({ type: 'error', text: 'Le nom est requis' });
+      setTimeout(() => setMsg(null), 3000);
+      return;
+    }
+    const payload = {
+      table_id: editing.tableId,
+      nom_client: editing.nom_client,
+      date_reservation: selectedDate,
+      heure: editing.heure,
+      nb_personnes: Number(editing.nb_personnes),
+      statut: 'confirmee',
+    };
     try {
-      await api.patch('/tables/' + editing.id, {
-        nom_reservation: editing.nom_reservation || null,
-        heure_arrivee: editing.heure_arrivee ? new Date(editing.heure_arrivee).toISOString() : null,
-      });
-      setMsg({ type: 'success', text: 'Réservation mise à jour' });
+      if (editing.reservationId) {
+        await api.patch('/reservations/' + editing.reservationId, payload);
+      } else {
+        await api.post('/reservations/', payload);
+      }
+      setMsg({ type: 'success', text: 'Réservation enregistrée' });
       setEditing(null);
       load();
     } catch (e) {
@@ -122,7 +197,9 @@ export default function PlanSalle() {
 
   const clearReservation = async () => {
     try {
-      await api.patch('/tables/' + editing.id, { nom_reservation: null, heure_arrivee: null });
+      if (editing.reservationId) {
+        await api.delete('/reservations/' + editing.reservationId);
+      }
       setMsg({ type: 'success', text: 'Réservation effacée' });
       setEditing(null);
       load();
@@ -143,10 +220,10 @@ export default function PlanSalle() {
     setTimeout(() => setMsg(null), 3000);
   };
 
-  const nbLibres = tables.filter(t => t.statut === 'libre').length;
-  const nbOccupees = tables.filter(t => t.statut === 'occupee').length;
-  const nbReservees = tables.filter(t => t.statut === 'reservee').length;
-  const nbIndisponibles = tables.filter(t => t.statut === 'indisponible').length;
+  const nbLibres = tables.filter(t => t.statutEffectif === 'libre').length;
+  const nbOccupees = tables.filter(t => t.statutEffectif === 'occupee').length;
+  const nbReservees = tables.filter(t => t.statutEffectif === 'reservee').length;
+  const nbIndisponibles = tables.filter(t => t.statutEffectif === 'indisponible').length;
 
   return (
     <div>
@@ -164,6 +241,30 @@ export default function PlanSalle() {
         )}
 
         {error && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 12 }}>{error}</div>}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+          <label style={{ fontSize: 13, color: '#888', fontWeight: 600 }}>Jour affiché</label>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 }}
+          />
+          {!isToday && (
+            <button className="btn" onClick={() => setSelectedDate(todayKey)}>Revenir à aujourd'hui</button>
+          )}
+          {isToday && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#888', marginLeft: 'auto', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={definirReference}
+                onChange={(e) => setDefinirReference(e.target.checked)}
+                style={{ width: 14, height: 14 }}
+              />
+              Déplacer = définir comme disposition de référence
+            </label>
+          )}
+        </div>
 
         <div className="stats" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
           <div className="stat-card" style={{ padding: '8px 14px' }}>
@@ -195,7 +296,11 @@ export default function PlanSalle() {
               {label}
             </span>
           ))}
-          <span style={{ marginLeft: 'auto' }}>Glissez une table pour la déplacer · Cliquez pour ouvrir le caddy · Double-cliquez pour la réservation</span>
+          <span style={{ marginLeft: 'auto' }}>
+            {isToday
+              ? 'Glissez une table pour la déplacer · Cliquez pour ouvrir le caddy · Double-cliquez pour la réservation'
+              : 'Double-cliquez pour réserver ce jour · Le statut manuel n\'est modifiable qu\'aujourd\'hui'}
+          </span>
         </div>
 
         <div
@@ -212,10 +317,10 @@ export default function PlanSalle() {
           }}
         >
           {tables.map(table => {
-            const heure = table.heure_arrivee
-              ? new Date(table.heure_arrivee).toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' })
-              : null;
-            const hasReservation = !!(table.nom_reservation || heure);
+            const resa = table.reservation;
+            const heure = resa ? resa.heure.slice(0, 5) : null;
+            const nomResa = resa ? resa.nom_client : null;
+            const hasReservation = !!resa;
             return (
               <div
                 key={table.id}
@@ -229,14 +334,14 @@ export default function PlanSalle() {
                   width: table.forme === 'rond' ? 64 : (table.capacite >= 6 ? 100 : 80),
                   height: table.forme === 'rond' ? 64 : (hasReservation ? 70 : 56),
                   borderRadius: table.forme === 'rond' ? '50%' : 10,
-                  background: STATUT_COLOR[table.statut] || '#9ca3af',
+                  background: STATUT_COLOR[table.statutEffectif] || '#9ca3af',
                   color: 'white',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  cursor: table.statut === 'indisponible' ? 'not-allowed' : 'grab',
-                  opacity: table.statut === 'indisponible' ? 0.6 : 1,
+                  cursor: table.statutEffectif === 'indisponible' ? 'not-allowed' : 'grab',
+                  opacity: table.statutEffectif === 'indisponible' ? 0.6 : 1,
                   userSelect: 'none',
                   WebkitTouchCallout: 'none',
                   fontSize: 13,
@@ -244,15 +349,15 @@ export default function PlanSalle() {
                   boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
                   padding: '2px 4px',
                 }}
-                title={table.nom + ' — ' + STATUT_LABEL[table.statut] + (table.nom_reservation ? ' — ' + table.nom_reservation : '') + (heure ? ' — arrivée ' + heure : '')}
+                title={table.nom + ' — ' + STATUT_LABEL[table.statutEffectif] + (nomResa ? ' — ' + nomResa : '') + (heure ? ' — ' + heure : '')}
               >
                 <span>{table.nom}</span>
                 <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>
                   {table.capacite}p{heure ? ' · ' + heure : ''}
                 </span>
-                {table.nom_reservation && (
+                {nomResa && (
                   <span style={{ fontSize: 9, fontWeight: 500, opacity: 0.9, maxWidth: '95%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {table.nom_reservation}
+                    {nomResa}
                   </span>
                 )}
               </div>
@@ -269,43 +374,49 @@ export default function PlanSalle() {
           }}
         >
           <div style={{ fontSize: 12, color: '#888', fontWeight: 600, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-            Statut des tables
+            Statut des tables {isToday ? "(aujourd'hui)" : '(lecture seule, pas aujourd\'hui)'}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-            {[...tables].sort((a, b) => a.nom.localeCompare(b.nom, undefined, { numeric: true })).map(table => (
-              <div
-                key={table.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '8px 10px',
-                  border: '1px solid #eee',
-                  borderRadius: 8,
-                  minWidth: 150,
-                }}
-              >
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>{table.nom}</span>
-                <select
-                  value={table.statut}
-                  onChange={(e) => changerStatut(table.id, e.target.value)}
+            {[...tables].sort((a, b) => a.nom.localeCompare(b.nom, undefined, { numeric: true })).map(table => {
+              const disabled = !isToday || !!table.reservation;
+              return (
+                <div
+                  key={table.id}
                   style={{
-                    fontSize: 12,
-                    padding: '4px 6px',
-                    borderRadius: 6,
-                    border: '1px solid #ddd',
-                    color: STATUT_COLOR[table.statut] || '#555',
-                    fontWeight: 600,
-                    background: 'white',
-                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '8px 10px',
+                    border: '1px solid #eee',
+                    borderRadius: 8,
+                    minWidth: 150,
                   }}
                 >
-                  {Object.entries(STATUT_LABEL).map(([key, label]) => (
-                    <option key={key} value={key}>{label}</option>
-                  ))}
-                </select>
-              </div>
-            ))}
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>{table.nom}</span>
+                  <select
+                    value={table.statutEffectif}
+                    onChange={(e) => changerStatut(table.id, e.target.value)}
+                    disabled={disabled}
+                    title={disabled ? (table.reservation ? 'Réservée automatiquement ce jour' : 'Modifiable uniquement pour aujourd\'hui') : ''}
+                    style={{
+                      fontSize: 12,
+                      padding: '4px 6px',
+                      borderRadius: 6,
+                      border: '1px solid #ddd',
+                      color: STATUT_COLOR[table.statutEffectif] || '#555',
+                      fontWeight: 600,
+                      background: disabled ? '#f5f5f0' : 'white',
+                      flex: 1,
+                      cursor: disabled ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {Object.entries(STATUT_LABEL).map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -316,35 +427,40 @@ export default function PlanSalle() {
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
         }}>
           <div style={{ background: 'white', borderRadius: 10, padding: 24, width: 320 }}>
-            <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 16 }}>Réservation</div>
+            <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 4 }}>Réservation</div>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 16 }}>
+              {new Date(selectedDate + 'T00:00:00').toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </div>
 
-            <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Nom de la réservation</label>
+            <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Nom du client</label>
             <input
               type="text"
-              value={editing.nom_reservation}
-              onChange={(e) => setEditing({ ...editing, nom_reservation: e.target.value })}
-              placeholder="Ex: Dupont 4p"
-              style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, marginBottom: 16, boxSizing: 'border-box' }}
+              value={editing.nom_client}
+              onChange={(e) => setEditing({ ...editing, nom_client: e.target.value })}
+              placeholder="Ex: Dupont"
+              style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, marginBottom: 14, boxSizing: 'border-box' }}
             />
 
-            <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Heure d'arrivée</label>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-              <input
-                type="datetime-local"
-                value={editing.heure_arrivee}
-                onChange={(e) => setEditing({ ...editing, heure_arrivee: e.target.value })}
-                style={{ flex: 1, padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 }}
-              />
-              <button
-                className="btn"
-                onClick={() => {
-                  const now = new Date();
-                  now.setSeconds(0, 0);
-                  setEditing({ ...editing, heure_arrivee: now.toISOString().slice(0, 16) });
-                }}
-              >
-                Maintenant
-              </button>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Heure</label>
+                <input
+                  type="time"
+                  value={editing.heure}
+                  onChange={(e) => setEditing({ ...editing, heure: e.target.value })}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ width: 100 }}>
+                <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Personnes</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={editing.nb_personnes}
+                  onChange={(e) => setEditing({ ...editing, nb_personnes: e.target.value })}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, boxSizing: 'border-box' }}
+                />
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: 8 }}>
