@@ -154,15 +154,24 @@ export default function Caddy() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <button className="btn" onClick={() => navigate('/')}>← Retour au plan de salle</button>
 
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={emporte}
-              onChange={(e) => setEmporte(e.target.checked)}
-              style={{ width: 16, height: 16 }}
-            />
-            À emporter
-          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={emporte}
+                onChange={(e) => setEmporte(e.target.checked)}
+                style={{ width: 16, height: 16 }}
+              />
+              À emporter
+            </label>
+            <button
+              className="btn"
+              style={{ background: '#15803d', color: 'white', fontWeight: 600 }}
+              onClick={() => navigate('/paiement/' + tableId)}
+            >
+              Payer →
+            </button>
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: 16 }}>
