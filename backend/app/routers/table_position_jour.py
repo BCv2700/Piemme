@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from datetime import date
 from typing import Optional
 from app.database import get_db
@@ -35,8 +36,9 @@ def upsert_position_jour(payload: TablePositionJourUpsert, db: Session = Depends
       directement, et supprime toute exception existante pour ce jour précis
       (puisque la référence devient la nouvelle position par défaut, l'exception
       du jour n'a plus de raison d'exister).
-    - Sinon : crée ou met à jour (upsert) l'exception pour cette table à cette date,
-      sans toucher à la référence.
+    - Sinon : upsert atomique (INSERT ... ON CONFLICT DO UPDATE) sur la contrainte
+      unique (table_id, date), pour éviter toute violation de contrainte en cas
+      d'appels rapprochés (ex: glissements successifs d'une même table).
     """
     table = db.query(Table).filter(Table.id == payload.table_id).first()
     if not table:
@@ -46,13 +48,10 @@ def upsert_position_jour(payload: TablePositionJourUpsert, db: Session = Depends
         table.pos_x = payload.pos_x
         table.pos_y = payload.pos_y
 
-        existing = db.query(TablePositionJour).filter(
+        db.query(TablePositionJour).filter(
             TablePositionJour.table_id == payload.table_id,
             TablePositionJour.date == payload.date,
-        ).first()
-        if existing:
-            db.delete(existing)
-            db.commit()
+        ).delete()
 
         db.commit()
         db.refresh(table)
@@ -64,28 +63,28 @@ def upsert_position_jour(payload: TablePositionJourUpsert, db: Session = Depends
             pos_y=table.pos_y,
         )
 
-    existing = db.query(TablePositionJour).filter(
-        TablePositionJour.table_id == payload.table_id,
-        TablePositionJour.date == payload.date,
-    ).first()
-
-    if existing:
-        existing.pos_x = payload.pos_x
-        existing.pos_y = payload.pos_y
-        db.commit()
-        db.refresh(existing)
-        return existing
-
-    db_position = TablePositionJour(
+    stmt = pg_insert(TablePositionJour).values(
         table_id=payload.table_id,
         date=payload.date,
         pos_x=payload.pos_x,
         pos_y=payload.pos_y,
     )
-    db.add(db_position)
+    stmt = stmt.on_conflict_do_update(
+        constraint='uq_table_position_jour_table_date',
+        set_={'pos_x': payload.pos_x, 'pos_y': payload.pos_y},
+    ).returning(TablePositionJour.id)
+
+    result = db.execute(stmt)
     db.commit()
-    db.refresh(db_position)
-    return db_position
+    new_id = result.scalar_one()
+
+    return TablePositionJourOut(
+        id=new_id,
+        table_id=payload.table_id,
+        date=payload.date,
+        pos_x=payload.pos_x,
+        pos_y=payload.pos_y,
+    )
 
 
 @router.delete("/{position_id}")
