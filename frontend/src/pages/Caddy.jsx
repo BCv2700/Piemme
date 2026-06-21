@@ -56,7 +56,7 @@ export default function Caddy() {
     articles
       .filter(a => a.code_vente === codeVente)
       .map(a => a.type_article || 'Sans type')
-  )];
+  )].sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
 
   // Quand on change de code de vente (niveau 1), on resélectionne le premier type disponible
   useEffect(() => {
@@ -168,7 +168,7 @@ export default function Caddy() {
         <div style={{ display: 'flex', gap: 16 }}>
 
           {/* Colonne 1 : codes de vente (Boissons Alcools, Nourriture, Boissons Softs, Boissons Vins, Divers) */}
-          <div style={{ width: 150, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ width: 130, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
             {codesVente.map(code => (
               <button
                 key={code}
@@ -177,7 +177,8 @@ export default function Caddy() {
                   background: codeVente === code ? '#111' : 'white',
                   color: codeVente === code ? 'white' : '#333',
                   fontWeight: 600,
-                  padding: '14px 10px',
+                  padding: '12px 8px',
+                  fontSize: 13,
                 }}
                 onClick={() => setCodeVente(code)}
               >
@@ -188,7 +189,7 @@ export default function Caddy() {
 
           {/* Colonne 2 : types précis (liste verticale) */}
           <div style={{
-            width: 170,
+            width: 150,
             flexShrink: 0,
             display: 'flex',
             flexDirection: 'column',
@@ -226,11 +227,11 @@ export default function Caddy() {
           </div>
 
           {/* Colonne 3 : articles de la catégorie sélectionnée */}
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ flex: '1 1 0%', minWidth: 0 }}>
             <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-              gap: 10,
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 8,
             }}>
               {articlesAffiches.map(article => {
                 const prix = emporte && article.prix_vente_away != null ? article.prix_vente_away : article.prix_vente;
@@ -244,12 +245,14 @@ export default function Caddy() {
                       flexDirection: 'column',
                       alignItems: 'flex-start',
                       textAlign: 'left',
-                      height: 64,
-                      padding: '8px 12px',
+                      height: 56,
+                      width: 110,
+                      flexShrink: 0,
+                      padding: '6px 10px',
                     }}
                   >
-                    <span style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3 }}>{article.nom}</span>
-                    <span style={{ fontSize: 12, color: '#888', marginTop: 'auto' }}>{Number(prix).toFixed(2)} €</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.25 }}>{article.nom}</span>
+                    <span style={{ fontSize: 11, color: '#888', marginTop: 'auto' }}>{Number(prix).toFixed(2)} €</span>
                   </button>
                 );
               })}
@@ -261,7 +264,7 @@ export default function Caddy() {
 
           {/* Colonne 4 : ticket de caisse */}
           <div style={{
-            width: 300,
+            width: 280,
             flexShrink: 0,
             background: 'white',
             border: '1px solid #e5e5e0',
