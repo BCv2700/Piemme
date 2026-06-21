@@ -76,13 +76,15 @@ export default function PlanSalle() {
     let statutEffectif = 'libre';
     if (reservation) {
       statutEffectif = 'reservee';
+    } else if (exception && exception.statut) {
+      statutEffectif = exception.statut;
     } else if (isToday) {
       statutEffectif = t.statut;
     }
     return {
       ...t,
-      pos_x: exception ? exception.pos_x : t.pos_x,
-      pos_y: exception ? exception.pos_y : t.pos_y,
+      pos_x: exception && exception.pos_x != null ? exception.pos_x : t.pos_x,
+      pos_y: exception && exception.pos_y != null ? exception.pos_y : t.pos_y,
       statutEffectif,
       reservation,
     };
@@ -239,7 +241,11 @@ export default function PlanSalle() {
 
   const changerStatut = async (id, statut) => {
     try {
-      await api.patch('/tables/' + id, { statut });
+      await api.put('/table-positions-jour/statut', {
+        table_id: id,
+        date: selectedDate,
+        statut,
+      });
       setMsg({ type: 'success', text: 'Statut mis à jour' });
       load();
     } catch (e) {
@@ -334,7 +340,7 @@ export default function PlanSalle() {
           <span style={{ marginLeft: 'auto' }}>
             {isToday
               ? 'Glissez une table pour la déplacer · Cliquez pour ouvrir le caddy · Double-cliquez pour la réservation'
-              : 'Double-cliquez pour réserver ce jour · Le statut manuel n\'est modifiable qu\'aujourd\'hui'}
+              : 'Double-cliquez pour réserver ce jour · Choisissez le statut ci-dessous'}
           </span>
         </div>
 
@@ -411,11 +417,11 @@ export default function PlanSalle() {
           }}
         >
           <div style={{ fontSize: 12, color: '#888', fontWeight: 600, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-            Statut des tables {isToday ? "(aujourd'hui)" : '(lecture seule, pas aujourd\'hui)'}
+            Statut des tables {isToday ? "(aujourd'hui)" : '— ' + selectedDate}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
             {[...tables].sort((a, b) => a.nom.localeCompare(b.nom, undefined, { numeric: true })).map(table => {
-              const disabled = !isToday || !!table.reservation || isReferenceDay;
+              const disabled = !!table.reservation || isReferenceDay;
               return (
                 <div
                   key={table.id}
@@ -434,7 +440,7 @@ export default function PlanSalle() {
                     value={table.statutEffectif}
                     onChange={(e) => changerStatut(table.id, e.target.value)}
                     disabled={disabled}
-                    title={disabled ? (table.reservation ? 'Réservée automatiquement ce jour' : 'Modifiable uniquement pour aujourd\'hui') : ''}
+                    title={disabled ? (table.reservation ? 'Réservée automatiquement ce jour' : 'Non modifiable sur le jour de référence') : ''}
                     style={{
                       fontSize: 12,
                       padding: '4px 6px',
