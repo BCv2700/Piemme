@@ -136,7 +136,6 @@ export default function Caddy() {
   if (loading) {
     return (
       <div>
-        <div className="topbar"><h1>Caddy</h1></div>
         <div className="content">Chargement...</div>
       </div>
     );
@@ -144,15 +143,20 @@ export default function Caddy() {
 
   return (
     <div>
-      <div className="topbar">
-        <h1>{table ? table.nom : 'Table'} — Caddy</h1>
-      </div>
       <div className="content">
 
         {error && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <button className="btn" onClick={() => navigate('/')}>← Retour au plan de salle</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button className="btn" onClick={() => navigate('/')}>← Retour au plan de salle</button>
+            <span style={{
+              fontSize: 13, fontWeight: 700, color: '#111',
+              background: '#f0f0ee', borderRadius: 6, padding: '6px 12px',
+            }}>
+              {table ? table.nom : 'Table'}
+            </span>
+          </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>

@@ -95,7 +95,6 @@ export default function Paiement() {
   if (loading) {
     return (
       <div>
-        <div className="topbar"><h1>Paiement</h1></div>
         <div className="content">Chargement...</div>
       </div>
     );
@@ -103,16 +102,21 @@ export default function Paiement() {
 
   return (
     <div>
-      <div className="topbar">
-        <h1>{table ? table.nom : 'Table'} — Paiement</h1>
-      </div>
       <div className="content">
 
         {error && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 12, fontWeight: 500 }}>{error}</div>}
 
-        <button className="btn" onClick={() => navigate('/caddy/' + tableId)} style={{ marginBottom: 16 }}>
-          ← Retour au caddy
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <button className="btn" onClick={() => navigate('/caddy/' + tableId)}>
+            ← Retour au caddy
+          </button>
+          <span style={{
+            fontSize: 13, fontWeight: 700, color: '#111',
+            background: '#f0f0ee', borderRadius: 6, padding: '6px 12px',
+          }}>
+            {table ? table.nom : 'Table'}
+          </span>
+        </div>
 
         <div style={{ maxWidth: 480, margin: '0 auto' }}>
 

@@ -173,9 +173,6 @@ export default function Reservations() {
 
   return (
     <div>
-      <div className="topbar">
-        <h1>Réservations</h1>
-      </div>
       <div className="content">
 
         {msg && (

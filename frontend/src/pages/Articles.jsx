@@ -110,9 +110,6 @@ export default function Articles() {
 
   return (
     <div>
-      <div className="topbar">
-        <h1>Articles <span style={{ color: '#888', fontWeight: 400 }}>({articles.length})</span></h1>
-      </div>
       <div className="content">
 
         {msg && (
@@ -128,7 +125,10 @@ export default function Articles() {
 
         {error && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
-        <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <span style={{ fontSize: 13, color: '#888', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {articles.length} article{articles.length !== 1 ? 's' : ''}
+          </span>
           <button className="btn" onClick={ouvrirCreation}>+ Nouvel article</button>
           <input
             type="text"

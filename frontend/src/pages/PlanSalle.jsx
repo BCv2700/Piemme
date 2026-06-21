@@ -150,9 +150,6 @@ export default function PlanSalle() {
 
   return (
     <div>
-      <div className="topbar">
-        <h1>Plan de salle</h1>
-      </div>
       <div className="content">
 
         {msg && (
@@ -169,25 +166,25 @@ export default function PlanSalle() {
         {error && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
         <div className="stats" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
-          <div className="stat-card">
+          <div className="stat-card" style={{ padding: '8px 14px' }}>
             <label>Tables libres</label>
-            <span style={{ color: '#16a34a' }}>{nbLibres}</span>
+            <span style={{ color: '#16a34a', fontSize: 20 }}>{nbLibres}</span>
           </div>
-          <div className="stat-card">
+          <div className="stat-card" style={{ padding: '8px 14px' }}>
             <label>Tables occupées</label>
-            <span style={{ color: '#dc2626' }}>{nbOccupees}</span>
+            <span style={{ color: '#dc2626', fontSize: 20 }}>{nbOccupees}</span>
           </div>
-          <div className="stat-card">
+          <div className="stat-card" style={{ padding: '8px 14px' }}>
             <label>Tables réservées</label>
-            <span style={{ color: '#b45309' }}>{nbReservees}</span>
+            <span style={{ color: '#b45309', fontSize: 20 }}>{nbReservees}</span>
           </div>
-          <div className="stat-card">
+          <div className="stat-card" style={{ padding: '8px 14px' }}>
             <label>Tables indisponibles</label>
-            <span style={{ color: '#6b7280' }}>{nbIndisponibles}</span>
+            <span style={{ color: '#6b7280', fontSize: 20 }}>{nbIndisponibles}</span>
           </div>
-          <div className="stat-card">
+          <div className="stat-card" style={{ padding: '8px 14px' }}>
             <label>Total</label>
-            <span>{tables.length}</span>
+            <span style={{ fontSize: 20 }}>{tables.length}</span>
           </div>
         </div>
 
