@@ -54,7 +54,7 @@ export default function Reservations() {
     api.get('/tables/').then(r => setTables(r.data)).catch(() => {});
   }, []);
 
-  // Charge le nombre de réservations par jour pour tout le mois affiché (pour les pastilles du calendrier)
+  // Charge le total de couverts (personnes) par jour pour tout le mois affiché (pour les pastilles du calendrier)
   useEffect(() => {
     const start = new Date(viewYear, viewMonth, 1);
     const end = new Date(viewYear, viewMonth + 1, 0);
@@ -64,7 +64,12 @@ export default function Reservations() {
       const dateKey = toDateKey(new Date(viewYear, viewMonth, d));
       promises.push(
         api.get('/reservations/', { params: { date_reservation: dateKey } })
-          .then(r => ({ dateKey, count: r.data.length }))
+          .then(r => ({
+            dateKey,
+            count: r.data
+              .filter(resa => resa.statut !== 'annulee')
+              .reduce((sum, resa) => sum + Number(resa.nb_personnes || 0), 0),
+          }))
           .catch(() => ({ dateKey, count: 0 }))
       );
     }
@@ -80,7 +85,10 @@ export default function Reservations() {
     api.get('/reservations/', { params: { date_reservation: dateKey } })
       .then(r => {
         setReservationsByDate(prev => ({ ...prev, [dateKey]: r.data }));
-        setMonthCounts(prev => ({ ...prev, [dateKey]: r.data.length }));
+        const totalPersonnes = r.data
+          .filter(resa => resa.statut !== 'annulee')
+          .reduce((sum, resa) => sum + Number(resa.nb_personnes || 0), 0);
+        setMonthCounts(prev => ({ ...prev, [dateKey]: totalPersonnes }));
       })
       .catch(() => setError('Impossible de charger les réservations'))
       .finally(() => setLoadingDay(false));
@@ -215,7 +223,7 @@ export default function Reservations() {
               {calendarDays.map((date, idx) => {
                 if (!date) return <div key={'empty-' + idx} />;
                 const dateKey = toDateKey(date);
-                const count = monthCounts[dateKey] || 0;
+                const totalPersonnes = monthCounts[dateKey] || 0;
                 const isSelected = dateKey === selectedDate;
                 const isToday = dateKey === todayKey;
                 return (
@@ -238,13 +246,13 @@ export default function Reservations() {
                     }}
                   >
                     <span style={{ fontWeight: isToday ? 700 : 400 }}>{date.getDate()}</span>
-                    {count > 0 && (
+                    {totalPersonnes > 0 && (
                       <span style={{
                         fontSize: 10,
                         fontWeight: 700,
                         color: isSelected ? 'white' : '#f59e0b',
                       }}>
-                        {count}
+                        {totalPersonnes}p
                       </span>
                     )}
                   </button>
