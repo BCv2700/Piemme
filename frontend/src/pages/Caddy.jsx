@@ -240,19 +240,30 @@ export default function Caddy() {
                     key={article.id}
                     className="btn"
                     onClick={() => ajouterArticle(article)}
+                    title={article.nom}
                     style={{
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'flex-start',
+                      justifyContent: 'space-between',
                       textAlign: 'left',
-                      height: 56,
-                      width: 110,
+                      height: 64,
+                      width: 130,
                       flexShrink: 0,
                       padding: '6px 10px',
+                      overflow: 'hidden',
                     }}
                   >
-                    <span style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.25 }}>{article.nom}</span>
-                    <span style={{ fontSize: 11, color: '#888', marginTop: 'auto' }}>{Number(prix).toFixed(2)} €</span>
+                    <span style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      lineHeight: 1.25,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}>{article.nom}</span>
+                    <span style={{ fontSize: 11, color: '#888', flexShrink: 0 }}>{Number(prix).toFixed(2)} €</span>
                   </button>
                 );
               })}
