@@ -168,7 +168,7 @@ export default function PlanSalle() {
 
         {error && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
-        <div className="stats">
+        <div className="stats" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
           <div className="stat-card">
             <label>Tables libres</label>
             <span style={{ color: '#16a34a' }}>{nbLibres}</span>
