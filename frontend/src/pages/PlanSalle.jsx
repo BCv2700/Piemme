@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/api';
 
 const STATUT_COLOR = {
@@ -27,8 +27,17 @@ const DATE_REFERENCE = '2025-12-31'; // jour neutre utilisé pour éditer la dis
 
 export default function PlanSalle() {
   const todayKey = toDateKey(new Date());
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedDate = searchParams.get('date') || todayKey;
 
-  const [selectedDate, setSelectedDate] = useState(todayKey);
+  const setSelectedDate = (newDate) => {
+    if (newDate === todayKey) {
+      setSearchParams({});
+    } else {
+      setSearchParams({ date: newDate });
+    }
+  };
+
   const [tablesRef, setTablesRef] = useState([]); // disposition de référence (Table.pos_x/pos_y/statut...)
   const [positionsJour, setPositionsJour] = useState([]); // exceptions de position pour le jour affiché
   const [reservationsJour, setReservationsJour] = useState([]); // réservations confirmées du jour affiché
@@ -138,7 +147,7 @@ export default function PlanSalle() {
               setMsg({ type: 'error', text: 'Cette table est indisponible' });
               setTimeout(() => setMsg(null), 3000);
             } else {
-              navigate('/caddy/' + id);
+              navigate('/caddy/' + id + '?retourDate=' + selectedDate);
             }
           }, 220);
         }

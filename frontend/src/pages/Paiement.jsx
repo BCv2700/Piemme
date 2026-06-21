@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/api';
 
 export default function Paiement() {
   const { tableId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const retourDate = searchParams.get('retourDate');
+  const urlRetourPlan = retourDate ? '/?date=' + retourDate : '/';
+  const urlRetourCaddy = '/caddy/' + tableId + (retourDate ? '?retourDate=' + retourDate : '');
 
   const [table, setTable] = useState(null);
   const [lignes, setLignes] = useState([]);
@@ -85,7 +89,7 @@ export default function Paiement() {
           tva: l.tva,
         })),
       });
-      navigate('/');
+      navigate(urlRetourPlan);
     } catch (e) {
       setError(e.response?.data?.detail || "Erreur lors de l'enregistrement du paiement");
       setEnregistrement(false);
@@ -107,7 +111,7 @@ export default function Paiement() {
         {error && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 12, fontWeight: 500 }}>{error}</div>}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-          <button className="btn" onClick={() => navigate('/caddy/' + tableId)}>
+          <button className="btn" onClick={() => navigate(urlRetourCaddy)}>
             ← Retour au caddy
           </button>
           <span style={{

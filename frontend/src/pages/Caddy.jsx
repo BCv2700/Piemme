@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/api';
 
 export default function Caddy() {
   const { tableId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const retourDate = searchParams.get('retourDate');
+  const urlRetourPlan = retourDate ? '/?date=' + retourDate : '/';
 
   const [table, setTable] = useState(null);
   const [articles, setArticles] = useState([]);
@@ -149,7 +152,7 @@ export default function Caddy() {
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button className="btn" onClick={() => navigate('/')}>← Retour au plan de salle</button>
+            <button className="btn" onClick={() => navigate(urlRetourPlan)}>← Retour au plan de salle</button>
             <span style={{
               fontSize: 13, fontWeight: 700, color: '#111',
               background: '#f0f0ee', borderRadius: 6, padding: '6px 12px',
@@ -171,7 +174,7 @@ export default function Caddy() {
             <button
               className="btn"
               style={{ background: '#15803d', color: 'white', fontWeight: 600 }}
-              onClick={() => navigate('/paiement/' + tableId)}
+              onClick={() => navigate('/paiement/' + tableId + (retourDate ? '?retourDate=' + retourDate : ''))}
             >
               Payer →
             </button>
