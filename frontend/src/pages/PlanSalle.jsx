@@ -23,6 +23,8 @@ function toDateKey(date) {
   return `${y}-${m}-${d}`;
 }
 
+const DATE_REFERENCE = '2025-12-31'; // jour neutre utilisé pour éditer la disposition de référence des tables
+
 export default function PlanSalle() {
   const todayKey = toDateKey(new Date());
 
@@ -33,13 +35,13 @@ export default function PlanSalle() {
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
   const [editing, setEditing] = useState(null);
-  const [definirReference, setDefinirReference] = useState(false);
   const roomRef = useRef(null);
   const dragRef = useRef(null);
   const clickTimerRef = useRef(null);
   const navigate = useNavigate();
 
   const isToday = selectedDate === todayKey;
+  const isReferenceDay = selectedDate === DATE_REFERENCE;
 
   const load = () => {
     Promise.all([
@@ -84,9 +86,9 @@ export default function PlanSalle() {
         date: selectedDate,
         pos_x,
         pos_y,
-        definir_reference: definirReference,
+        definir_reference: isReferenceDay,
       });
-      if (definirReference) load();
+      if (isReferenceDay) load();
     } catch (e) {
       setError(e.response?.data?.detail || 'Erreur lors du déplacement');
     }
@@ -156,6 +158,11 @@ export default function PlanSalle() {
       clearTimeout(clickTimerRef.current);
       clickTimerRef.current = null;
     }
+    if (isReferenceDay) {
+      setMsg({ type: 'error', text: 'Pas de réservation possible sur le jour de référence' });
+      setTimeout(() => setMsg(null), 3000);
+      return;
+    }
     const resa = table.reservation;
     setEditing({
       tableId: table.id,
@@ -209,6 +216,18 @@ export default function PlanSalle() {
     setTimeout(() => setMsg(null), 3000);
   };
 
+  const resetPositionsJour = async () => {
+    if (!window.confirm('Réinitialiser toutes les tables de ce jour vers la disposition de référence ?')) return;
+    try {
+      await api.delete('/table-positions-jour/jour/' + selectedDate);
+      setMsg({ type: 'success', text: 'Disposition réinitialisée pour ce jour' });
+      load();
+    } catch (e) {
+      setMsg({ type: 'error', text: e.response?.data?.detail || 'Erreur' });
+    }
+    setTimeout(() => setMsg(null), 3000);
+  };
+
   const changerStatut = async (id, statut) => {
     try {
       await api.patch('/tables/' + id, { statut });
@@ -253,16 +272,23 @@ export default function PlanSalle() {
           {!isToday && (
             <button className="btn" onClick={() => setSelectedDate(todayKey)}>Revenir à aujourd'hui</button>
           )}
-          {isToday && (
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#888', marginLeft: 'auto', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={definirReference}
-                onChange={(e) => setDefinirReference(e.target.checked)}
-                style={{ width: 14, height: 14 }}
-              />
-              Déplacer = définir comme disposition de référence
-            </label>
+          {!isReferenceDay && (
+            <button className="btn" onClick={() => setSelectedDate(DATE_REFERENCE)} style={{ color: '#888' }}>
+              Modifier la disposition de référence
+            </button>
+          )}
+          {!isReferenceDay && (
+            <button className="btn" onClick={resetPositionsJour} style={{ color: '#888' }}>
+              Réinitialiser ce jour
+            </button>
+          )}
+          {isReferenceDay && (
+            <span style={{
+              fontSize: 12, fontWeight: 600, color: '#b45309',
+              background: '#fef3c7', borderRadius: 6, padding: '6px 12px', marginLeft: 'auto',
+            }}>
+              Mode disposition de référence — tout déplacement modifie la base pour tous les jours
+            </span>
           )}
         </div>
 
@@ -378,7 +404,7 @@ export default function PlanSalle() {
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
             {[...tables].sort((a, b) => a.nom.localeCompare(b.nom, undefined, { numeric: true })).map(table => {
-              const disabled = !isToday || !!table.reservation;
+              const disabled = !isToday || !!table.reservation || isReferenceDay;
               return (
                 <div
                   key={table.id}

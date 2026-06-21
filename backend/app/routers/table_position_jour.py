@@ -100,3 +100,14 @@ def delete_position_jour(position_id: int, db: Session = Depends(get_db)):
     db.delete(db_position)
     db.commit()
     return {"message": "Position supprimée"}
+
+
+@router.delete("/jour/{date_jour}")
+def reset_positions_jour(date_jour: date, db: Session = Depends(get_db)):
+    """
+    Supprime TOUTES les exceptions de position pour le jour donné en une seule fois.
+    Toutes les tables de ce jour retombent alors sur la disposition de référence.
+    """
+    nb_supprimees = db.query(TablePositionJour).filter(TablePositionJour.date == date_jour).delete()
+    db.commit()
+    return {"message": f"{nb_supprimees} position(s) réinitialisée(s) pour le {date_jour}"}
