@@ -20,8 +20,10 @@ export default function PlanSalle() {
   const [tables, setTables] = useState([]);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
+  const [editing, setEditing] = useState(null);
   const roomRef = useRef(null);
   const dragRef = useRef(null);
+  const clickTimerRef = useRef(null);
   const navigate = useNavigate();
 
   const load = () => api.get('/tables/').then(r => setTables(r.data)).catch(() => setError('Impossible de charger le plan de salle'));
@@ -70,12 +72,15 @@ export default function PlanSalle() {
             return prev;
           });
         } else {
-          if (table.statut === 'indisponible') {
-            setMsg({ type: 'error', text: 'Cette table est indisponible' });
-            setTimeout(() => setMsg(null), 3000);
-          } else {
-            navigate('/caddy/' + id);
-          }
+          if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+          clickTimerRef.current = setTimeout(() => {
+            if (table.statut === 'indisponible') {
+              setMsg({ type: 'error', text: 'Cette table est indisponible' });
+              setTimeout(() => setMsg(null), 3000);
+            } else {
+              navigate('/caddy/' + id);
+            }
+          }, 220);
         }
       }
       dragRef.current = null;
@@ -85,6 +90,46 @@ export default function PlanSalle() {
 
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+  };
+
+  const handleDoubleClick = (e, table) => {
+    e.preventDefault();
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+    }
+    setEditing({
+      id: table.id,
+      nom_reservation: table.nom_reservation || '',
+      heure_arrivee: table.heure_arrivee ? table.heure_arrivee.slice(0, 16) : '',
+    });
+  };
+
+  const saveReservation = async () => {
+    try {
+      await api.patch('/tables/' + editing.id, {
+        nom_reservation: editing.nom_reservation || null,
+        heure_arrivee: editing.heure_arrivee ? new Date(editing.heure_arrivee).toISOString() : null,
+      });
+      setMsg({ type: 'success', text: 'Réservation mise à jour' });
+      setEditing(null);
+      load();
+    } catch (e) {
+      setMsg({ type: 'error', text: e.response?.data?.detail || 'Erreur' });
+    }
+    setTimeout(() => setMsg(null), 3000);
+  };
+
+  const clearReservation = async () => {
+    try {
+      await api.patch('/tables/' + editing.id, { nom_reservation: null, heure_arrivee: null });
+      setMsg({ type: 'success', text: 'Réservation effacée' });
+      setEditing(null);
+      load();
+    } catch (e) {
+      setMsg({ type: 'error', text: e.response?.data?.detail || 'Erreur' });
+    }
+    setTimeout(() => setMsg(null), 3000);
   };
 
   const changerStatut = async (id, statut) => {
@@ -153,7 +198,7 @@ export default function PlanSalle() {
               {label}
             </span>
           ))}
-          <span style={{ marginLeft: 'auto' }}>Glissez une table pour la déplacer · Cliquez pour ouvrir le caddy</span>
+          <span style={{ marginLeft: 'auto' }}>Glissez une table pour la déplacer · Cliquez pour ouvrir le caddy · Double-cliquez pour la réservation</span>
         </div>
 
         <div
@@ -174,6 +219,7 @@ export default function PlanSalle() {
               key={table.id}
               id={'table-' + table.id}
               onMouseDown={(e) => handleMouseDown(e, table)}
+              onDoubleClick={(e) => handleDoubleClick(e, table)}
               style={{
                 position: 'absolute',
                 left: table.pos_x,
@@ -195,10 +241,14 @@ export default function PlanSalle() {
                 fontWeight: 600,
                 boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
               }}
-              title={table.nom + ' — ' + STATUT_LABEL[table.statut]}
+              title={table.nom + ' — ' + STATUT_LABEL[table.statut] + (table.nom_reservation ? ' — ' + table.nom_reservation : '')}
             >
               <span>{table.nom}</span>
-              <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>{table.capacite}p</span>
+              {table.nom_reservation ? (
+                <span style={{ fontSize: 9, fontWeight: 500, opacity: 0.9, maxWidth: '90%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{table.nom_reservation}</span>
+              ) : (
+                <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>{table.capacite}p</span>
+              )}
             </div>
           ))}
         </div>
@@ -252,6 +302,52 @@ export default function PlanSalle() {
           </div>
         </div>
       </div>
+
+      {editing && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
+        }}>
+          <div style={{ background: 'white', borderRadius: 10, padding: 24, width: 320 }}>
+            <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 16 }}>Réservation</div>
+
+            <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Nom de la réservation</label>
+            <input
+              type="text"
+              value={editing.nom_reservation}
+              onChange={(e) => setEditing({ ...editing, nom_reservation: e.target.value })}
+              placeholder="Ex: Dupont 4p"
+              style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, marginBottom: 16, boxSizing: 'border-box' }}
+            />
+
+            <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Heure d'arrivée</label>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+              <input
+                type="datetime-local"
+                value={editing.heure_arrivee}
+                onChange={(e) => setEditing({ ...editing, heure_arrivee: e.target.value })}
+                style={{ flex: 1, padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 }}
+              />
+              <button
+                className="btn"
+                onClick={() => {
+                  const now = new Date();
+                  now.setSeconds(0, 0);
+                  setEditing({ ...editing, heure_arrivee: now.toISOString().slice(0, 16) });
+                }}
+              >
+                Maintenant
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn" style={{ flex: 1 }} onClick={() => setEditing(null)}>Annuler</button>
+              <button className="btn" style={{ flex: 1 }} onClick={clearReservation}>Effacer</button>
+              <button className="btn" style={{ flex: 1, background: '#22c55e', color: 'white', borderColor: '#22c55e' }} onClick={saveReservation}>Valider</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
