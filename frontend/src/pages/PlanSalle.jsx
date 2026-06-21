@@ -358,7 +358,7 @@ export default function PlanSalle() {
                   left: table.pos_x,
                   top: table.pos_y,
                   width: table.forme === 'rond' ? 64 : (table.capacite >= 6 ? 100 : 80),
-                  height: table.forme === 'rond' ? 64 : (hasReservation ? 70 : 56),
+                  height: table.forme === 'rond' ? 64 : (hasReservation ? 70 : 44),
                   borderRadius: table.forme === 'rond' ? '50%' : 10,
                   background: STATUT_COLOR[table.statutEffectif] || '#9ca3af',
                   color: 'white',
@@ -378,9 +378,11 @@ export default function PlanSalle() {
                 title={table.nom + ' — ' + STATUT_LABEL[table.statutEffectif] + (nomResa ? ' — ' + nomResa : '') + (heure ? ' — ' + heure : '')}
               >
                 <span>{table.nom}</span>
-                <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>
-                  {table.capacite}p{heure ? ' · ' + heure : ''}
-                </span>
+                {resa && (
+                  <span style={{ fontSize: 10, fontWeight: 400, opacity: 0.85 }}>
+                    {resa.nb_personnes}p{heure ? ' · ' + heure : ''}
+                  </span>
+                )}
                 {nomResa && (
                   <span style={{ fontSize: 9, fontWeight: 500, opacity: 0.9, maxWidth: '95%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {nomResa}
