@@ -15,6 +15,8 @@ class ArticleBase(BaseModel):
     stock: int = 0
     stock_min: int = 0
     stock_max: int = 0
+    stock_a_suivre: bool = False
+    est_boisson: bool = False
     ean: Optional[str] = None
     fournisseur: Optional[str] = None
     localisation: Optional[str] = None
@@ -36,6 +38,8 @@ class ArticleUpdate(BaseModel):
     stock: Optional[int] = None
     stock_min: Optional[int] = None
     stock_max: Optional[int] = None
+    stock_a_suivre: Optional[bool] = None
+    est_boisson: Optional[bool] = None
     ean: Optional[str] = None
     fournisseur: Optional[str] = None
     localisation: Optional[str] = None

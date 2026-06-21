@@ -16,6 +16,8 @@ class Article(Base):
     stock            = Column(Integer, default=0)
     stock_min        = Column(Integer, default=0)
     stock_max        = Column(Integer, default=0)
+    stock_a_suivre   = Column(Boolean, default=False)
+    est_boisson      = Column(Boolean, default=False)
     ean              = Column(String(20))
     fournisseur      = Column(String(100))
     localisation     = Column(String(100))

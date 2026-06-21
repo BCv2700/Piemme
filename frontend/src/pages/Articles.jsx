@@ -3,8 +3,8 @@ import api from '../api/api';
 
 const ARTICLE_VIDE = {
   nom: '',
-  categorie: '',
   type_article: '',
+  code_vente: '',
   tva: 21,
   tva_away: '',
   prix_achat: 0,
@@ -13,17 +13,27 @@ const ARTICLE_VIDE = {
   stock: 0,
   stock_min: 0,
   stock_max: 0,
+  stock_a_suivre: false,
+  est_boisson: false,
   ean: '',
   fournisseur: '',
   localisation: '',
   actif: true,
 };
 
+const LIBELLES_CODE_VENTE = {
+  7001: 'Boissons Alcools',
+  7002: 'Nourriture',
+  7003: 'Boissons Softs',
+  7004: 'Boissons Vins',
+  7005: 'Divers',
+};
+
 export default function Articles() {
   const [articles, setArticles] = useState([]);
   const [recherche, setRecherche] = useState('');
-  const [filtreCategorie, setFiltreCategorie] = useState('');
   const [filtreType, setFiltreType] = useState('');
+  const [filtreASuivre, setFiltreASuivre] = useState(false);
   const [edition, setEdition] = useState(null); // null = pas de formulaire ouvert, sinon = objet article (ou ARTICLE_VIDE pour créer)
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
@@ -39,15 +49,13 @@ export default function Articles() {
 
   useEffect(() => { load(); }, []);
 
-  const categories = [...new Set(articles.map(a => a.categorie).filter(Boolean))].sort();
   const types = [...new Set(articles.map(a => a.type_article).filter(Boolean))].sort();
 
   const articlesAffiches = articles.filter(a =>
     (a.nom.toLowerCase().includes(recherche.toLowerCase()) ||
-      (a.categorie || '').toLowerCase().includes(recherche.toLowerCase()) ||
       (a.type_article || '').toLowerCase().includes(recherche.toLowerCase())) &&
-    (filtreCategorie === '' || a.categorie === filtreCategorie) &&
-    (filtreType === '' || a.type_article === filtreType)
+    (filtreType === '' || a.type_article === filtreType) &&
+    (!filtreASuivre || a.stock_a_suivre)
   );
 
   const ouvrirCreation = () => setEdition({ ...ARTICLE_VIDE });
@@ -60,6 +68,7 @@ export default function Articles() {
     setError('');
     const payload = {
       ...edition,
+      code_vente: edition.code_vente === '' ? null : Number(edition.code_vente),
       tva: Number(edition.tva),
       tva_away: edition.tva_away === '' ? null : Number(edition.tva_away),
       prix_achat: Number(edition.prix_achat),
@@ -102,7 +111,7 @@ export default function Articles() {
   return (
     <div>
       <div className="topbar">
-        <h1>Articles</h1>
+        <h1>Articles <span style={{ color: '#888', fontWeight: 400 }}>({articles.length})</span></h1>
       </div>
       <div className="content">
 
@@ -119,25 +128,11 @@ export default function Articles() {
 
         {error && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
-        <div className="stats">
-          <div className="stat-card">
-            <label>Total articles</label>
-            <span>{articles.length}</span>
-          </div>
-          <div className="stat-card">
-            <label>Actifs</label>
-            <span style={{ color: '#16a34a' }}>{articles.filter(a => a.actif).length}</span>
-          </div>
-          <div className="stat-card">
-            <label>Inactifs</label>
-            <span style={{ color: '#888' }}>{articles.filter(a => !a.actif).length}</span>
-          </div>
-        </div>
-
         <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+          <button className="btn" onClick={ouvrirCreation}>+ Nouvel article</button>
           <input
             type="text"
-            placeholder="Rechercher par nom, catégorie ou type..."
+            placeholder="Rechercher par nom ou type..."
             value={recherche}
             onChange={(e) => setRecherche(e.target.value)}
             style={{
@@ -156,15 +151,15 @@ export default function Articles() {
             <option value="">Tous les types</option>
             {types.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          <select
-            value={filtreCategorie}
-            onChange={(e) => setFiltreCategorie(e.target.value)}
-            style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}
-          >
-            <option value="">Toutes les catégories</option>
-            {categories.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <button className="btn" onClick={ouvrirCreation}>+ Nouvel article</button>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer', padding: '0 4px' }}>
+            <input
+              type="checkbox"
+              checked={filtreASuivre}
+              onChange={(e) => setFiltreASuivre(e.target.checked)}
+              style={{ width: 16, height: 16 }}
+            />
+            À suivre uniquement
+          </label>
         </div>
 
         {loading ? (
@@ -174,42 +169,55 @@ export default function Articles() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
+                  <th style={{ padding: '10px 14px' }}></th>
                   <th style={{ padding: '10px 14px' }}>ID</th>
                   <th style={{ padding: '10px 14px' }}>Nom</th>
                   <th style={{ padding: '10px 14px' }}>Type</th>
-                  <th style={{ padding: '10px 14px' }}>Catégorie</th>
+                  <th style={{ padding: '10px 14px' }}>Code vente</th>
                   <th style={{ padding: '10px 14px', textAlign: 'right' }}>Prix vente</th>
                   <th style={{ padding: '10px 14px', textAlign: 'right' }}>Stock</th>
+                  <th style={{ padding: '10px 14px', textAlign: 'right' }}>Stock min</th>
+                  <th style={{ padding: '10px 14px' }}>À suivre</th>
+                  <th style={{ padding: '10px 14px' }}>Boisson</th>
                   <th style={{ padding: '10px 14px' }}>Actif</th>
-                  <th style={{ padding: '10px 14px' }}></th>
                 </tr>
               </thead>
               <tbody>
-                {articlesAffiches.map(article => (
-                  <tr
-                    key={article.id}
-                    onClick={() => ouvrirEdition(article)}
-                    style={{ borderTop: '1px solid #f0f0ee', cursor: 'pointer' }}
-                  >
-                    <td style={{ padding: '10px 14px', color: '#aaa' }}>{article.id}</td>
-                    <td style={{ padding: '10px 14px', fontWeight: 500 }}>{article.nom}</td>
-                    <td style={{ padding: '10px 14px', color: '#666' }}>{article.type_article || '—'}</td>
-                    <td style={{ padding: '10px 14px', color: '#666' }}>{article.categorie || '—'}</td>
-                    <td style={{ padding: '10px 14px', textAlign: 'right' }}>{Number(article.prix_vente).toFixed(2)} €</td>
-                    <td style={{ padding: '10px 14px', textAlign: 'right' }}>{article.stock}</td>
-                    <td style={{ padding: '10px 14px' }}>
-                      <span style={{
-                        display: 'inline-block',
-                        width: 10, height: 10, borderRadius: '50%',
-                        background: article.actif ? '#22c55e' : '#9ca3af',
-                      }} />
-                    </td>
-                    <td style={{ padding: '10px 14px', textAlign: 'right', color: '#888' }}>Modifier →</td>
-                  </tr>
-                ))}
+                {articlesAffiches.map(article => {
+                  const stockBas = article.stock_min > 0 && article.stock < article.stock_min;
+                  return (
+                    <tr
+                      key={article.id}
+                      onClick={() => ouvrirEdition(article)}
+                      style={{
+                        borderTop: '1px solid #f0f0ee',
+                        cursor: 'pointer',
+                        background: stockBas ? '#fee2e2' : 'transparent',
+                      }}
+                    >
+                      <td style={{ padding: '10px 14px', color: '#888' }}>Modifier →</td>
+                      <td style={{ padding: '10px 14px', color: '#aaa' }}>{article.id}</td>
+                      <td style={{ padding: '10px 14px', fontWeight: 500 }}>{article.nom}</td>
+                      <td style={{ padding: '10px 14px', color: '#666' }}>{article.type_article || '—'}</td>
+                      <td style={{ padding: '10px 14px', color: '#666' }}>{LIBELLES_CODE_VENTE[article.code_vente] || article.code_vente || '—'}</td>
+                      <td style={{ padding: '10px 14px', textAlign: 'right' }}>{Number(article.prix_vente).toFixed(2)} €</td>
+                      <td style={{ padding: '10px 14px', textAlign: 'right', color: stockBas ? '#dc2626' : 'inherit', fontWeight: stockBas ? 600 : 400 }}>{article.stock}</td>
+                      <td style={{ padding: '10px 14px', textAlign: 'right', color: '#666' }}>{article.stock_min}</td>
+                      <td style={{ padding: '10px 14px' }}>{article.stock_a_suivre ? '✓' : ''}</td>
+                      <td style={{ padding: '10px 14px' }}>{article.est_boisson ? '✓' : ''}</td>
+                      <td style={{ padding: '10px 14px' }}>
+                        <span style={{
+                          display: 'inline-block',
+                          width: 10, height: 10, borderRadius: '50%',
+                          background: article.actif ? '#22c55e' : '#9ca3af',
+                        }} />
+                      </td>
+                    </tr>
+                  );
+                })}
                 {articlesAffiches.length === 0 && (
                   <tr>
-                    <td colSpan={8} style={{ padding: 20, textAlign: 'center', color: '#888' }}>
+                    <td colSpan={11} style={{ padding: 20, textAlign: 'center', color: '#888' }}>
                       Aucun article ne correspond à la recherche
                     </td>
                   </tr>
@@ -263,10 +271,19 @@ export default function Articles() {
 
               <div style={{ display: 'flex', gap: 12 }}>
                 <Champ label="Type d'article" style={{ flex: 1 }}>
-                  <input style={inputStyle} value={edition.type_article || ''} onChange={e => majChamp('type_article', e.target.value)} placeholder="Entrée, Plat, Dessert, Boisson..." />
+                  <input style={inputStyle} value={edition.type_article || ''} onChange={e => majChamp('type_article', e.target.value)} placeholder="2. APERITIF, VIN ROUGE, 4A. PÂTES..." />
                 </Champ>
-                <Champ label="Catégorie" style={{ flex: 1 }}>
-                  <input style={inputStyle} value={edition.categorie || ''} onChange={e => majChamp('categorie', e.target.value)} />
+                <Champ label="Code de vente" style={{ flex: 1 }}>
+                  <select
+                    style={inputStyle}
+                    value={edition.code_vente ?? ''}
+                    onChange={e => majChamp('code_vente', e.target.value)}
+                  >
+                    <option value="">—</option>
+                    {Object.entries(LIBELLES_CODE_VENTE).map(([code, libelle]) => (
+                      <option key={code} value={code}>{libelle}</option>
+                    ))}
+                  </select>
                 </Champ>
               </div>
 
@@ -317,15 +334,37 @@ export default function Articles() {
                 <input style={inputStyle} value={edition.localisation || ''} onChange={e => majChamp('localisation', e.target.value)} />
               </Champ>
 
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginTop: 4 }}>
-                <input
-                  type="checkbox"
-                  checked={edition.actif}
-                  onChange={e => majChamp('actif', e.target.checked)}
-                  style={{ width: 16, height: 16 }}
-                />
-                Article actif (visible dans le caddy)
-              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                  <input
+                    type="checkbox"
+                    checked={edition.actif}
+                    onChange={e => majChamp('actif', e.target.checked)}
+                    style={{ width: 16, height: 16 }}
+                  />
+                  Article actif (visible dans le caddy)
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                  <input
+                    type="checkbox"
+                    checked={edition.stock_a_suivre || false}
+                    onChange={e => majChamp('stock_a_suivre', e.target.checked)}
+                    style={{ width: 16, height: 16 }}
+                  />
+                  À suivre (article important à surveiller)
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                  <input
+                    type="checkbox"
+                    checked={edition.est_boisson || false}
+                    onChange={e => majChamp('est_boisson', e.target.checked)}
+                    style={{ width: 16, height: 16 }}
+                  />
+                  Boisson
+                </label>
+              </div>
             </div>
             </div>
           </div>
