@@ -25,6 +25,16 @@ function toDateKey(date) {
 
 const DATE_REFERENCE = '2025-12-31'; // jour neutre utilisé pour éditer la disposition de référence des tables
 
+function extractErrorMessage(e, fallback) {
+  const detail = e.response?.data?.detail;
+  if (!detail) return fallback;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail.map(d => d.msg || JSON.stringify(d)).join(' · ');
+  }
+  return fallback;
+}
+
 export default function PlanSalle() {
   const todayKey = toDateKey(new Date());
   const [searchParams, setSearchParams] = useSearchParams();
@@ -101,7 +111,7 @@ export default function PlanSalle() {
       });
       if (isReferenceDay) load();
     } catch (e) {
-      setError(e.response?.data?.detail || 'Erreur lors du déplacement');
+      setError(extractErrorMessage(e, 'Erreur lors du déplacement'));
     }
   };
 
@@ -180,7 +190,7 @@ export default function PlanSalle() {
       reservationId: resa ? resa.id : null,
       nom_client: resa ? resa.nom_client : '',
       heure: resa ? resa.heure.slice(0, 5) : '12:00',
-      nb_personnes: resa ? resa.nb_personnes : table.capacite,
+      nb_personnes: resa ? resa.nb_personnes : (table.capacite || 2),
     });
   };
 
@@ -190,12 +200,18 @@ export default function PlanSalle() {
       setTimeout(() => setMsg(null), 3000);
       return;
     }
+    const nbPersonnes = Number(editing.nb_personnes);
+    if (!nbPersonnes || nbPersonnes < 1) {
+      setMsg({ type: 'error', text: 'Le nombre de personnes doit être supérieur à 0' });
+      setTimeout(() => setMsg(null), 3000);
+      return;
+    }
     const payload = {
       table_id: editing.tableId,
       nom_client: editing.nom_client,
       date_reservation: selectedDate,
       heure: editing.heure,
-      nb_personnes: Number(editing.nb_personnes),
+      nb_personnes: nbPersonnes,
       statut: 'confirmee',
     };
     try {
@@ -208,7 +224,7 @@ export default function PlanSalle() {
       setEditing(null);
       load();
     } catch (e) {
-      setMsg({ type: 'error', text: e.response?.data?.detail || 'Erreur' });
+      setMsg({ type: 'error', text: extractErrorMessage(e, 'Erreur') });
     }
     setTimeout(() => setMsg(null), 3000);
   };
@@ -222,7 +238,7 @@ export default function PlanSalle() {
       setEditing(null);
       load();
     } catch (e) {
-      setMsg({ type: 'error', text: e.response?.data?.detail || 'Erreur' });
+      setMsg({ type: 'error', text: extractErrorMessage(e, 'Erreur') });
     }
     setTimeout(() => setMsg(null), 3000);
   };
@@ -234,7 +250,7 @@ export default function PlanSalle() {
       setMsg({ type: 'success', text: 'Disposition réinitialisée pour ce jour' });
       load();
     } catch (e) {
-      setMsg({ type: 'error', text: e.response?.data?.detail || 'Erreur' });
+      setMsg({ type: 'error', text: extractErrorMessage(e, 'Erreur') });
     }
     setTimeout(() => setMsg(null), 3000);
   };
@@ -249,7 +265,7 @@ export default function PlanSalle() {
       setMsg({ type: 'success', text: 'Statut mis à jour' });
       load();
     } catch (e) {
-      setMsg({ type: 'error', text: e.response?.data?.detail || 'Erreur' });
+      setMsg({ type: 'error', text: extractErrorMessage(e, 'Erreur') });
     }
     setTimeout(() => setMsg(null), 3000);
   };
