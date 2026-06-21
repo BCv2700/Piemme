@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, ForeignKey
+from sqlalchemy import Column, Integer, String, Numeric, Boolean, ForeignKey
 from app.database import Base
 
 class EncaissementLigne(Base):
@@ -10,3 +10,4 @@ class EncaissementLigne(Base):
     quantite          = Column(Numeric(10,2), nullable=False, default=1)
     prix_vente        = Column(Numeric(10,2), nullable=False)
     tva               = Column(Numeric(5,2), nullable=False)
+    vente_analysee    = Column(Boolean, default=False)

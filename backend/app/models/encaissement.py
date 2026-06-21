@@ -17,6 +17,7 @@ class Encaissement(Base):
     serveur             = Column(String(50))
     date_encaissement   = Column(DateTime, server_default=func.now())
     remarque            = Column(Text)
+    cash_analyse        = Column(Numeric(10,2), default=0)
 
     lignes = relationship(
         "EncaissementLigne",

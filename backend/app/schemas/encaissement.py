@@ -9,6 +9,7 @@ class EncaissementLigneBase(BaseModel):
     quantite: Decimal = Decimal("1")
     prix_vente: Decimal
     tva: Decimal
+    vente_analysee: bool = False
 
 class EncaissementLigneOut(EncaissementLigneBase):
     id: int
@@ -23,6 +24,7 @@ class EncaissementLigneUpdate(BaseModel):
     quantite: Optional[Decimal] = None
     prix_vente: Optional[Decimal] = None
     tva: Optional[Decimal] = None
+    vente_analysee: Optional[bool] = None
 
 class EncaissementLigneCreate(EncaissementLigneBase):
     pass
@@ -38,6 +40,7 @@ class EncaissementBase(BaseModel):
     depenses: bool = False
     serveur: Optional[str] = None
     remarque: Optional[str] = None
+    cash_analyse: Decimal = Decimal("0")
 
 class EncaissementCreate(EncaissementBase):
     lignes: List[EncaissementLigneBase] = []
@@ -54,6 +57,7 @@ class EncaissementUpdate(BaseModel):
     serveur: Optional[str] = None
     remarque: Optional[str] = None
     date_encaissement: Optional[datetime] = None
+    cash_analyse: Optional[Decimal] = None
 
 class EncaissementOut(EncaissementBase):
     id: int
