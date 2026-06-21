@@ -5,6 +5,7 @@ import Caddy from './pages/Caddy';
 import Paiement from './pages/Paiement';
 import Articles from './pages/Articles';
 import Reservations from './pages/Reservations';
+import HistoriqueVentes from './pages/HistoriqueVentes';
 import './App.css';
 
 function App() {
@@ -17,6 +18,7 @@ function App() {
         <Route path="/paiement/:tableId" element={<Paiement />} />
         <Route path="/articles" element={<Articles />} />
         <Route path="/reservations" element={<Reservations />} />
+        <Route path="/historique" element={<HistoriqueVentes />} />
       </Routes>
     </BrowserRouter>
   );
