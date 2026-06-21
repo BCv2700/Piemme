@@ -23,6 +23,7 @@ export default function PlanSalle() {
   const [selected, setSelected] = useState(null);
   const roomRef = useRef(null);
   const dragRef = useRef(null);
+  const longPressRef = useRef(null);
   const navigate = useNavigate();
 
   const load = () => api.get('/tables/').then(r => setTables(r.data)).catch(() => setError('Impossible de charger le plan de salle'));
@@ -93,6 +94,41 @@ export default function PlanSalle() {
     setSelected(table);
   };
 
+  const handleTouchStart = (e, table) => {
+    longPressRef.current = {
+      triggered: false,
+      startX: e.touches[0].clientX,
+      startY: e.touches[0].clientY,
+    };
+    const timer = setTimeout(() => {
+      if (longPressRef.current) {
+        longPressRef.current.triggered = true;
+        setSelected(table);
+      }
+    }, 550);
+    longPressRef.current.timer = timer;
+  };
+
+  const handleTouchMove = (e) => {
+    if (!longPressRef.current) return;
+    const dx = Math.abs(e.touches[0].clientX - longPressRef.current.startX);
+    const dy = Math.abs(e.touches[0].clientY - longPressRef.current.startY);
+    if (dx > 10 || dy > 10) {
+      clearTimeout(longPressRef.current.timer);
+      longPressRef.current = null;
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    if (longPressRef.current) {
+      clearTimeout(longPressRef.current.timer);
+      if (longPressRef.current.triggered) {
+        e.preventDefault();
+      }
+      longPressRef.current = null;
+    }
+  };
+
   const changerStatut = async (id, statut) => {
     try {
       await api.patch('/tables/' + id, { statut });
@@ -160,7 +196,7 @@ export default function PlanSalle() {
               {label}
             </span>
           ))}
-          <span style={{ marginLeft: 'auto' }}>Glissez une table pour la déplacer · Clic gauche pour ouvrir le caddy · Clic droit pour changer le statut</span>
+          <span style={{ marginLeft: 'auto' }}>Glissez une table pour la déplacer · Clic gauche pour ouvrir le caddy · Clic droit ou appui long pour changer le statut</span>
         </div>
 
         <div
@@ -181,6 +217,9 @@ export default function PlanSalle() {
               id={'table-' + table.id}
               onMouseDown={(e) => handleMouseDown(e, table)}
               onContextMenu={(e) => handleContextMenu(e, table)}
+              onTouchStart={(e) => handleTouchStart(e, table)}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
               style={{
                 position: 'absolute',
                 left: table.pos_x,
@@ -197,6 +236,7 @@ export default function PlanSalle() {
                 cursor: table.statut === 'indisponible' ? 'not-allowed' : 'grab',
                 opacity: table.statut === 'indisponible' ? 0.6 : 1,
                 userSelect: 'none',
+                WebkitTouchCallout: 'none',
                 fontSize: 13,
                 fontWeight: 600,
                 boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
