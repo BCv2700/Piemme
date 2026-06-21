@@ -6,7 +6,11 @@ from typing import Optional
 from app.database import get_db
 from app.models.table_position_jour import TablePositionJour
 from app.models.table import Table
-from app.schemas.table_position_jour import TablePositionJourOut, TablePositionJourUpsert
+from app.schemas.table_position_jour import (
+    TablePositionJourOut,
+    TablePositionJourUpsert,
+    TablePositionJourStatutUpsert,
+)
 
 router = APIRouter(prefix="/table-positions-jour", tags=["TablePositionsJour"])
 
@@ -68,22 +72,61 @@ def upsert_position_jour(payload: TablePositionJourUpsert, db: Session = Depends
         date=payload.date,
         pos_x=payload.pos_x,
         pos_y=payload.pos_y,
+        statut=None,
     )
     stmt = stmt.on_conflict_do_update(
         constraint='uq_table_position_jour_table_date',
         set_={'pos_x': payload.pos_x, 'pos_y': payload.pos_y},
-    ).returning(TablePositionJour.id)
+    ).returning(TablePositionJour.id, TablePositionJour.statut)
 
     result = db.execute(stmt)
     db.commit()
-    new_id = result.scalar_one()
+    row = result.one()
 
     return TablePositionJourOut(
-        id=new_id,
+        id=row.id,
         table_id=payload.table_id,
         date=payload.date,
         pos_x=payload.pos_x,
         pos_y=payload.pos_y,
+        statut=row.statut,
+    )
+
+
+@router.put("/statut", response_model=TablePositionJourOut)
+def upsert_statut_jour(payload: TablePositionJourStatutUpsert, db: Session = Depends(get_db)):
+    """
+    Enregistre le statut manuel (libre/occupee/reservee/indisponible) d'une table
+    pour un jour donné, sans toucher à sa position éventuelle ce jour-là.
+    Upsert atomique sur la contrainte unique (table_id, date).
+    """
+    table = db.query(Table).filter(Table.id == payload.table_id).first()
+    if not table:
+        raise HTTPException(status_code=404, detail="Table introuvable")
+
+    stmt = pg_insert(TablePositionJour).values(
+        table_id=payload.table_id,
+        date=payload.date,
+        pos_x=None,
+        pos_y=None,
+        statut=payload.statut,
+    )
+    stmt = stmt.on_conflict_do_update(
+        constraint='uq_table_position_jour_table_date',
+        set_={'statut': payload.statut},
+    ).returning(TablePositionJour.id, TablePositionJour.pos_x, TablePositionJour.pos_y)
+
+    result = db.execute(stmt)
+    db.commit()
+    row = result.one()
+
+    return TablePositionJourOut(
+        id=row.id,
+        table_id=payload.table_id,
+        date=payload.date,
+        pos_x=row.pos_x,
+        pos_y=row.pos_y,
+        statut=payload.statut,
     )
 
 
