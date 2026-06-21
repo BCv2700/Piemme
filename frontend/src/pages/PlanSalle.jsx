@@ -6,12 +6,14 @@ const STATUT_COLOR = {
   libre: '#22c55e',
   occupee: '#ef4444',
   reservee: '#f59e0b',
+  indisponible: '#9ca3af',
 };
 
 const STATUT_LABEL = {
   libre: 'Libre',
   occupee: 'Occupée',
   reservee: 'Réservée',
+  indisponible: 'Indisponible',
 };
 
 export default function PlanSalle() {
@@ -69,7 +71,12 @@ export default function PlanSalle() {
             return prev;
           });
         } else {
-          navigate('/caddy/' + id);
+          if (table.statut === 'indisponible') {
+            setMsg({ type: 'error', text: 'Cette table est indisponible' });
+            setTimeout(() => setMsg(null), 3000);
+          } else {
+            navigate('/caddy/' + id);
+          }
         }
       }
       dragRef.current = null;
@@ -79,6 +86,11 @@ export default function PlanSalle() {
 
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+  };
+
+  const handleContextMenu = (e, table) => {
+    e.preventDefault();
+    setSelected(table);
   };
 
   const changerStatut = async (id, statut) => {
@@ -96,6 +108,7 @@ export default function PlanSalle() {
   const nbLibres = tables.filter(t => t.statut === 'libre').length;
   const nbOccupees = tables.filter(t => t.statut === 'occupee').length;
   const nbReservees = tables.filter(t => t.statut === 'reservee').length;
+  const nbIndisponibles = tables.filter(t => t.statut === 'indisponible').length;
 
   return (
     <div>
@@ -131,6 +144,10 @@ export default function PlanSalle() {
             <span style={{ color: '#b45309' }}>{nbReservees}</span>
           </div>
           <div className="stat-card">
+            <label>Tables indisponibles</label>
+            <span style={{ color: '#6b7280' }}>{nbIndisponibles}</span>
+          </div>
+          <div className="stat-card">
             <label>Total</label>
             <span>{tables.length}</span>
           </div>
@@ -143,7 +160,7 @@ export default function PlanSalle() {
               {label}
             </span>
           ))}
-          <span style={{ marginLeft: 'auto' }}>Glissez une table pour la déplacer · Cliquez pour ouvrir le caddy</span>
+          <span style={{ marginLeft: 'auto' }}>Glissez une table pour la déplacer · Clic gauche pour ouvrir le caddy · Clic droit pour changer le statut</span>
         </div>
 
         <div
@@ -163,6 +180,7 @@ export default function PlanSalle() {
               key={table.id}
               id={'table-' + table.id}
               onMouseDown={(e) => handleMouseDown(e, table)}
+              onContextMenu={(e) => handleContextMenu(e, table)}
               style={{
                 position: 'absolute',
                 left: table.pos_x,
@@ -176,7 +194,8 @@ export default function PlanSalle() {
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                cursor: 'grab',
+                cursor: table.statut === 'indisponible' ? 'not-allowed' : 'grab',
+                opacity: table.statut === 'indisponible' ? 0.6 : 1,
                 userSelect: 'none',
                 fontSize: 13,
                 fontWeight: 600,
