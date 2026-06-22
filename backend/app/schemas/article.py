@@ -21,6 +21,9 @@ class ArticleBase(BaseModel):
     fournisseur: Optional[str] = None
     localisation: Optional[str] = None
     actif: bool = True
+    # 'vente' (défaut) ou 'depense' : détermine si l'article apparaît dans le
+    # Caddy d'une table de salle classique ou uniquement sur la table DÉPENSES
+    type: str = "vente"
 
 class ArticleCreate(ArticleBase):
     pass
@@ -44,6 +47,7 @@ class ArticleUpdate(BaseModel):
     fournisseur: Optional[str] = None
     localisation: Optional[str] = None
     actif: Optional[bool] = None
+    type: Optional[str] = None
 
 class ArticleOut(ArticleBase):
     id: int

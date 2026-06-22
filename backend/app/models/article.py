@@ -22,3 +22,7 @@ class Article(Base):
     fournisseur      = Column(String(100))
     localisation     = Column(String(100))
     actif            = Column(Boolean, default=True)
+    # Distingue les articles de vente classiques ('vente') des articles utilisés
+    # uniquement sur la table fictive DÉPENSES pour encoder des sorties de caisse
+    # ('depense'). Filtré côté Caddy selon le type de la table active.
+    type             = Column(String(20), nullable=False, default='vente')
