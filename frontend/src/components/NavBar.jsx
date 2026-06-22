@@ -1,7 +1,18 @@
+import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 export default function NavBar() {
   const location = useLocation();
+  const [dernierDatePlanSalle, setDernierDatePlanSalle] = useState(null);
+
+  // Mémorise la date du Plan de salle chaque fois qu'on s'y trouve, pour pouvoir
+  // y revenir avec cette même date même après avoir visité un autre écran.
+  useEffect(() => {
+    if (location.pathname === '/') {
+      const date = new URLSearchParams(location.search).get('date');
+      setDernierDatePlanSalle(date);
+    }
+  }, [location]);
 
   const linkStyle = (path) => ({
     padding: '8px 14px',
@@ -13,6 +24,9 @@ export default function NavBar() {
     background: location.pathname === path ? '#111' : 'transparent',
   });
 
+  const urlPlanSalle = dernierDatePlanSalle ? '/?date=' + dernierDatePlanSalle : '/';
+  const suffixeDate = dernierDatePlanSalle ? '?date=' + dernierDatePlanSalle : '';
+
   return (
     <div style={{
       display: 'flex',
@@ -21,11 +35,11 @@ export default function NavBar() {
       borderBottom: '1px solid #e5e5e0',
       background: 'white',
     }}>
-      <Link to="/" style={linkStyle('/')}>Plan de salle</Link>
+      <Link to={urlPlanSalle} style={linkStyle('/')}>Plan de salle</Link>
       <Link to="/articles" style={linkStyle('/articles')}>Articles</Link>
       <Link to="/reservations" style={linkStyle('/reservations')}>Réservations</Link>
-      <Link to="/historique" style={linkStyle('/historique')}>Historique</Link>
-      <Link to="/encaissements" style={linkStyle('/encaissements')}>Encaissements</Link>
+      <Link to={'/historique' + suffixeDate} style={linkStyle('/historique')}>Historique</Link>
+      <Link to={'/encaissements' + suffixeDate} style={linkStyle('/encaissements')}>Encaissements</Link>
     </div>
   );
 }
