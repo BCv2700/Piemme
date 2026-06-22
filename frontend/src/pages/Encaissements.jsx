@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../api/api';
 
 function todayKey() {
@@ -15,7 +16,12 @@ function addDays(dateKey, delta) {
 const TAUX_TVA = [6, 12, 21];
 
 export default function Encaissements() {
-  const [dateUnique, setDateUnique] = useState(todayKey());
+  const [searchParams] = useSearchParams();
+  // Lit la date transmise par le Plan de salle (NavBar) au montage du composant.
+  // S'il n'y en a pas (accès direct à /encaissements), on retombe sur aujourd'hui.
+  const dateInitiale = searchParams.get('date') || todayKey();
+
+  const [dateUnique, setDateUnique] = useState(dateInitiale);
   const [encaissements, setEncaissements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

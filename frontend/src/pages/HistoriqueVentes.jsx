@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../api/api';
 
 function todayKey() {
@@ -13,10 +14,15 @@ function addDays(dateKey, delta) {
 }
 
 export default function HistoriqueVentes() {
+  const [searchParams] = useSearchParams();
+  // Lit la date transmise par le Plan de salle (NavBar) au montage du composant.
+  // S'il n'y en a pas (accès direct à /historique), on retombe sur aujourd'hui.
+  const dateInitiale = searchParams.get('date') || todayKey();
+
   const [modePlage, setModePlage] = useState(false);
-  const [dateUnique, setDateUnique] = useState(todayKey());
-  const [dateDebut, setDateDebut] = useState(todayKey());
-  const [dateFin, setDateFin] = useState(todayKey());
+  const [dateUnique, setDateUnique] = useState(dateInitiale);
+  const [dateDebut, setDateDebut] = useState(dateInitiale);
+  const [dateFin, setDateFin] = useState(dateInitiale);
   const [encaissements, setEncaissements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
