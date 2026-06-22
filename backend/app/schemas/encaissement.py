@@ -41,6 +41,7 @@ class EncaissementBase(BaseModel):
     serveur: Optional[str] = None
     remarque: Optional[str] = None
     cash_analyse: Decimal = Decimal("0")
+    nom_reservation_archive: Optional[str] = None
 
 class EncaissementCreate(EncaissementBase):
     lignes: List[EncaissementLigneBase] = []
@@ -58,6 +59,7 @@ class EncaissementUpdate(BaseModel):
     remarque: Optional[str] = None
     date_encaissement: Optional[datetime] = None
     cash_analyse: Optional[Decimal] = None
+    nom_reservation_archive: Optional[str] = None
 
 class EncaissementOut(EncaissementBase):
     id: int

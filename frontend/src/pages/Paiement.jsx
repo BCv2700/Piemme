@@ -13,22 +13,31 @@ export default function Paiement() {
   const [table, setTable] = useState(null);
   const [lignes, setLignes] = useState([]);
   const [articles, setArticles] = useState([]);
+  const [nomReservation, setNomReservation] = useState(null);
   const [montantCarte, setMontantCarte] = useState('');
   const [montantCash, setMontantCash] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [enregistrement, setEnregistrement] = useState(false);
 
+  const todayKey = (() => {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  })();
+
   const load = async () => {
     try {
-      const [tableRes, lignesRes, articlesRes] = await Promise.all([
+      const [tableRes, lignesRes, articlesRes, reservationsRes] = await Promise.all([
         api.get('/tables/' + tableId),
         api.get('/commandes/', { params: { table_id: tableId } }),
         api.get('/articles/'),
+        api.get('/reservations/', { params: { date_reservation: todayKey } }),
       ]);
       setTable(tableRes.data);
       setLignes(lignesRes.data);
       setArticles(articlesRes.data);
+      const resa = reservationsRes.data.find(r => r.table_id === Number(tableId) && r.statut !== 'annulee');
+      setNomReservation(resa ? resa.nom_client : null);
     } catch (e) {
       setError(e.response?.data?.detail || 'Impossible de charger la commande');
     } finally {
@@ -81,6 +90,7 @@ export default function Paiement() {
         montant_total: total,
         nb_personnes: 1,
         emporte: lignes.some(l => l.emporte),
+        nom_reservation_archive: nomReservation,
         lignes: lignes.map(l => ({
           article_id: l.article_id,
           article_nom: nomArticle(l.article_id),
