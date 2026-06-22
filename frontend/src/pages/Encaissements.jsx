@@ -204,12 +204,18 @@ export default function Encaissements() {
                       {new Date(enc.date_encaissement).toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' })}
                     </td>
                     <td style={{ padding: '4px 6px' }}>
-                      <input
-                        style={{ ...inputStyle, width: 60 }}
-                        value={enc.table_nom || ''}
-                        onChange={(e) => majLocal(enc.id, 'table_nom', e.target.value)}
-                        onBlur={() => saveEncaissement(enc)}
-                      />
+                      {enc.depenses ? (
+                        <span style={{ fontSize: 12, color: '#b91c1c', fontWeight: 600, paddingLeft: 4 }}>
+                          {enc.lignes && enc.lignes[0] ? enc.lignes[0].article_nom : '—'}
+                        </span>
+                      ) : (
+                        <input
+                          style={{ ...inputStyle, width: 60 }}
+                          value={enc.table_nom || ''}
+                          onChange={(e) => majLocal(enc.id, 'table_nom', e.target.value)}
+                          onBlur={() => saveEncaissement(enc)}
+                        />
+                      )}
                     </td>
                     <td style={{ padding: '6px 10px', color: '#666' }}>{enc.nom_reservation_archive || '—'}</td>
                     <td style={{ padding: '6px 10px', textAlign: 'center' }}>
