@@ -210,7 +210,7 @@ export default function HistoriqueVentes() {
                     <td style={{ padding: '4px 6px' }}>
                       <input
                         type="number" step="0.01"
-                        style={{ ...inputStyle, width: 50, textAlign: 'right' }}
+                        style={{ ...inputStyle, width: 60, textAlign: 'right' }}
                         value={ligne.quantite}
                         onChange={(e) => majLigneLocal(enc.id, ligne.id, 'quantite', e.target.value)}
                         onBlur={() => saveLigne(ligne)}
@@ -219,7 +219,7 @@ export default function HistoriqueVentes() {
                     <td style={{ padding: '4px 6px' }}>
                       <input
                         type="number" step="0.01"
-                        style={{ ...inputStyle, width: 65, textAlign: 'right' }}
+                        style={{ ...inputStyle, width: 80, textAlign: 'right' }}
                         value={ligne.prix_vente}
                         onChange={(e) => majLigneLocal(enc.id, ligne.id, 'prix_vente', e.target.value)}
                         onBlur={() => saveLigne(ligne)}
@@ -227,9 +227,9 @@ export default function HistoriqueVentes() {
                     </td>
                     <td style={{ padding: '4px 6px' }}>
                       <input
-                        type="number" step="0.01"
-                        style={{ ...inputStyle, width: 50, textAlign: 'right' }}
-                        value={ligne.tva}
+                        type="number" step="1"
+                        style={{ ...inputStyle, width: 55, textAlign: 'right' }}
+                        value={Math.round(ligne.tva)}
                         onChange={(e) => majLigneLocal(enc.id, ligne.id, 'tva', e.target.value)}
                         onBlur={() => saveLigne(ligne)}
                       />
