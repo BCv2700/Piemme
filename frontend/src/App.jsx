@@ -6,6 +6,7 @@ import Paiement from './pages/Paiement';
 import Articles from './pages/Articles';
 import Reservations from './pages/Reservations';
 import HistoriqueVentes from './pages/HistoriqueVentes';
+import Encaissements from './pages/Encaissements';
 import './App.css';
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
         <Route path="/articles" element={<Articles />} />
         <Route path="/reservations" element={<Reservations />} />
         <Route path="/historique" element={<HistoriqueVentes />} />
+        <Route path="/encaissements" element={<Encaissements />} />
       </Routes>
     </BrowserRouter>
   );

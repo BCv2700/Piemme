@@ -25,6 +25,7 @@ export default function NavBar() {
       <Link to="/articles" style={linkStyle('/articles')}>Articles</Link>
       <Link to="/reservations" style={linkStyle('/reservations')}>Réservations</Link>
       <Link to="/historique" style={linkStyle('/historique')}>Historique</Link>
+      <Link to="/encaissements" style={linkStyle('/encaissements')}>Encaissements</Link>
     </div>
   );
 }
