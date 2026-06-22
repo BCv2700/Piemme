@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../api/api';
+import DetailEncaissementModal from '../components/DetailEncaissementModal';
 
 function todayKey() {
   const d = new Date();
@@ -26,6 +27,7 @@ export default function Encaissements() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
+  const [detailOuvert, setDetailOuvert] = useState(null); // id de l'encaissement affiché dans la modale, ou null
 
   const load = () => {
     setLoading(true);
@@ -183,6 +185,8 @@ export default function Encaissements() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
+                  <th style={{ padding: '8px 10px' }}></th>
+                  <th style={{ padding: '8px 10px' }}></th>
                   <th style={{ padding: '8px 10px' }}>Réf</th>
                   <th style={{ padding: '8px 10px' }}>Heure</th>
                   <th style={{ padding: '8px 10px' }}>Ticket</th>
@@ -193,12 +197,26 @@ export default function Encaissements() {
                   <th style={{ padding: '8px 10px', textAlign: 'right' }}>Carte</th>
                   <th style={{ padding: '8px 10px', textAlign: 'right' }}>Total</th>
                   <th style={{ padding: '8px 10px', textAlign: 'right' }}>Cash analysé</th>
-                  <th style={{ padding: '8px 10px' }}></th>
                 </tr>
               </thead>
               <tbody>
                 {encaissementsTries.map(enc => (
                   <tr key={enc.id} style={{ borderTop: '1px solid #f0f0ee' }}>
+                    <td style={{ padding: '6px 10px' }}>
+                      <button
+                        className="btn"
+                        style={{ width: 22, height: 22, padding: 0, fontSize: 11 }}
+                        title="Voir / corriger le détail"
+                        onClick={() => setDetailOuvert(enc.id)}
+                      >⋯</button>
+                    </td>
+                    <td style={{ padding: '6px 10px' }}>
+                      <button
+                        className="btn"
+                        style={{ width: 22, height: 22, padding: 0, fontSize: 11, color: '#dc2626', borderColor: '#fca5a5' }}
+                        onClick={() => deleteEncaissement(enc.id)}
+                      >✕</button>
+                    </td>
                     <td style={{ padding: '6px 10px', color: '#aaa' }}>{enc.id}</td>
                     <td style={{ padding: '6px 10px', whiteSpace: 'nowrap', color: '#666' }}>
                       {new Date(enc.date_encaissement).toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' })}
@@ -260,13 +278,6 @@ export default function Encaissements() {
                         onBlur={() => saveEncaissement(enc)}
                       />
                     </td>
-                    <td style={{ padding: '6px 10px' }}>
-                      <button
-                        className="btn"
-                        style={{ width: 22, height: 22, padding: 0, fontSize: 11, color: '#dc2626', borderColor: '#fca5a5' }}
-                        onClick={() => deleteEncaissement(enc.id)}
-                      >✕</button>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -274,6 +285,14 @@ export default function Encaissements() {
           </div>
         )}
       </div>
+
+      {detailOuvert && (
+        <DetailEncaissementModal
+          encaissementId={detailOuvert}
+          onClose={() => setDetailOuvert(null)}
+          onChanged={load}
+        />
+      )}
     </div>
   );
 }

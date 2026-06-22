@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../api/api';
+import DetailEncaissementModal from '../components/DetailEncaissementModal';
 
 function todayKey() {
   const d = new Date();
@@ -27,6 +28,7 @@ export default function HistoriqueVentes() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
+  const [detailOuvert, setDetailOuvert] = useState(null); // id de l'encaissement affiché dans la modale, ou null
 
   const effectiveDebut = modePlage ? dateDebut : dateUnique;
   const effectiveFin = modePlage ? dateFin : dateUnique;
@@ -186,6 +188,8 @@ export default function HistoriqueVentes() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
+                  <th style={{ padding: '8px 10px' }}>Réf enc.</th>
+                  <th style={{ padding: '8px 10px' }}></th>
                   <th style={{ padding: '8px 10px' }}>Date</th>
                   <th style={{ padding: '8px 10px' }}>Article</th>
                   <th style={{ padding: '8px 10px', textAlign: 'right' }}>Qté</th>
@@ -193,15 +197,27 @@ export default function HistoriqueVentes() {
                   <th style={{ padding: '8px 10px', textAlign: 'right' }}>TVA %</th>
                   <th style={{ padding: '8px 10px', textAlign: 'right' }}>Prix payé</th>
                   <th style={{ padding: '8px 10px', textAlign: 'center' }}>Analysée</th>
-                  <th style={{ padding: '8px 10px' }}>Réf enc.</th>
                   <th style={{ padding: '8px 10px' }}>Ticket</th>
                   <th style={{ padding: '8px 10px' }}>Réservation</th>
-                  <th style={{ padding: '8px 10px' }}></th>
                 </tr>
               </thead>
               <tbody>
                 {lignesAPlat.map(({ enc, ligne }) => (
                   <tr key={ligne.id} style={{ borderTop: '1px solid #f0f0ee' }}>
+                    <td
+                      style={{ padding: '6px 10px', color: '#2563eb', cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted' }}
+                      onClick={() => setDetailOuvert(enc.id)}
+                      title="Voir / corriger le détail de cet encaissement"
+                    >
+                      {enc.id}
+                    </td>
+                    <td style={{ padding: '6px 10px' }}>
+                      <button
+                        className="btn"
+                        style={{ width: 22, height: 22, padding: 0, fontSize: 11, color: '#dc2626', borderColor: '#fca5a5' }}
+                        onClick={() => deleteLigne(enc.id, ligne.id)}
+                      >✕</button>
+                    </td>
                     <td style={{ padding: '6px 10px', whiteSpace: 'nowrap', color: '#666' }}>
                       {new Date(enc.date_encaissement).toLocaleString('fr-BE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </td>
@@ -251,16 +267,8 @@ export default function HistoriqueVentes() {
                         style={{ width: 15, height: 15, cursor: 'pointer' }}
                       />
                     </td>
-                    <td style={{ padding: '6px 10px', color: '#aaa' }}>{enc.id}</td>
                     <td style={{ padding: '6px 10px', color: '#666' }}>{enc.table_nom || '—'}</td>
                     <td style={{ padding: '6px 10px', color: '#666' }}>{enc.nom_reservation_archive || '—'}</td>
-                    <td style={{ padding: '6px 10px' }}>
-                      <button
-                        className="btn"
-                        style={{ width: 22, height: 22, padding: 0, fontSize: 11, color: '#dc2626', borderColor: '#fca5a5' }}
-                        onClick={() => deleteLigne(enc.id, ligne.id)}
-                      >✕</button>
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -268,6 +276,14 @@ export default function HistoriqueVentes() {
           </div>
         )}
       </div>
+
+      {detailOuvert && (
+        <DetailEncaissementModal
+          encaissementId={detailOuvert}
+          onClose={() => setDetailOuvert(null)}
+          onChanged={load}
+        />
+      )}
     </div>
   );
 }
