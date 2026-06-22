@@ -23,6 +23,12 @@ function toDateKey(date) {
   return `${y}-${m}-${d}`;
 }
 
+function addDays(dateKey, delta) {
+  const d = new Date(dateKey + 'T00:00:00');
+  d.setDate(d.getDate() + delta);
+  return toDateKey(d);
+}
+
 const DATE_REFERENCE = '2025-12-31'; // jour neutre utilisé pour éditer la disposition de référence des tables
 
 function extractErrorMessage(e, fallback) {
@@ -105,8 +111,8 @@ export default function PlanSalle() {
       await api.put('/table-positions-jour/', {
         table_id: id,
         date: selectedDate,
-        pos_x,
-        pos_y,
+        pos_x: Math.round(pos_x),
+        pos_y: Math.round(pos_y),
         definir_reference: isReferenceDay,
       });
       if (isReferenceDay) load();
@@ -132,8 +138,8 @@ export default function PlanSalle() {
       if (!dragRef.current) return;
       const draggedId = dragRef.current.id;
       const rect = roomRef.current.getBoundingClientRect();
-      const newX = Math.max(0, Math.min(rect.width - 90, ev.clientX - rect.left - dragRef.current.offsetX));
-      const newY = Math.max(0, Math.min(rect.height - 90, ev.clientY - rect.top - dragRef.current.offsetY));
+      const newX = Math.round(Math.max(0, Math.min(rect.width - 90, ev.clientX - rect.left - dragRef.current.offsetX)));
+      const newY = Math.round(Math.max(0, Math.min(rect.height - 90, ev.clientY - rect.top - dragRef.current.offsetY)));
       if (Math.abs(newX - dragRef.current.startX) > 4 || Math.abs(newY - dragRef.current.startY) > 4) {
         dragRef.current.moved = true;
       }
@@ -294,12 +300,14 @@ export default function PlanSalle() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
           <label style={{ fontSize: 13, color: '#888', fontWeight: 600 }}>Jour affiché</label>
+          <button className="btn" onClick={() => setSelectedDate(addDays(selectedDate, -1))}>−</button>
           <input
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
             style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 }}
           />
+          <button className="btn" onClick={() => setSelectedDate(addDays(selectedDate, 1))}>+</button>
           {!isToday && (
             <button className="btn" onClick={() => setSelectedDate(todayKey)}>Revenir à aujourd'hui</button>
           )}
