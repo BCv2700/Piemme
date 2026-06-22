@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 from app.database import get_db
 from app.models.encaissement import Encaissement
@@ -29,7 +29,11 @@ def list_encaissements(
     if date_debut:
         query = query.filter(Encaissement.date_encaissement >= date_debut)
     if date_fin:
-        query = query.filter(Encaissement.date_encaissement <= date_fin)
+        # date_fin désigne une journée entière : on inclut tout jusqu'à 23:59:59.999999
+        # de ce jour, sinon une comparaison directe à la date (minuit) exclurait toute
+        # vente faite après 00:00 le jour même.
+        borne_fin = datetime.combine(date_fin, datetime.max.time())
+        query = query.filter(Encaissement.date_encaissement <= borne_fin)
     return query.order_by(Encaissement.date_encaissement.desc()).all()
 
 
