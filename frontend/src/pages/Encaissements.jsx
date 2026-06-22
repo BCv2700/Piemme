@@ -85,7 +85,6 @@ export default function Encaissements() {
         montant_carte: Number(enc.montant_carte),
         montant_cash: Number(enc.montant_cash),
         montant_total: Number(enc.montant_total),
-        cash_analyse: Number(enc.cash_analyse || 0),
         serveur: enc.serveur,
         remarque: enc.remarque,
         depenses: !!enc.depenses,
@@ -269,14 +268,8 @@ export default function Encaissements() {
                         onBlur={() => saveEncaissement(enc)}
                       />
                     </td>
-                    <td style={{ padding: '4px 6px' }}>
-                      <input
-                        type="number" step="0.01"
-                        style={{ ...inputStyle, width: 80, textAlign: 'right', color: Number(enc.cash_analyse) > 0 ? '#16a34a' : '#888' }}
-                        value={enc.cash_analyse || 0}
-                        onChange={(e) => majLocal(enc.id, 'cash_analyse', e.target.value)}
-                        onBlur={() => saveEncaissement(enc)}
-                      />
+                    <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 600, color: Number(enc.cash_analyse) > 0 ? '#16a34a' : '#888' }}>
+                      {Number(enc.cash_analyse || 0).toFixed(2)} €
                     </td>
                   </tr>
                 ))}
