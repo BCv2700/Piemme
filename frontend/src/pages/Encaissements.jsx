@@ -52,10 +52,15 @@ export default function Encaissements() {
     return fallback;
   };
 
-  // Répartition par taux de TVA, calculée à partir des lignes de tous les encaissements du jour
+  // Tous les totaux ci-dessous ne portent que sur les vraies recettes : les
+  // encaissements de type dépense (depenses=true, montants négatifs) sont
+  // exclus, pour ne pas polluer Cash/Carte/TVA avec des sorties de caisse.
+  const recettes = useMemo(() => encaissements.filter(e => !e.depenses), [encaissements]);
+
+  // Répartition par taux de TVA, calculée à partir des lignes des seules recettes du jour
   const repartitionTva = useMemo(() => {
     const totaux = { 6: 0, 12: 0, 21: 0, autre: 0 };
-    encaissements.forEach(enc => {
+    recettes.forEach(enc => {
       (enc.lignes || []).forEach(ligne => {
         const montant = Number(ligne.prix_vente) * Number(ligne.quantite);
         const taux = Math.round(Number(ligne.tva));
@@ -67,12 +72,12 @@ export default function Encaissements() {
       });
     });
     return totaux;
-  }, [encaissements]);
+  }, [recettes]);
 
-  const totalJour = encaissements.reduce((s, e) => s + Number(e.montant_total || 0), 0);
-  const totalCash = encaissements.reduce((s, e) => s + Number(e.montant_cash || 0), 0);
-  const totalCarte = encaissements.reduce((s, e) => s + Number(e.montant_carte || 0), 0);
-  const totalCashAnalyse = encaissements.reduce((s, e) => s + Number(e.cash_analyse || 0), 0);
+  const totalJour = recettes.reduce((s, e) => s + Number(e.montant_total || 0), 0);
+  const totalCash = recettes.reduce((s, e) => s + Number(e.montant_cash || 0), 0);
+  const totalCarte = recettes.reduce((s, e) => s + Number(e.montant_carte || 0), 0);
+  const totalCashAnalyse = recettes.reduce((s, e) => s + Number(e.cash_analyse || 0), 0);
 
   const majLocal = (encId, champ, valeur) => {
     setEncaissements(prev => prev.map(e => e.id === encId ? { ...e, [champ]: valeur } : e));
