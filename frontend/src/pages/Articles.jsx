@@ -27,12 +27,14 @@ const LIBELLES_CODE_VENTE = {
   7003: 'Boissons Softs',
   7004: 'Boissons Vins',
   7005: 'Divers',
+  9001: 'Dépenses',
 };
 
 export default function Articles() {
   const [articles, setArticles] = useState([]);
   const [recherche, setRecherche] = useState('');
   const [filtreType, setFiltreType] = useState('');
+  const [filtreCodeVente, setFiltreCodeVente] = useState('');
   const [filtreASuivre, setFiltreASuivre] = useState(false);
   const [edition, setEdition] = useState(null); // null = pas de formulaire ouvert, sinon = objet article (ou ARTICLE_VIDE pour créer)
   const [error, setError] = useState('');
@@ -51,10 +53,15 @@ export default function Articles() {
 
   const types = [...new Set(articles.map(a => a.type_article).filter(Boolean))].sort();
 
+  // Codes de vente réellement présents dans les articles, triés
+  const codesVente = [...new Set(articles.map(a => a.code_vente).filter(c => c != null))]
+    .sort((a, b) => a - b);
+
   const articlesAffiches = articles.filter(a =>
     (a.nom.toLowerCase().includes(recherche.toLowerCase()) ||
       (a.type_article || '').toLowerCase().includes(recherche.toLowerCase())) &&
     (filtreType === '' || a.type_article === filtreType) &&
+    (filtreCodeVente === '' || String(a.code_vente) === filtreCodeVente) &&
     (!filtreASuivre || a.stock_a_suivre)
   );
 
@@ -125,7 +132,7 @@ export default function Articles() {
 
         {error && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, color: '#888', fontWeight: 600, whiteSpace: 'nowrap' }}>
             {articles.length} article{articles.length !== 1 ? 's' : ''}
           </span>
@@ -137,12 +144,23 @@ export default function Articles() {
             onChange={(e) => setRecherche(e.target.value)}
             style={{
               flex: 1,
+              minWidth: 200,
               padding: '10px 14px',
               borderRadius: 8,
               border: '1px solid #ddd',
               fontSize: 14,
             }}
           />
+          <select
+            value={filtreCodeVente}
+            onChange={(e) => setFiltreCodeVente(e.target.value)}
+            style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}
+          >
+            <option value="">Tous les codes de vente</option>
+            {codesVente.map(c => (
+              <option key={c} value={String(c)}>{LIBELLES_CODE_VENTE[c] || c}</option>
+            ))}
+          </select>
           <select
             value={filtreType}
             onChange={(e) => setFiltreType(e.target.value)}
