@@ -136,6 +136,18 @@ export default function Articles() {
     setTimeout(() => setMsg(null), 3000);
   };
 
+  // Changement de catégorie directement depuis le tableau (dépenses), enregistré aussitôt
+  const changerCategorieLigne = async (article, nouvelleCat) => {
+    setError('');
+    const valeur = nouvelleCat === '' ? null : nouvelleCat;
+    try {
+      const res = await api.patch('/articles/' + article.id, { categorie: valeur });
+      setArticles(prev => prev.map(a => a.id === article.id ? { ...a, categorie: res.data.categorie } : a));
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Erreur lors du changement de catégorie');
+    }
+  };
+
   // ───── Sélection multiple ────────────────────────────────────────────────
   const basculerSelection = (id) => {
     setSelection(prev =>
@@ -344,12 +356,31 @@ export default function Articles() {
                       <td style={{ padding: '4px 14px', fontWeight: 500 }}>{article.nom}</td>
                       <td style={{ padding: '4px 14px', color: '#666' }}>{article.type_article || '—'}</td>
                       <td style={{ padding: '4px 14px', color: '#666' }}>{LIBELLES_CODE_VENTE[article.code_vente] || article.code_vente || '—'}</td>
-                      <td style={{ padding: '4px 14px' }}>
-                        {article.code_vente === CODE_VENTE_DEPENSE
-                          ? (article.categorie
-                              ? <span style={{ color: '#666' }}>{article.categorie}</span>
-                              : <span style={{ color: '#b45309', fontStyle: 'italic' }}>Non classé</span>)
-                          : <span style={{ color: '#ccc' }}>—</span>}
+                      <td style={{ padding: '4px 14px' }} onClick={(e) => e.stopPropagation()}>
+                        {article.code_vente === CODE_VENTE_DEPENSE ? (
+                          <select
+                            value={article.categorie || ''}
+                            onChange={(e) => changerCategorieLigne(article, e.target.value)}
+                            style={{
+                              fontSize: 12,
+                              padding: '3px 6px',
+                              borderRadius: 6,
+                              border: '1px solid #ddd',
+                              background: 'white',
+                              color: article.categorie ? '#333' : '#b45309',
+                              fontStyle: article.categorie ? 'normal' : 'italic',
+                              cursor: 'pointer',
+                              maxWidth: 160,
+                            }}
+                          >
+                            <option value="">Non classé</option>
+                            {categoriesDepense.map(c => (
+                              <option key={c} value={c} style={{ color: '#333', fontStyle: 'normal' }}>{c}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span style={{ color: '#ccc' }}>—</span>
+                        )}
                       </td>
                       <td style={{ padding: '4px 14px', textAlign: 'right' }}>{Number(article.prix_vente).toFixed(2)} €</td>
                       <td style={{ padding: '4px 14px', textAlign: 'right', color: stockBas ? '#dc2626' : 'inherit', fontWeight: stockBas ? 600 : 400 }}>{article.stock}</td>
