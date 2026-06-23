@@ -44,6 +44,8 @@ export default function Articles() {
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [selection, setSelection] = useState([]); // ids des articles cochés
+  const [suppressionEnCours, setSuppressionEnCours] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -134,6 +136,54 @@ export default function Articles() {
     setTimeout(() => setMsg(null), 3000);
   };
 
+  // ───── Sélection multiple ────────────────────────────────────────────────
+  const basculerSelection = (id) => {
+    setSelection(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  // Ids actuellement affichés (après filtres)
+  const idsAffiches = articlesAffiches.map(a => a.id);
+  const toutAfficheCoche = idsAffiches.length > 0 && idsAffiches.every(id => selection.includes(id));
+
+  const basculerToutAffiche = () => {
+    if (toutAfficheCoche) {
+      // décoche uniquement ce qui est affiché
+      setSelection(prev => prev.filter(id => !idsAffiches.includes(id)));
+    } else {
+      // coche tout ce qui est affiché (en gardant d'éventuels cochés hors filtre)
+      setSelection(prev => [...new Set([...prev, ...idsAffiches])]);
+    }
+  };
+
+  const supprimerSelection = async () => {
+    if (selection.length === 0) return;
+    if (!window.confirm('Supprimer définitivement ' + selection.length + ' article(s) ? Cette action est irréversible.')) {
+      return;
+    }
+    setError('');
+    setSuppressionEnCours(true);
+    let echecs = 0;
+    // L'API supprime un article à la fois : on enchaîne les suppressions.
+    for (const id of selection) {
+      try {
+        await api.delete('/articles/' + id);
+      } catch (e) {
+        echecs++;
+      }
+    }
+    setSuppressionEnCours(false);
+    setSelection([]);
+    if (echecs === 0) {
+      setMsg({ type: 'success', text: 'Articles supprimés' });
+    } else {
+      setMsg({ type: 'error', text: echecs + ' suppression(s) ont échoué' });
+    }
+    load();
+    setTimeout(() => setMsg(null), 4000);
+  };
+
   return (
     <div>
       <div className="content">
@@ -199,6 +249,33 @@ export default function Articles() {
           </label>
         </div>
 
+        {selection.length > 0 && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '10px 16px', marginBottom: 12, borderRadius: 8,
+            background: '#fef3c7', border: '1px solid #fcd34d',
+          }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#92400e' }}>
+              {selection.length} article{selection.length > 1 ? 's' : ''} sélectionné{selection.length > 1 ? 's' : ''}
+            </span>
+            <button
+              className="btn"
+              disabled={suppressionEnCours}
+              style={{ color: '#dc2626', borderColor: '#fca5a5', fontWeight: 600 }}
+              onClick={supprimerSelection}
+            >
+              {suppressionEnCours ? 'Suppression…' : 'Supprimer la sélection'}
+            </button>
+            <button
+              className="btn"
+              disabled={suppressionEnCours}
+              onClick={() => setSelection([])}
+            >
+              Tout décocher
+            </button>
+          </div>
+        )}
+
         {loading ? (
           <div style={{ color: '#888' }}>Chargement...</div>
         ) : (
@@ -206,6 +283,15 @@ export default function Articles() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
+                  <th style={{ padding: '6px 14px' }}>
+                    <input
+                      type="checkbox"
+                      checked={toutAfficheCoche}
+                      onChange={basculerToutAffiche}
+                      title="Tout sélectionner (lignes affichées)"
+                      style={{ width: 16, height: 16, cursor: 'pointer' }}
+                    />
+                  </th>
                   <th style={{ padding: '6px 14px' }}></th>
                   <th style={{ padding: '6px 14px' }}>ID</th>
                   <th style={{ padding: '6px 14px' }}>Nom</th>
@@ -223,7 +309,7 @@ export default function Articles() {
               <tbody>
                 {articlesAffiches.map((article, index) => {
                   const stockBas = article.stock_min > 0 && article.stock < article.stock_min;
-                  const fondAlterne = index % 2 === 1 ? '#fafaf8' : 'transparent';
+                  const fondAlterne = index % 2 === 1 ? '#f0f0ec' : 'transparent';
                   return (
                     <tr
                       key={article.id}
@@ -234,6 +320,14 @@ export default function Articles() {
                         background: stockBas ? '#fee2e2' : fondAlterne,
                       }}
                     >
+                      <td style={{ padding: '4px 14px' }} onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selection.includes(article.id)}
+                          onChange={() => basculerSelection(article.id)}
+                          style={{ width: 16, height: 16, cursor: 'pointer' }}
+                        />
+                      </td>
                       <td style={{ padding: '4px 14px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <button
@@ -274,7 +368,7 @@ export default function Articles() {
                 })}
                 {articlesAffiches.length === 0 && (
                   <tr>
-                    <td colSpan={12} style={{ padding: 20, textAlign: 'center', color: '#888' }}>
+                    <td colSpan={13} style={{ padding: 20, textAlign: 'center', color: '#888' }}>
                       Aucun article ne correspond à la recherche
                     </td>
                   </tr>
