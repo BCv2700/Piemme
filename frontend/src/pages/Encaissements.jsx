@@ -155,7 +155,12 @@ export default function Encaissements() {
           />
           <button className="btn" onClick={() => setDateUnique(d => addDays(d, 1))}>+</button>
           <button className="btn" onClick={() => setDateUnique(todayKey())} style={{ color: '#888' }}>Aujourd'hui</button>
-          <span style={{ marginLeft: 'auto', fontSize: 14, fontWeight: 700 }}>{totalJour.toFixed(2)} €</span>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 18, alignItems: 'baseline' }}>
+            <span style={{ fontSize: 13, color: '#888' }}>
+              Cash analysé : <strong style={{ fontSize: 14, color: '#b45309' }}>{totalCashAnalyse.toFixed(2)} €</strong>
+            </span>
+            <span style={{ fontSize: 14, fontWeight: 700 }}>{totalJour.toFixed(2)} €</span>
+          </div>
         </div>
 
         {/* Répartition par TVA et paiement */}
