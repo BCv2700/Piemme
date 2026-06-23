@@ -331,29 +331,6 @@ export default function PlanSalle() {
           )}
         </div>
 
-        <div className="stats" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
-          <div className="stat-card" style={{ padding: '8px 14px' }}>
-            <label>Tables libres</label>
-            <span style={{ color: '#16a34a', fontSize: 20 }}>{nbLibres}</span>
-          </div>
-          <div className="stat-card" style={{ padding: '8px 14px' }}>
-            <label>Tables occupées</label>
-            <span style={{ color: '#dc2626', fontSize: 20 }}>{nbOccupees}</span>
-          </div>
-          <div className="stat-card" style={{ padding: '8px 14px' }}>
-            <label>Tables réservées</label>
-            <span style={{ color: '#b45309', fontSize: 20 }}>{nbReservees}</span>
-          </div>
-          <div className="stat-card" style={{ padding: '8px 14px' }}>
-            <label>Tables indisponibles</label>
-            <span style={{ color: '#6b7280', fontSize: 20 }}>{nbIndisponibles}</span>
-          </div>
-          <div className="stat-card" style={{ padding: '8px 14px' }}>
-            <label>Total</label>
-            <span style={{ fontSize: 20 }}>{tables.length}</span>
-          </div>
-        </div>
-
         <div style={{ display: 'flex', gap: 16, marginBottom: 12, fontSize: 12, color: '#888' }}>
           {Object.entries(STATUT_LABEL).map(([key, label]) => (
             <span key={key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
