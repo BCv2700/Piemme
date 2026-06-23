@@ -3,23 +3,11 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/api';
 
 // ───────────────────────────────────────────────────────────────────────────
-// REGROUPEMENT DES DÉPENSES (code_vente 9001)
-//
-// Range ici tes magasins / postes de dépense par catégorie.
-// - Le nom à gauche (ex: 'Magasins') est le titre de la catégorie affichée.
-// - La liste à droite contient les NOMS EXACTS des dépenses (tels qu'ils
-//   apparaissent : 'ACTION', 'ALDI', 'AG ASSURANCE'...). Respecte les majuscules.
-// - Tout ce qui n'est listé nulle part ici tombera automatiquement dans
-//   « Non classé » — donc rien ne disparaît jamais, tu ranges à ton rythme.
-//
-// Pour modifier : ajoute/déplace simplement les noms entre les crochets.
+// Les dépenses (code_vente 9001) sont regroupées par leur champ « categorie »,
+// défini pour chaque dépense dans l'onglet Articles. Aucune liste en dur ici :
+// les catégories sont relevées automatiquement depuis la base. Une dépense sans
+// catégorie apparaît dans « Non classé ».
 // ───────────────────────────────────────────────────────────────────────────
-const GROUPES_DEPENSES = {
-  'Magasins': ['ACTION', 'ALDI', 'ALVO', 'AMAZON', 'ALBINETE'],
-  'Frais fixes': ['AG ASSURANCE', 'ASSURANCE', 'AFSCA'],
-  'Divers': ['AMEUBLEMENT', 'ARMOIRE CHAUFFANTE'],
-};
-
 const CODE_VENTE_DEPENSE = 9001;
 
 export default function Caddy() {
@@ -85,24 +73,24 @@ export default function Caddy() {
   }, [codesVente, codeVente]);
 
   // ───── MODE DÉPENSE ──────────────────────────────────────────────────────
-  // On ne montre que les articles 9001, regroupés selon GROUPES_DEPENSES.
+  // On ne montre que les articles 9001, regroupés par leur champ « categorie ».
   // Le "niveau 2" devient la catégorie (Magasins, Frais fixes, ...).
   const articlesDepense = articles.filter(a => a.code_vente === CODE_VENTE_DEPENSE);
 
-  // Pour chaque dépense, retrouve sa catégorie (ou 'Non classé')
-  const categorieDe = (nom) => {
-    for (const [cat, noms] of Object.entries(GROUPES_DEPENSES)) {
-      if (noms.includes(nom)) return cat;
-    }
-    return 'Non classé';
+  // Pour chaque dépense, sa catégorie vient du champ « categorie » (saisi dans
+  // l'onglet Articles). Vide ou absent => 'Non classé'.
+  const categorieDe = (article) => {
+    const c = (article.categorie || '').trim();
+    return c === '' ? 'Non classé' : c;
   };
 
-  // Liste des catégories à afficher (dans l'ordre du bloc de config, + 'Non classé' à la fin si besoin)
+  // Liste des catégories présentes, par ordre alphabétique, 'Non classé' à la fin
   const categoriesDepense = (() => {
-    const presentes = new Set(articlesDepense.map(a => categorieDe(a.nom)));
-    const ordonnees = Object.keys(GROUPES_DEPENSES).filter(c => presentes.has(c));
-    if (presentes.has('Non classé')) ordonnees.push('Non classé');
-    return ordonnees;
+    const presentes = [...new Set(articlesDepense.map(a => categorieDe(a)))];
+    const sansNonClasse = presentes.filter(c => c !== 'Non classé')
+      .sort((a, b) => a.localeCompare(b, 'fr'));
+    if (presentes.includes('Non classé')) sansNonClasse.push('Non classé');
+    return sansNonClasse;
   })();
 
   // ───── MODE VENTE (inchangé) ─────────────────────────────────────────────
@@ -129,7 +117,7 @@ export default function Caddy() {
 
   // Niveau 3 : articles affichés
   const articlesAffiches = estEcranDepense
-    ? articlesDepense.filter(a => categorieDe(a.nom) === categorie)
+    ? articlesDepense.filter(a => categorieDe(a) === categorie)
         .sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { numeric: true }))
     : articles.filter(a =>
         a.code_vente === codeVente &&

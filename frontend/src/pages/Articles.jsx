@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
 import api from '../api/api';
 
+const CODE_VENTE_DEPENSE = 9001;
+
 const ARTICLE_VIDE = {
   nom: '',
+  categorie: '',
   type_article: '',
   code_vente: '',
   tva: 21,
@@ -37,6 +40,7 @@ export default function Articles() {
   const [filtreCodeVente, setFiltreCodeVente] = useState('');
   const [filtreASuivre, setFiltreASuivre] = useState(false);
   const [edition, setEdition] = useState(null); // null = pas de formulaire ouvert, sinon = objet article (ou ARTICLE_VIDE pour créer)
+  const [nouvelleCategorie, setNouvelleCategorie] = useState(false); // true = saisie libre d'une nouvelle catégorie de dépense
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -57,6 +61,14 @@ export default function Articles() {
   const codesVente = [...new Set(articles.map(a => a.code_vente).filter(c => c != null))]
     .sort((a, b) => a - b);
 
+  // Catégories de dépense déjà saisies (pour la liste déroulante), triées
+  const categoriesDepense = [...new Set(
+    articles
+      .filter(a => a.code_vente === CODE_VENTE_DEPENSE)
+      .map(a => a.categorie)
+      .filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b, 'fr'));
+
   const articlesAffiches = articles.filter(a =>
     (a.nom.toLowerCase().includes(recherche.toLowerCase()) ||
       (a.type_article || '').toLowerCase().includes(recherche.toLowerCase())) &&
@@ -65,9 +77,9 @@ export default function Articles() {
     (!filtreASuivre || a.stock_a_suivre)
   );
 
-  const ouvrirCreation = () => setEdition({ ...ARTICLE_VIDE });
-  const ouvrirEdition = (article) => setEdition({ ...article });
-  const fermerFormulaire = () => setEdition(null);
+  const ouvrirCreation = () => { setNouvelleCategorie(false); setEdition({ ...ARTICLE_VIDE }); };
+  const ouvrirEdition = (article) => { setNouvelleCategorie(false); setEdition({ ...article }); };
+  const fermerFormulaire = () => { setNouvelleCategorie(false); setEdition(null); };
 
   const majChamp = (champ, valeur) => setEdition(prev => ({ ...prev, [champ]: valeur }));
 
@@ -75,6 +87,7 @@ export default function Articles() {
     setError('');
     const payload = {
       ...edition,
+      categorie: edition.categorie === '' ? null : edition.categorie,
       code_vente: edition.code_vente === '' ? null : Number(edition.code_vente),
       tva: Number(edition.tva),
       tva_away: edition.tva_away === '' ? null : Number(edition.tva_away),
@@ -100,6 +113,12 @@ export default function Articles() {
       setError(e.response?.data?.detail || "Erreur lors de l'enregistrement");
     }
     setTimeout(() => setMsg(null), 3000);
+  };
+
+  const demanderSuppression = (article) => {
+    if (window.confirm('Supprimer définitivement « ' + article.nom + ' » ?')) {
+      supprimer(article);
+    }
   };
 
   const supprimer = async (article) => {
@@ -213,7 +232,18 @@ export default function Articles() {
                         background: stockBas ? '#fee2e2' : 'transparent',
                       }}
                     >
-                      <td style={{ padding: '4px 14px', color: '#888' }}>Modifier →</td>
+                      <td style={{ padding: '4px 14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <button
+                            className="btn"
+                            style={{ color: '#dc2626', borderColor: '#fca5a5', fontSize: 12, padding: '2px 8px' }}
+                            onClick={(e) => { e.stopPropagation(); demanderSuppression(article); }}
+                          >
+                            Supprimer
+                          </button>
+                          <span style={{ color: '#888', fontSize: 12 }}>Modifier →</span>
+                        </div>
+                      </td>
                       <td style={{ padding: '4px 14px', color: '#aaa' }}>{article.id}</td>
                       <td style={{ padding: '4px 14px', fontWeight: 500 }}>{article.nom}</td>
                       <td style={{ padding: '4px 14px', color: '#666' }}>{article.type_article || '—'}</td>
@@ -304,6 +334,50 @@ export default function Articles() {
                   </select>
                 </Champ>
               </div>
+
+              {/* Catégorie : uniquement pour les dépenses (code de vente 9001).
+                  Regroupe les dépenses dans le caddy (Magasins, Charges fixes, Divers...). */}
+              {String(edition.code_vente) === String(CODE_VENTE_DEPENSE) && (
+                <Champ label="Catégorie de dépense">
+                  {nouvelleCategorie ? (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        style={inputStyle}
+                        autoFocus
+                        value={edition.categorie || ''}
+                        onChange={e => majChamp('categorie', e.target.value)}
+                        placeholder="Ex: Charges fixes, Magasins, Divers..."
+                      />
+                      <button
+                        className="btn"
+                        type="button"
+                        onClick={() => { setNouvelleCategorie(false); majChamp('categorie', ''); }}
+                      >
+                        Choisir dans la liste
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      style={inputStyle}
+                      value={edition.categorie || ''}
+                      onChange={e => {
+                        if (e.target.value === '__NOUVELLE__') {
+                          setNouvelleCategorie(true);
+                          majChamp('categorie', '');
+                        } else {
+                          majChamp('categorie', e.target.value);
+                        }
+                      }}
+                    >
+                      <option value="">— Non classé —</option>
+                      {categoriesDepense.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                      <option value="__NOUVELLE__">+ Nouvelle catégorie…</option>
+                    </select>
+                  )}
+                </Champ>
+              )}
 
               <div style={{ display: 'flex', gap: 12 }}>
                 <Champ label="Prix de vente (sur place)" style={{ flex: 1 }}>
