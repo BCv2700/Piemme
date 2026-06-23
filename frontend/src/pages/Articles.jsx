@@ -211,6 +211,7 @@ export default function Articles() {
                   <th style={{ padding: '6px 14px' }}>Nom</th>
                   <th style={{ padding: '6px 14px' }}>Type</th>
                   <th style={{ padding: '6px 14px' }}>Code vente</th>
+                  <th style={{ padding: '6px 14px' }}>Catégorie</th>
                   <th style={{ padding: '6px 14px', textAlign: 'right' }}>Prix vente</th>
                   <th style={{ padding: '6px 14px', textAlign: 'right' }}>Stock</th>
                   <th style={{ padding: '6px 14px', textAlign: 'right' }}>Stock min</th>
@@ -220,8 +221,9 @@ export default function Articles() {
                 </tr>
               </thead>
               <tbody>
-                {articlesAffiches.map(article => {
+                {articlesAffiches.map((article, index) => {
                   const stockBas = article.stock_min > 0 && article.stock < article.stock_min;
+                  const fondAlterne = index % 2 === 1 ? '#fafaf8' : 'transparent';
                   return (
                     <tr
                       key={article.id}
@@ -229,7 +231,7 @@ export default function Articles() {
                       style={{
                         borderTop: '1px solid #f0f0ee',
                         cursor: 'pointer',
-                        background: stockBas ? '#fee2e2' : 'transparent',
+                        background: stockBas ? '#fee2e2' : fondAlterne,
                       }}
                     >
                       <td style={{ padding: '4px 14px' }}>
@@ -248,6 +250,13 @@ export default function Articles() {
                       <td style={{ padding: '4px 14px', fontWeight: 500 }}>{article.nom}</td>
                       <td style={{ padding: '4px 14px', color: '#666' }}>{article.type_article || '—'}</td>
                       <td style={{ padding: '4px 14px', color: '#666' }}>{LIBELLES_CODE_VENTE[article.code_vente] || article.code_vente || '—'}</td>
+                      <td style={{ padding: '4px 14px' }}>
+                        {article.code_vente === CODE_VENTE_DEPENSE
+                          ? (article.categorie
+                              ? <span style={{ color: '#666' }}>{article.categorie}</span>
+                              : <span style={{ color: '#b45309', fontStyle: 'italic' }}>Non classé</span>)
+                          : <span style={{ color: '#ccc' }}>—</span>}
+                      </td>
                       <td style={{ padding: '4px 14px', textAlign: 'right' }}>{Number(article.prix_vente).toFixed(2)} €</td>
                       <td style={{ padding: '4px 14px', textAlign: 'right', color: stockBas ? '#dc2626' : 'inherit', fontWeight: stockBas ? 600 : 400 }}>{article.stock}</td>
                       <td style={{ padding: '4px 14px', textAlign: 'right', color: '#666' }}>{article.stock_min}</td>
@@ -265,7 +274,7 @@ export default function Articles() {
                 })}
                 {articlesAffiches.length === 0 && (
                   <tr>
-                    <td colSpan={11} style={{ padding: 20, textAlign: 'center', color: '#888' }}>
+                    <td colSpan={12} style={{ padding: 20, textAlign: 'center', color: '#888' }}>
                       Aucun article ne correspond à la recherche
                     </td>
                   </tr>
