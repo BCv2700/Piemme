@@ -2,6 +2,26 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/api';
 
+// ───────────────────────────────────────────────────────────────────────────
+// REGROUPEMENT DES DÉPENSES (code_vente 9001)
+//
+// Range ici tes magasins / postes de dépense par catégorie.
+// - Le nom à gauche (ex: 'Magasins') est le titre de la catégorie affichée.
+// - La liste à droite contient les NOMS EXACTS des dépenses (tels qu'ils
+//   apparaissent : 'ACTION', 'ALDI', 'AG ASSURANCE'...). Respecte les majuscules.
+// - Tout ce qui n'est listé nulle part ici tombera automatiquement dans
+//   « Non classé » — donc rien ne disparaît jamais, tu ranges à ton rythme.
+//
+// Pour modifier : ajoute/déplace simplement les noms entre les crochets.
+// ───────────────────────────────────────────────────────────────────────────
+const GROUPES_DEPENSES = {
+  'Magasins': ['ACTION', 'ALDI', 'ALVO', 'AMAZON', 'ALBINETE'],
+  'Frais fixes': ['AG ASSURANCE', 'ASSURANCE', 'AFSCA'],
+  'Divers': ['AMEUBLEMENT', 'ARMOIRE CHAUFFANTE'],
+};
+
+const CODE_VENTE_DEPENSE = 9001;
+
 export default function Caddy() {
   const { tableId } = useParams();
   const navigate = useNavigate();
@@ -17,6 +37,9 @@ export default function Caddy() {
   const [emporte, setEmporte] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // Saisie d'un montant de dépense (null = fenêtre fermée)
+  const [saisieDepense, setSaisieDepense] = useState(null); // { article, montant }
 
   const load = async () => {
     try {
@@ -43,7 +66,14 @@ export default function Caddy() {
     7003: 'Boissons Softs',
     7004: 'Boissons Vins',
     7005: 'Divers',
+    9001: 'Dépenses',
   };
+
+  // Cet écran est-il un écran de dépenses ? On le détecte de façon fiable :
+  // dès qu'il existe au moins un article en code_vente 9001 / type "depense".
+  const estEcranDepense = articles.some(
+    a => a.code_vente === CODE_VENTE_DEPENSE || a.type === 'depense'
+  );
 
   // Niveau 1 : codes de vente présents (Boissons Alcools, Nourriture...), dans l'ordre des codes
   const codesVente = [...new Set(articles.map(a => a.code_vente))]
@@ -54,32 +84,64 @@ export default function Caddy() {
     if (!codeVente && codesVente.length > 0) setCodeVente(codesVente[0]);
   }, [codesVente, codeVente]);
 
-  // Niveau 2 : types précis disponibles pour le code de vente sélectionné (2. APERITIF, VIN ROUGE, 4A. PÂTES...)
+  // ───── MODE DÉPENSE ──────────────────────────────────────────────────────
+  // On ne montre que les articles 9001, regroupés selon GROUPES_DEPENSES.
+  // Le "niveau 2" devient la catégorie (Magasins, Frais fixes, ...).
+  const articlesDepense = articles.filter(a => a.code_vente === CODE_VENTE_DEPENSE);
+
+  // Pour chaque dépense, retrouve sa catégorie (ou 'Non classé')
+  const categorieDe = (nom) => {
+    for (const [cat, noms] of Object.entries(GROUPES_DEPENSES)) {
+      if (noms.includes(nom)) return cat;
+    }
+    return 'Non classé';
+  };
+
+  // Liste des catégories à afficher (dans l'ordre du bloc de config, + 'Non classé' à la fin si besoin)
+  const categoriesDepense = (() => {
+    const presentes = new Set(articlesDepense.map(a => categorieDe(a.nom)));
+    const ordonnees = Object.keys(GROUPES_DEPENSES).filter(c => presentes.has(c));
+    if (presentes.has('Non classé')) ordonnees.push('Non classé');
+    return ordonnees;
+  })();
+
+  // ───── MODE VENTE (inchangé) ─────────────────────────────────────────────
+  // Niveau 2 : types précis disponibles pour le code de vente sélectionné
   const typesNiveau2 = [...new Set(
     articles
       .filter(a => a.code_vente === codeVente)
       .map(a => a.type_article || 'Sans type')
   )].sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
 
-  // Quand on change de code de vente (niveau 1), on resélectionne le premier type disponible
+  // Quand on change de code de vente (niveau 1), on resélectionne le premier type disponible.
+  // En mode dépense, le niveau 2 = catégories de dépense.
   useEffect(() => {
-    if (typesNiveau2.length > 0 && !typesNiveau2.includes(categorie)) {
-      setCategorie(typesNiveau2[0]);
+    if (estEcranDepense) {
+      if (categoriesDepense.length > 0 && !categoriesDepense.includes(categorie)) {
+        setCategorie(categoriesDepense[0]);
+      }
+    } else {
+      if (typesNiveau2.length > 0 && !typesNiveau2.includes(categorie)) {
+        setCategorie(typesNiveau2[0]);
+      }
     }
-  }, [typesNiveau2, categorie]);
+  }, [estEcranDepense, typesNiveau2, categoriesDepense, categorie]);
 
-  // Niveau 3 : articles du type sélectionné
-  const articlesAffiches = articles.filter(a =>
-    a.code_vente === codeVente &&
-    (a.type_article || 'Sans type') === categorie
-  );
+  // Niveau 3 : articles affichés
+  const articlesAffiches = estEcranDepense
+    ? articlesDepense.filter(a => categorieDe(a.nom) === categorie)
+        .sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { numeric: true }))
+    : articles.filter(a =>
+        a.code_vente === codeVente &&
+        (a.type_article || 'Sans type') === categorie
+      );
 
+  // ───── AJOUT D'UN ARTICLE DE VENTE (inchangé) ────────────────────────────
   const ajouterArticle = async (article) => {
     setError('');
     const prix = emporte && article.prix_vente_away != null ? article.prix_vente_away : article.prix_vente;
     const tva = emporte && article.tva_away != null ? article.tva_away : article.tva;
 
-    // Une ligne existante = même table + même article + même mode (sur place / à emporter)
     const ligneExistante = lignes.find(l => l.article_id === article.id && l.emporte === emporte);
 
     try {
@@ -100,6 +162,48 @@ export default function Caddy() {
       }
     } catch (e) {
       setError(e.response?.data?.detail || "Erreur lors de l'ajout");
+    }
+  };
+
+  // ───── AJOUT D'UNE DÉPENSE (avec saisie du montant) ──────────────────────
+  const ouvrirSaisieDepense = (article) => {
+    setSaisieDepense({ article, montant: '' });
+  };
+
+  const validerSaisieDepense = async () => {
+    if (!saisieDepense) return;
+    const montant = Number(String(saisieDepense.montant).replace(',', '.'));
+    if (!Number.isFinite(montant) || montant <= 0) {
+      setError('Montant invalide');
+      return;
+    }
+    setError('');
+    try {
+      const res = await api.post('/commandes/', {
+        table_id: Number(tableId),
+        article_id: saisieDepense.article.id,
+        quantite: 1,
+        prix_unitaire: montant,
+        tva: saisieDepense.article.tva,
+        emporte: false,
+      });
+      setLignes(prev => [...prev, res.data]);
+      setSaisieDepense(null);
+    } catch (e) {
+      setError(e.response?.data?.detail || "Erreur lors de l'ajout de la dépense");
+    }
+  };
+
+  // ───── ÉDITION DU MONTANT D'UNE LIGNE (dépense) ──────────────────────────
+  const modifierMontantLigne = async (ligne, nouveauMontantStr) => {
+    const montant = Number(String(nouveauMontantStr).replace(',', '.'));
+    if (!Number.isFinite(montant) || montant < 0) return;
+    setError('');
+    try {
+      const res = await api.patch('/commandes/' + ligne.id, { prix_unitaire: montant });
+      setLignes(prev => prev.map(l => l.id === ligne.id ? res.data : l));
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Erreur lors de la mise à jour du montant');
     }
   };
 
@@ -162,15 +266,17 @@ export default function Caddy() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={emporte}
-                onChange={(e) => setEmporte(e.target.checked)}
-                style={{ width: 16, height: 16 }}
-              />
-              À emporter
-            </label>
+            {!estEcranDepense && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={emporte}
+                  onChange={(e) => setEmporte(e.target.checked)}
+                  style={{ width: 16, height: 16 }}
+                />
+                À emporter
+              </label>
+            )}
             <button
               className="btn"
               style={{ background: '#15803d', color: 'white', fontWeight: 600 }}
@@ -183,27 +289,29 @@ export default function Caddy() {
 
         <div style={{ display: 'flex', gap: 16 }}>
 
-          {/* Colonne 1 : codes de vente (Boissons Alcools, Nourriture, Boissons Softs, Boissons Vins, Divers) */}
-          <div style={{ width: 130, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {codesVente.map(code => (
-              <button
-                key={code}
-                className="btn"
-                style={{
-                  background: codeVente === code ? '#111' : 'white',
-                  color: codeVente === code ? 'white' : '#333',
-                  fontWeight: 600,
-                  padding: '12px 8px',
-                  fontSize: 13,
-                }}
-                onClick={() => setCodeVente(code)}
-              >
-                {LIBELLES_CODE_VENTE[code] || code}
-              </button>
-            ))}
-          </div>
+          {/* Colonne 1 : codes de vente — masquée en mode dépense (un seul code) */}
+          {!estEcranDepense && (
+            <div style={{ width: 130, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {codesVente.filter(c => c !== CODE_VENTE_DEPENSE).map(code => (
+                <button
+                  key={code}
+                  className="btn"
+                  style={{
+                    background: codeVente === code ? '#111' : 'white',
+                    color: codeVente === code ? 'white' : '#333',
+                    fontWeight: 600,
+                    padding: '12px 8px',
+                    fontSize: 13,
+                  }}
+                  onClick={() => setCodeVente(code)}
+                >
+                  {LIBELLES_CODE_VENTE[code] || code}
+                </button>
+              ))}
+            </div>
+          )}
 
-          {/* Colonne 2 : types précis (liste verticale) */}
+          {/* Colonne 2 : types précis (vente) OU catégories (dépense) */}
           <div style={{
             width: 150,
             flexShrink: 0,
@@ -218,7 +326,7 @@ export default function Caddy() {
             maxHeight: 560,
             overflowY: 'auto',
           }}>
-            {typesNiveau2.map(t => (
+            {(estEcranDepense ? categoriesDepense : typesNiveau2).map(t => (
               <button
                 key={t}
                 onClick={() => setCategorie(t)}
@@ -237,8 +345,10 @@ export default function Caddy() {
                 {t}
               </button>
             ))}
-            {typesNiveau2.length === 0 && (
-              <div style={{ color: '#888', fontSize: 13, padding: 8 }}>Aucun type</div>
+            {(estEcranDepense ? categoriesDepense : typesNiveau2).length === 0 && (
+              <div style={{ color: '#888', fontSize: 13, padding: 8 }}>
+                {estEcranDepense ? 'Aucune dépense' : 'Aucun type'}
+              </div>
             )}
           </div>
 
@@ -255,7 +365,7 @@ export default function Caddy() {
                   <button
                     key={article.id}
                     className="btn"
-                    onClick={() => ajouterArticle(article)}
+                    onClick={() => estEcranDepense ? ouvrirSaisieDepense(article) : ajouterArticle(article)}
                     title={article.nom}
                     style={{
                       display: 'flex',
@@ -279,7 +389,10 @@ export default function Caddy() {
                       WebkitBoxOrient: 'vertical',
                       overflow: 'hidden',
                     }}>{article.nom}</span>
-                    <span style={{ fontSize: 11, color: '#888', flexShrink: 0 }}>{Number(prix).toFixed(2)} €</span>
+                    {estEcranDepense
+                      ? <span style={{ fontSize: 11, color: '#888', flexShrink: 0 }}>Saisir un montant</span>
+                      : <span style={{ fontSize: 11, color: '#888', flexShrink: 0 }}>{Number(prix).toFixed(2)} €</span>
+                    }
                   </button>
                 );
               })}
@@ -301,10 +414,14 @@ export default function Caddy() {
             position: 'sticky',
             top: 16,
           }}>
-            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>Commande en cours</div>
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>
+              {estEcranDepense ? 'Dépenses en cours' : 'Commande en cours'}
+            </div>
 
             {lignes.length === 0 && (
-              <div style={{ color: '#888', fontSize: 13, marginBottom: 12 }}>Aucun article commandé</div>
+              <div style={{ color: '#888', fontSize: 13, marginBottom: 12 }}>
+                {estEcranDepense ? 'Aucune dépense saisie' : 'Aucun article commandé'}
+              </div>
             )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
@@ -315,24 +432,44 @@ export default function Caddy() {
                       {nomArticle(ligne.article_id)}
                       {ligne.emporte && <span style={{ fontSize: 11, color: '#888' }}> (emporté)</span>}
                     </div>
-                    <div style={{ fontSize: 12, color: '#888' }}>
-                      {Number(ligne.prix_unitaire).toFixed(2)} € × {Number(ligne.quantite)}
-                    </div>
+                    {estEcranDepense ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          defaultValue={Number(ligne.prix_unitaire).toFixed(2)}
+                          onBlur={(e) => modifierMontantLigne(ligne, e.target.value)}
+                          style={{
+                            width: 80, padding: '4px 6px', borderRadius: 6,
+                            border: '1px solid #ddd', fontSize: 13,
+                          }}
+                        />
+                        <span style={{ fontSize: 12, color: '#888' }}>€</span>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 12, color: '#888' }}>
+                        {Number(ligne.prix_unitaire).toFixed(2)} € × {Number(ligne.quantite)}
+                      </div>
+                    )}
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <button
-                      className="btn"
-                      style={{ width: 26, height: 26, padding: 0, fontSize: 14, lineHeight: 1 }}
-                      onClick={() => changerQuantite(ligne, -1)}
-                    >−</button>
-                    <span style={{ fontSize: 13, minWidth: 18, textAlign: 'center' }}>{Number(ligne.quantite)}</span>
-                    <button
-                      className="btn"
-                      style={{ width: 26, height: 26, padding: 0, fontSize: 14, lineHeight: 1 }}
-                      onClick={() => changerQuantite(ligne, 1)}
-                    >+</button>
-                  </div>
+                  {/* Quantité : seulement en mode vente */}
+                  {!estEcranDepense && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <button
+                        className="btn"
+                        style={{ width: 26, height: 26, padding: 0, fontSize: 14, lineHeight: 1 }}
+                        onClick={() => changerQuantite(ligne, -1)}
+                      >−</button>
+                      <span style={{ fontSize: 13, minWidth: 18, textAlign: 'center' }}>{Number(ligne.quantite)}</span>
+                      <button
+                        className="btn"
+                        style={{ width: 26, height: 26, padding: 0, fontSize: 14, lineHeight: 1 }}
+                        onClick={() => changerQuantite(ligne, 1)}
+                      >+</button>
+                    </div>
+                  )}
 
                   <button
                     className="btn"
@@ -359,6 +496,45 @@ export default function Caddy() {
 
         </div>
       </div>
+
+      {/* Fenêtre de saisie du montant d'une dépense */}
+      {saisieDepense && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
+        }}
+          onClick={() => setSaisieDepense(null)}
+        >
+          <div
+            style={{ background: 'white', borderRadius: 10, padding: 24, width: 320 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 4 }}>{saisieDepense.article.nom}</div>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 16 }}>Montant de la dépense</div>
+
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              autoFocus
+              value={saisieDepense.montant}
+              onChange={(e) => setSaisieDepense({ ...saisieDepense, montant: e.target.value })}
+              onKeyDown={(e) => { if (e.key === 'Enter') validerSaisieDepense(); }}
+              placeholder="Ex: 47.30"
+              style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 15, marginBottom: 20, boxSizing: 'border-box' }}
+            />
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn" style={{ flex: 1 }} onClick={() => setSaisieDepense(null)}>Annuler</button>
+              <button
+                className="btn"
+                style={{ flex: 1, background: '#22c55e', color: 'white', borderColor: '#22c55e' }}
+                onClick={validerSaisieDepense}
+              >Ajouter</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
