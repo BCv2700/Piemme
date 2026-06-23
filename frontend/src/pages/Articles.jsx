@@ -169,17 +169,17 @@ export default function Articles() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
-                  <th style={{ padding: '10px 14px' }}></th>
-                  <th style={{ padding: '10px 14px' }}>ID</th>
-                  <th style={{ padding: '10px 14px' }}>Nom</th>
-                  <th style={{ padding: '10px 14px' }}>Type</th>
-                  <th style={{ padding: '10px 14px' }}>Code vente</th>
-                  <th style={{ padding: '10px 14px', textAlign: 'right' }}>Prix vente</th>
-                  <th style={{ padding: '10px 14px', textAlign: 'right' }}>Stock</th>
-                  <th style={{ padding: '10px 14px', textAlign: 'right' }}>Stock min</th>
-                  <th style={{ padding: '10px 14px' }}>À suivre</th>
-                  <th style={{ padding: '10px 14px' }}>Boisson</th>
-                  <th style={{ padding: '10px 14px' }}>Actif</th>
+                  <th style={{ padding: '6px 14px' }}></th>
+                  <th style={{ padding: '6px 14px' }}>ID</th>
+                  <th style={{ padding: '6px 14px' }}>Nom</th>
+                  <th style={{ padding: '6px 14px' }}>Type</th>
+                  <th style={{ padding: '6px 14px' }}>Code vente</th>
+                  <th style={{ padding: '6px 14px', textAlign: 'right' }}>Prix vente</th>
+                  <th style={{ padding: '6px 14px', textAlign: 'right' }}>Stock</th>
+                  <th style={{ padding: '6px 14px', textAlign: 'right' }}>Stock min</th>
+                  <th style={{ padding: '6px 14px' }}>À suivre</th>
+                  <th style={{ padding: '6px 14px' }}>Boisson</th>
+                  <th style={{ padding: '6px 14px' }}>Actif</th>
                 </tr>
               </thead>
               <tbody>
@@ -195,17 +195,17 @@ export default function Articles() {
                         background: stockBas ? '#fee2e2' : 'transparent',
                       }}
                     >
-                      <td style={{ padding: '10px 14px', color: '#888' }}>Modifier →</td>
-                      <td style={{ padding: '10px 14px', color: '#aaa' }}>{article.id}</td>
-                      <td style={{ padding: '10px 14px', fontWeight: 500 }}>{article.nom}</td>
-                      <td style={{ padding: '10px 14px', color: '#666' }}>{article.type_article || '—'}</td>
-                      <td style={{ padding: '10px 14px', color: '#666' }}>{LIBELLES_CODE_VENTE[article.code_vente] || article.code_vente || '—'}</td>
-                      <td style={{ padding: '10px 14px', textAlign: 'right' }}>{Number(article.prix_vente).toFixed(2)} €</td>
-                      <td style={{ padding: '10px 14px', textAlign: 'right', color: stockBas ? '#dc2626' : 'inherit', fontWeight: stockBas ? 600 : 400 }}>{article.stock}</td>
-                      <td style={{ padding: '10px 14px', textAlign: 'right', color: '#666' }}>{article.stock_min}</td>
-                      <td style={{ padding: '10px 14px' }}>{article.stock_a_suivre ? '✓' : ''}</td>
-                      <td style={{ padding: '10px 14px' }}>{article.est_boisson ? '✓' : ''}</td>
-                      <td style={{ padding: '10px 14px' }}>
+                      <td style={{ padding: '4px 14px', color: '#888' }}>Modifier →</td>
+                      <td style={{ padding: '4px 14px', color: '#aaa' }}>{article.id}</td>
+                      <td style={{ padding: '4px 14px', fontWeight: 500 }}>{article.nom}</td>
+                      <td style={{ padding: '4px 14px', color: '#666' }}>{article.type_article || '—'}</td>
+                      <td style={{ padding: '4px 14px', color: '#666' }}>{LIBELLES_CODE_VENTE[article.code_vente] || article.code_vente || '—'}</td>
+                      <td style={{ padding: '4px 14px', textAlign: 'right' }}>{Number(article.prix_vente).toFixed(2)} €</td>
+                      <td style={{ padding: '4px 14px', textAlign: 'right', color: stockBas ? '#dc2626' : 'inherit', fontWeight: stockBas ? 600 : 400 }}>{article.stock}</td>
+                      <td style={{ padding: '4px 14px', textAlign: 'right', color: '#666' }}>{article.stock_min}</td>
+                      <td style={{ padding: '4px 14px' }}>{article.stock_a_suivre ? '✓' : ''}</td>
+                      <td style={{ padding: '4px 14px' }}>{article.est_boisson ? '✓' : ''}</td>
+                      <td style={{ padding: '4px 14px' }}>
                         <span style={{
                           display: 'inline-block',
                           width: 10, height: 10, borderRadius: '50%',

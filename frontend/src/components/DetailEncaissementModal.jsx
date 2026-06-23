@@ -285,25 +285,25 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
                   <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
-                    <th style={{ padding: '8px 10px' }}>Article</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right' }}>Qté</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right' }}>Px vente</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right' }}>TVA %</th>
-                    <th style={{ padding: '8px 10px', textAlign: 'right' }}>Prix payé</th>
+                    <th style={{ padding: '6px 10px' }}>Article</th>
+                    <th style={{ padding: '6px 10px', textAlign: 'right' }}>Qté</th>
+                    <th style={{ padding: '6px 10px', textAlign: 'right' }}>Px vente</th>
+                    <th style={{ padding: '6px 10px', textAlign: 'right' }}>TVA %</th>
+                    <th style={{ padding: '6px 10px', textAlign: 'right' }}>Prix payé</th>
                     <th
-                      style={{ padding: '8px 10px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                      style={{ padding: '6px 10px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
                       onClick={toggleToutesAnalysees}
                       title="Cliquer pour tout cocher / décocher"
                     >
                       Analysée
                     </th>
-                    <th style={{ padding: '8px 10px' }}></th>
+                    <th style={{ padding: '6px 10px' }}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {(enc.lignes || []).map(ligne => (
                     <tr key={ligne.id} style={{ borderTop: '1px solid #f0f0ee' }}>
-                      <td style={{ padding: '4px 6px' }}>
+                      <td style={{ padding: '2px 6px' }}>
                         <input
                           style={inputStyle}
                           value={ligne.article_nom}
@@ -311,16 +311,16 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
                           onBlur={() => saveLigne(ligne)}
                         />
                       </td>
-                      <td style={{ padding: '4px 6px' }}>
+                      <td style={{ padding: '2px 6px' }}>
                         <input
                           type="number" step="0.01"
-                          style={{ ...inputStyle, width: 55, textAlign: 'right' }}
+                          style={{ ...inputStyle, width: 65, textAlign: 'right' }}
                           value={ligne.quantite}
                           onChange={(e) => majLigneLocal(ligne.id, 'quantite', e.target.value)}
                           onBlur={() => saveLigne(ligne)}
                         />
                       </td>
-                      <td style={{ padding: '4px 6px' }}>
+                      <td style={{ padding: '2px 6px' }}>
                         <input
                           type="number" step="0.01"
                           style={{ ...inputStyle, width: 75, textAlign: 'right' }}
@@ -329,7 +329,7 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
                           onBlur={() => saveLigne(ligne)}
                         />
                       </td>
-                      <td style={{ padding: '4px 6px' }}>
+                      <td style={{ padding: '2px 6px' }}>
                         <input
                           type="number" step="1"
                           style={{ ...inputStyle, width: 55, textAlign: 'right' }}
@@ -338,10 +338,10 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
                           onBlur={() => saveLigne(ligne)}
                         />
                       </td>
-                      <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 600 }}>
+                      <td style={{ padding: '4px 10px', textAlign: 'right', fontWeight: 600 }}>
                         {(Number(ligne.prix_vente) * Number(ligne.quantite)).toFixed(2)} €
                       </td>
-                      <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                      <td style={{ padding: '4px 10px', textAlign: 'center' }}>
                         <input
                           type="checkbox"
                           checked={!!ligne.vente_analysee}
@@ -349,7 +349,7 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
                           style={{ width: 15, height: 15, cursor: 'pointer' }}
                         />
                       </td>
-                      <td style={{ padding: '6px 10px' }}>
+                      <td style={{ padding: '4px 10px' }}>
                         <button
                           className="btn"
                           style={{ width: 22, height: 22, padding: 0, fontSize: 11, color: '#dc2626', borderColor: '#fca5a5' }}
