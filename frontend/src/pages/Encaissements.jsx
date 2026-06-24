@@ -16,6 +16,9 @@ function addDays(dateKey, delta) {
 
 const TAUX_TVA = [6, 12, 21];
 
+// Bordure de quadrillage commune à toutes les cellules du tableau
+const BORDURE = '1px solid #e5e5e0';
+
 export default function Encaissements() {
   const [searchParams] = useSearchParams();
   // Lit la date transmise par le Plan de salle (NavBar) au montage du composant.
@@ -127,6 +130,10 @@ export default function Encaissements() {
 
   const encaissementsTries = [...encaissements].sort((a, b) => new Date(a.date_encaissement) - new Date(b.date_encaissement));
 
+  // Styles de cellules avec quadrillage
+  const thCell = (extra = {}) => ({ padding: '6px 10px', border: BORDURE, ...extra });
+  const tdCell = (extra = {}) => ({ padding: '4px 10px', border: BORDURE, ...extra });
+
   return (
     <div>
       <div className="content">
@@ -190,28 +197,28 @@ export default function Encaissements() {
         ) : encaissementsTries.length === 0 ? (
           <div style={{ color: '#888', textAlign: 'center', padding: '40px 0' }}>Aucun encaissement ce jour</div>
         ) : (
-          <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ background: 'white', border: BORDURE, borderRadius: 10, overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
-                  <th style={{ padding: '6px 10px' }}></th>
-                  <th style={{ padding: '6px 10px' }}></th>
-                  <th style={{ padding: '6px 10px' }}>Réf</th>
-                  <th style={{ padding: '6px 10px' }}>Heure</th>
-                  <th style={{ padding: '6px 10px' }}>Ticket</th>
-                  <th style={{ padding: '6px 10px' }}>Réservation</th>
-                  <th style={{ padding: '6px 10px', textAlign: 'center' }}>Emporté</th>
-                  <th style={{ padding: '6px 10px', textAlign: 'center' }}>Dépenses</th>
-                  <th style={{ padding: '6px 10px', textAlign: 'right' }}>Cash</th>
-                  <th style={{ padding: '6px 10px', textAlign: 'right' }}>Carte</th>
-                  <th style={{ padding: '6px 10px', textAlign: 'right' }}>Total</th>
-                  <th style={{ padding: '6px 10px', textAlign: 'right' }}>Cash analysé</th>
+                  <th style={thCell()}></th>
+                  <th style={thCell()}></th>
+                  <th style={thCell()}>Réf</th>
+                  <th style={thCell()}>Heure</th>
+                  <th style={thCell()}>Ticket</th>
+                  <th style={thCell()}>Réservation</th>
+                  <th style={thCell({ textAlign: 'center' })}>Emporté</th>
+                  <th style={thCell({ textAlign: 'center' })}>Dépenses</th>
+                  <th style={thCell({ textAlign: 'right' })}>Cash</th>
+                  <th style={thCell({ textAlign: 'right' })}>Carte</th>
+                  <th style={thCell({ textAlign: 'right' })}>Total</th>
+                  <th style={thCell({ textAlign: 'right' })}>Cash analysé</th>
                 </tr>
               </thead>
               <tbody>
                 {encaissementsTries.map(enc => (
-                  <tr key={enc.id} style={{ borderTop: '1px solid #f0f0ee' }}>
-                    <td style={{ padding: '4px 10px' }}>
+                  <tr key={enc.id}>
+                    <td style={tdCell()}>
                       <button
                         className="btn"
                         style={{ width: 22, height: 22, padding: 0, fontSize: 11 }}
@@ -219,18 +226,18 @@ export default function Encaissements() {
                         onClick={() => setDetailOuvert(enc.id)}
                       >⋯</button>
                     </td>
-                    <td style={{ padding: '4px 10px' }}>
+                    <td style={tdCell()}>
                       <button
                         className="btn"
                         style={{ width: 22, height: 22, padding: 0, fontSize: 11, color: '#dc2626', borderColor: '#fca5a5' }}
                         onClick={() => deleteEncaissement(enc.id)}
                       >✕</button>
                     </td>
-                    <td style={{ padding: '4px 10px', color: '#aaa' }}>{enc.id}</td>
-                    <td style={{ padding: '4px 10px', whiteSpace: 'nowrap', color: '#666' }}>
+                    <td style={tdCell({ color: '#aaa' })}>{enc.id}</td>
+                    <td style={tdCell({ whiteSpace: 'nowrap', color: '#666' })}>
                       {new Date(enc.date_encaissement).toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' })}
                     </td>
-                    <td style={{ padding: '2px 6px' }}>
+                    <td style={tdCell({ padding: '2px 6px' })}>
                       {enc.depenses ? (
                         <span style={{ fontSize: 12, color: '#b91c1c', fontWeight: 600, paddingLeft: 4 }}>
                           {enc.lignes && enc.lignes[0] ? enc.lignes[0].article_nom : '—'}
@@ -244,14 +251,14 @@ export default function Encaissements() {
                         />
                       )}
                     </td>
-                    <td style={{ padding: '4px 10px', color: '#666' }}>{enc.nom_reservation_archive || '—'}</td>
-                    <td style={{ padding: '4px 10px', textAlign: 'center' }}>
+                    <td style={tdCell({ color: '#666' })}>{enc.nom_reservation_archive || '—'}</td>
+                    <td style={tdCell({ textAlign: 'center' })}>
                       <input type="checkbox" checked={!!enc.emporte} onChange={() => toggleBool(enc, 'emporte')} style={{ width: 15, height: 15, cursor: 'pointer' }} />
                     </td>
-                    <td style={{ padding: '4px 10px', textAlign: 'center' }}>
+                    <td style={tdCell({ textAlign: 'center' })}>
                       <input type="checkbox" checked={!!enc.depenses} onChange={() => toggleBool(enc, 'depenses')} style={{ width: 15, height: 15, cursor: 'pointer' }} />
                     </td>
-                    <td style={{ padding: '2px 6px' }}>
+                    <td style={tdCell({ padding: '2px 6px' })}>
                       <input
                         type="number" step="0.01"
                         style={{ ...inputStyle, width: 75, textAlign: 'right' }}
@@ -260,7 +267,7 @@ export default function Encaissements() {
                         onBlur={() => saveEncaissement(enc)}
                       />
                     </td>
-                    <td style={{ padding: '2px 6px' }}>
+                    <td style={tdCell({ padding: '2px 6px' })}>
                       <input
                         type="number" step="0.01"
                         style={{ ...inputStyle, width: 75, textAlign: 'right' }}
@@ -269,7 +276,7 @@ export default function Encaissements() {
                         onBlur={() => saveEncaissement(enc)}
                       />
                     </td>
-                    <td style={{ padding: '2px 6px' }}>
+                    <td style={tdCell({ padding: '2px 6px' })}>
                       <input
                         type="number" step="0.01"
                         style={{ ...inputStyle, width: 80, textAlign: 'right', fontWeight: 700 }}
@@ -278,7 +285,7 @@ export default function Encaissements() {
                         onBlur={() => saveEncaissement(enc)}
                       />
                     </td>
-                    <td style={{ padding: '4px 10px', textAlign: 'right', fontWeight: 600, color: Number(enc.cash_analyse) > 0 ? '#16a34a' : '#888' }}>
+                    <td style={tdCell({ textAlign: 'right', fontWeight: 600, color: Number(enc.cash_analyse) > 0 ? '#16a34a' : '#888' })}>
                       {Number(enc.cash_analyse || 0).toFixed(2)} €
                     </td>
                   </tr>
