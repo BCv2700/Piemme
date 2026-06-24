@@ -2,12 +2,17 @@ import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../api/api';
 
-const TAUX_TVA = [21, 6, 12];
+// Ordre d'affichage des taux de TVA : 6, 12, 21 (comme le PDF Access)
+const TAUX_TVA = [6, 12, 21];
 
 const MOIS_NOMS = [
   'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
   'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
 ];
+
+// Jours d'ouverture (repère visuel rouge) : 4 = jeudi, 5 = vendredi, 6 = samedi
+// (getDay() : 0 = dimanche, 1 = lundi, ... 6 = samedi)
+const JOURS_OUVERTURE = [4, 5, 6];
 
 function todayKey() {
   const d = new Date();
@@ -18,12 +23,10 @@ function pad2(n) {
   return String(n).padStart(2, '0');
 }
 
-// Nombre de jours dans un mois (mois = 1..12)
 function joursDansMois(annee, mois) {
   return new Date(annee, mois, 0).getDate();
 }
 
-// Clé AAAA-MM-JJ pour un jour donné
 function dateKey(annee, mois, jour) {
   return annee + '-' + pad2(mois) + '-' + pad2(jour);
 }
@@ -31,7 +34,7 @@ function dateKey(annee, mois, jour) {
 export default function RecapMensuel() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [vue, setVue] = useState('tous'); // 'tous' = version 1 ; 'analyse' = version 2
+  const [vue, setVue] = useState('analyse'); // 'analyse' (par défaut, en premier) ou 'tous'
   const dateRef = searchParams.get('date') || todayKey();
   const [anneeStr, moisStr] = dateRef.split('-');
   const annee = Number(anneeStr);
@@ -39,7 +42,6 @@ export default function RecapMensuel() {
 
   const [encaissements, setEncaissements] = useState([]);
   const [recap, setRecap] = useState(null); // { memo, km_defaut, km_par_jour }
-  const [idsDepense, setIdsDepense] = useState(() => new Set()); // ids des articles en code_vente 9001
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
@@ -58,17 +60,10 @@ export default function RecapMensuel() {
     Promise.all([
       api.get('/encaissements/', { params: { date_debut: dateDebut, date_fin: dateFin } }),
       api.get('/recap-mensuel/' + annee + '/' + mois),
-      api.get('/articles/'),
     ])
-      .then(([encRes, recapRes, articlesRes]) => {
+      .then(([encRes, recapRes]) => {
         setEncaissements(encRes.data);
         setRecap(recapRes.data);
-        // Mémorise les ids des articles dépense (code de vente 9001) pour repérer
-        // les lignes de dépense dans les encaissements.
-        const ids = new Set(
-          articlesRes.data.filter(a => a.code_vente === 9001).map(a => a.id)
-        );
-        setIdsDepense(ids);
       })
       .catch(() => setError('Impossible de charger le récap mensuel'))
       .finally(() => setLoading(false));
@@ -76,27 +71,34 @@ export default function RecapMensuel() {
 
   useEffect(() => { load(); }, [annee, mois]);
 
-  // Recettes uniquement (on exclut les dépenses), comme dans l'écran Encaissements
+  // Recettes = encaissements qui ne sont pas des dépenses
   const recettes = useMemo(() => encaissements.filter(e => !e.depenses), [encaissements]);
 
-  // Regroupe les recettes par jour du mois (1..31)
+  // Regroupement par jour (1..nbJours)
   const parJour = useMemo(() => {
-    const map = {}; // jour -> { total, cash, carte, cashAnalyse, tva, totalAnalyse, tvaAnalyse }
+    const map = {};
     const nbJours = joursDansMois(annee, mois);
     for (let j = 1; j <= nbJours; j++) {
       map[j] = {
-        total: 0, cash: 0, carte: 0, cashAnalyse: 0,
-        tva: { 6: 0, 12: 0, 21: 0, autre: 0 },
+        total: 0, cash: 0, carte: 0, cashAnalyse: 0, depenses: 0,
+        tva: { 6: 0, 12: 0, 21: 0, autre: 0 },          // toutes les lignes (vue Tous)
         totalAnalyse: 0,
-        tvaAnalyse: { 6: 0, 12: 0, 21: 0, autre: 0 },
+        tvaAnalyse: { 6: 0, 12: 0, 21: 0, autre: 0 },    // lignes analysées (vue Analysé)
       };
     }
-    recettes.forEach(enc => {
+    encaissements.forEach(enc => {
       const d = new Date(enc.date_encaissement);
-      // On se base sur l'année/mois/jour locaux de la date d'encaissement
       if (d.getFullYear() !== annee || (d.getMonth() + 1) !== mois) return;
       const j = d.getDate();
       if (!map[j]) return;
+
+      if (enc.depenses) {
+        // Dépense : on cumule le montant total (déjà négatif) dans la colonne dépenses
+        map[j].depenses += Number(enc.montant_total || 0);
+        return; // une dépense ne compte pas dans les recettes / TVA
+      }
+
+      // Recette
       map[j].total += Number(enc.montant_total || 0);
       map[j].cash += Number(enc.montant_cash || 0);
       map[j].carte += Number(enc.montant_carte || 0);
@@ -104,10 +106,8 @@ export default function RecapMensuel() {
       (enc.lignes || []).forEach(ligne => {
         const montant = Number(ligne.prix_vente) * Number(ligne.quantite);
         const taux = Math.round(Number(ligne.tva));
-        // Version 1 (toutes les lignes)
         if (map[j].tva[taux] !== undefined) map[j].tva[taux] += montant;
         else map[j].tva.autre += montant;
-        // Version 2 (uniquement les lignes analysées)
         if (ligne.vente_analysee) {
           map[j].totalAnalyse += montant;
           if (map[j].tvaAnalyse[taux] !== undefined) map[j].tvaAnalyse[taux] += montant;
@@ -116,38 +116,12 @@ export default function RecapMensuel() {
       });
     });
     return map;
-  }, [recettes, annee, mois]);
-
-  // Dépenses par jour : somme des lignes dont l'article est en code de vente 9001.
-  // On parcourt TOUS les encaissements (pas seulement les recettes), car une
-  // dépense peut être encodée indépendamment.
-  const depensesParJour = useMemo(() => {
-    const map = {};
-    const nbJours = joursDansMois(annee, mois);
-    for (let j = 1; j <= nbJours; j++) map[j] = 0;
-    encaissements.forEach(enc => {
-      const d = new Date(enc.date_encaissement);
-      if (d.getFullYear() !== annee || (d.getMonth() + 1) !== mois) return;
-      const j = d.getDate();
-      if (map[j] === undefined) return;
-      (enc.lignes || []).forEach(ligne => {
-        if (idsDepense.has(ligne.article_id)) {
-          map[j] += Number(ligne.prix_vente) * Number(ligne.quantite);
-        }
-      });
-    });
-    return map;
-  }, [encaissements, idsDepense, annee, mois]);
-
-  const totalDepenses = useMemo(
-    () => Object.values(depensesParJour).reduce((s, v) => s + v, 0),
-    [depensesParJour]
-  );
+  }, [encaissements, annee, mois]);
 
   // Totaux du mois
   const totaux = useMemo(() => {
     const t = {
-      total: 0, cash: 0, carte: 0, cashAnalyse: 0,
+      total: 0, cash: 0, carte: 0, cashAnalyse: 0, depenses: 0,
       tva: { 6: 0, 12: 0, 21: 0, autre: 0 },
       totalAnalyse: 0,
       tvaAnalyse: { 6: 0, 12: 0, 21: 0, autre: 0 },
@@ -157,28 +131,24 @@ export default function RecapMensuel() {
       t.cash += j.cash;
       t.carte += j.carte;
       t.cashAnalyse += j.cashAnalyse;
-      t.tva[6] += j.tva[6];
-      t.tva[12] += j.tva[12];
-      t.tva[21] += j.tva[21];
-      t.tva.autre += j.tva.autre;
+      t.depenses += j.depenses;
       t.totalAnalyse += j.totalAnalyse;
-      t.tvaAnalyse[6] += j.tvaAnalyse[6];
-      t.tvaAnalyse[12] += j.tvaAnalyse[12];
-      t.tvaAnalyse[21] += j.tvaAnalyse[21];
-      t.tvaAnalyse.autre += j.tvaAnalyse.autre;
+      [6, 12, 21, 'autre'].forEach(k => {
+        t.tva[k] += j.tva[k];
+        t.tvaAnalyse[k] += j.tvaAnalyse[k];
+      });
     });
     return t;
   }, [parJour]);
 
-  // Base ventilée selon la vue active (pour les pourcentages affichés)
   const tvaActive = vue === 'analyse' ? totaux.tvaAnalyse : totaux.tva;
   const baseTva = tvaActive[6] + tvaActive[12] + tvaActive[21];
   const pourcentage = (montant) => (baseTva > 0 ? (montant / baseTva) * 100 : 0);
 
-  // TVA à payer par taux = base × taux / (100 + taux)
+  // TVA à payer par taux : base × taux / (100 + taux)
   const tvaApayer = (base, taux) => base * taux / (100 + taux);
 
-  // ───── km : valeur par défaut + exceptions par jour ──────────────────────
+  // ───── km (par défaut + exceptions par jour) ─────────────────────────────
   const kmDefaut = recap ? Number(recap.km_defaut) : 53.4;
   const kmDuJour = (jour) => {
     if (recap && recap.km_par_jour && recap.km_par_jour[String(jour)] !== undefined) {
@@ -186,7 +156,6 @@ export default function RecapMensuel() {
     }
     return kmDefaut;
   };
-
   const totalKm = useMemo(() => {
     const nbJours = joursDansMois(annee, mois);
     let s = 0;
@@ -194,16 +163,14 @@ export default function RecapMensuel() {
     return s;
   }, [recap, annee, mois]);
 
-  // Enregistre une exception de km pour un jour
   const changerKm = async (jour, valeurStr) => {
     const valeur = Number(String(valeurStr).replace(',', '.'));
     if (!Number.isFinite(valeur) || valeur < 0) return;
-    const nouvellesExceptions = { ...(recap?.km_par_jour || {}) };
-    nouvellesExceptions[String(jour)] = valeur;
-    // Mise à jour locale immédiate
-    setRecap(prev => ({ ...prev, km_par_jour: nouvellesExceptions }));
+    const nouvelles = { ...(recap?.km_par_jour || {}) };
+    nouvelles[String(jour)] = valeur;
+    setRecap(prev => ({ ...prev, km_par_jour: nouvelles }));
     try {
-      const res = await api.patch('/recap-mensuel/' + annee + '/' + mois, { km_par_jour: nouvellesExceptions });
+      const res = await api.patch('/recap-mensuel/' + annee + '/' + mois, { km_par_jour: nouvelles });
       setRecap(res.data);
     } catch (e) {
       showMsg('error', 'Erreur lors de l\'enregistrement des km');
@@ -211,13 +178,13 @@ export default function RecapMensuel() {
     }
   };
 
-  // Enregistre le mémo (au blur)
+  // ───── mémo ──────────────────────────────────────────────────────────────
   const [memoLocal, setMemoLocal] = useState('');
   useEffect(() => { setMemoLocal(recap ? (recap.memo || '') : ''); }, [recap?.memo]);
 
   const sauverMemo = async () => {
     if (!recap) return;
-    if (memoLocal === (recap.memo || '')) return; // rien changé
+    if (memoLocal === (recap.memo || '')) return;
     try {
       const res = await api.patch('/recap-mensuel/' + annee + '/' + mois, { memo: memoLocal });
       setRecap(res.data);
@@ -234,13 +201,20 @@ export default function RecapMensuel() {
     const d = new Date(annee, mois - 1, jour);
     return d.toLocaleDateString('fr-BE', { weekday: 'long' });
   };
+  const estJourOuverture = (jour) => {
+    const d = new Date(annee, mois - 1, jour);
+    return JOURS_OUVERTURE.includes(d.getDay());
+  };
 
   const fmt = (n) => Number(n).toFixed(2);
 
-  // Clic sur un jour -> ouvre l'écran Encaissements positionné sur cette date
   const ouvrirJour = (jour) => {
     navigate('/encaissements?date=' + dateKey(annee, mois, jour));
   };
+
+  // Styles tableau
+  const thStyle = { padding: '8px 10px', borderBottom: '2px solid #e5e5e0', whiteSpace: 'nowrap' };
+  const tdStyle = { padding: '4px 10px', borderBottom: '1px solid #f0f0ee' };
 
   return (
     <div>
@@ -263,17 +237,7 @@ export default function RecapMensuel() {
           <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, textTransform: 'capitalize' }}>
             {MOIS_NOMS[mois - 1]} {annee}
           </h2>
-          <div style={{ display: 'flex', gap: 0, border: '1px solid #ddd', borderRadius: 8, overflow: 'hidden' }}>
-            <button
-              onClick={() => setVue('tous')}
-              style={{
-                padding: '6px 16px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
-                background: vue === 'tous' ? '#111' : 'white',
-                color: vue === 'tous' ? 'white' : '#333',
-              }}
-            >
-              Tous
-            </button>
+          <div style={{ display: 'flex', border: '1px solid #ddd', borderRadius: 8, overflow: 'hidden' }}>
             <button
               onClick={() => setVue('analyse')}
               style={{
@@ -284,9 +248,19 @@ export default function RecapMensuel() {
             >
               Analysé
             </button>
+            <button
+              onClick={() => setVue('tous')}
+              style={{
+                padding: '6px 16px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
+                background: vue === 'tous' ? '#111' : 'white',
+                color: vue === 'tous' ? 'white' : '#333',
+              }}
+            >
+              Tous
+            </button>
           </div>
           <span style={{ fontSize: 13, color: '#888' }}>
-            {vue === 'analyse' ? 'Ventes analysées uniquement' : 'Tous les encaissements'}
+            {vue === 'analyse' ? 'Ventes analysées' : 'Tous les encaissements'}
           </span>
         </div>
 
@@ -294,191 +268,135 @@ export default function RecapMensuel() {
           <div style={{ color: '#888' }}>Chargement...</div>
         ) : (
           <>
-            {/* Bandeau de totaux du mois */}
+            {/* Bandeau de totaux */}
             <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-              {vue === 'tous' ? (
+              {vue === 'analyse' ? (
+                <>
+                  <CarteTotal label="Total analysé" valeur={fmt(totaux.totalAnalyse)} fort />
+                  <CarteTotal label="Cash analysé" valeur={fmt(totaux.cashAnalyse)} couleur="#b45309" />
+                  <CarteTotal label="Carte" valeur={fmt(totaux.carte)} couleur="#2563eb" />
+                  {TAUX_TVA.map(taux => (
+                    <CarteTotal key={taux}
+                      label={'TVA ' + taux + '% (' + pourcentage(totaux.tvaAnalyse[taux]).toFixed(2) + '%)'}
+                      valeur={fmt(totaux.tvaAnalyse[taux])} />
+                  ))}
+                </>
+              ) : (
                 <>
                   <CarteTotal label="Total" valeur={fmt(totaux.total)} fort />
                   <CarteTotal label="Cash" valeur={fmt(totaux.cash)} couleur="#16a34a" />
                   <CarteTotal label="Carte" valeur={fmt(totaux.carte)} couleur="#2563eb" />
                   <CarteTotal label="Cash analysé" valeur={fmt(totaux.cashAnalyse)} couleur="#b45309" />
-                  <CarteTotal label="Dépenses" valeur={totalDepenses > 0 ? '-' + fmt(totalDepenses) : fmt(0)} couleur="#dc2626" />
+                  <CarteTotal label="Dépenses" valeur={fmt(totaux.depenses)} couleur="#dc2626" />
                   {TAUX_TVA.map(taux => (
-                    <CarteTotal
-                      key={taux}
+                    <CarteTotal key={taux}
                       label={'TVA ' + taux + '% (' + pourcentage(totaux.tva[taux]).toFixed(2) + '%)'}
-                      valeur={fmt(totaux.tva[taux])}
-                    />
-                  ))}
-                </>
-              ) : (
-                <>
-                  <CarteTotal label="Total analysé" valeur={fmt(totaux.totalAnalyse)} fort />
-                  <CarteTotal label="Carte" valeur={fmt(totaux.carte)} couleur="#2563eb" />
-                  <CarteTotal label="Cash analysé" valeur={fmt(totaux.cashAnalyse)} couleur="#b45309" />
-                  {TAUX_TVA.map(taux => (
-                    <CarteTotal
-                      key={taux}
-                      label={'TVA ' + taux + '% (' + pourcentage(totaux.tvaAnalyse[taux]).toFixed(2) + '%)'}
-                      valeur={fmt(totaux.tvaAnalyse[taux])}
-                    />
+                      valeur={fmt(totaux.tva[taux])} />
                   ))}
                 </>
               )}
               <CarteTotal label="Km A/R" valeur={fmt(totalKm)} couleur="#6b7280" />
             </div>
 
-            {/* Tableau jour par jour */}
+            {/* Tableau */}
             <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 10, overflow: 'auto', marginBottom: 20 }}>
-              {vue === 'tous' ? (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 820 }}>
-                  <thead>
-                    <tr style={{ background: '#fafaf8', textAlign: 'right' }}>
-                      <th style={{ padding: '8px 10px', textAlign: 'left' }}>Jour</th>
-                      <th style={{ padding: '8px 10px' }}>Total</th>
-                      <th style={{ padding: '8px 10px' }}>Cash</th>
-                      <th style={{ padding: '8px 10px' }}>Carte</th>
-                      <th style={{ padding: '8px 10px' }}>Cash analysé</th>
-                      <th style={{ padding: '8px 10px' }}>Dépenses</th>
-                      <th style={{ padding: '8px 10px' }}>TVA 21%</th>
-                      <th style={{ padding: '8px 10px' }}>TVA 6%</th>
-                      <th style={{ padding: '8px 10px' }}>TVA 12%</th>
-                      <th style={{ padding: '8px 10px' }}>Km A/R</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {jours.map(j => {
-                      const d = parJour[j];
-                      const aRecette = d.total !== 0;
-                      return (
-                        <tr key={j} style={{ borderTop: '1px solid #f0f0ee', textAlign: 'right' }}>
-                          <td
-                            style={{ padding: '4px 10px', textAlign: 'left', whiteSpace: 'nowrap', color: aRecette ? '#111' : '#aaa', cursor: 'pointer', textDecoration: 'underline dotted' }}
-                            title="Ouvrir les encaissements de ce jour"
-                            onClick={() => ouvrirJour(j)}
-                          >
-                            {pad2(j)} <span style={{ color: '#999', textTransform: 'capitalize' }}>{nomJourSemaine(j)}</span>
-                          </td>
-                          <td style={{ padding: '4px 10px', fontWeight: aRecette ? 700 : 400, color: aRecette ? '#111' : '#ccc' }}>{fmt(d.total)}</td>
-                          <td style={{ padding: '4px 10px', color: aRecette ? '#16a34a' : '#ccc' }}>{fmt(d.cash)}</td>
-                          <td style={{ padding: '4px 10px', color: aRecette ? '#2563eb' : '#ccc' }}>{fmt(d.carte)}</td>
-                          <td style={{ padding: '4px 10px', color: aRecette ? '#b45309' : '#ccc' }}>{fmt(d.cashAnalyse)}</td>
-                          <td style={{ padding: '4px 10px', color: depensesParJour[j] > 0 ? '#dc2626' : '#ccc' }}>
-                            {depensesParJour[j] > 0 ? '-' + fmt(depensesParJour[j]) : fmt(0)}
-                          </td>
-                          <td style={{ padding: '4px 10px', color: '#666' }}>{fmt(d.tva[21])}</td>
-                          <td style={{ padding: '4px 10px', color: '#666' }}>{fmt(d.tva[6])}</td>
-                          <td style={{ padding: '4px 10px', color: '#666' }}>{fmt(d.tva[12])}</td>
-                          <td style={{ padding: '2px 6px' }}>
-                            <input
-                              type="number" step="0.1" min="0"
-                              defaultValue={fmt(kmDuJour(j))}
-                              onBlur={(e) => changerKm(j, e.target.value)}
-                              style={{ width: 64, padding: '2px 6px', borderRadius: 5, border: '1px solid #ddd', fontSize: 12, textAlign: 'right' }}
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ borderTop: '2px solid #e5e5e0', textAlign: 'right', fontWeight: 700, background: '#fafaf8' }}>
-                      <td style={{ padding: '8px 10px', textAlign: 'left' }}>Totaux {MOIS_NOMS[mois - 1]}</td>
-                      <td style={{ padding: '8px 10px' }}>{fmt(totaux.total)}</td>
-                      <td style={{ padding: '8px 10px', color: '#16a34a' }}>{fmt(totaux.cash)}</td>
-                      <td style={{ padding: '8px 10px', color: '#2563eb' }}>{fmt(totaux.carte)}</td>
-                      <td style={{ padding: '8px 10px', color: '#b45309' }}>{fmt(totaux.cashAnalyse)}</td>
-                      <td style={{ padding: '8px 10px', color: '#dc2626' }}>{totalDepenses > 0 ? '-' + fmt(totalDepenses) : fmt(0)}</td>
-                      <td style={{ padding: '8px 10px' }}>{fmt(totaux.tva[21])}</td>
-                      <td style={{ padding: '8px 10px' }}>{fmt(totaux.tva[6])}</td>
-                      <td style={{ padding: '8px 10px' }}>{fmt(totaux.tva[12])}</td>
-                      <td style={{ padding: '8px 10px', color: '#6b7280' }}>{fmt(totalKm)}</td>
-                    </tr>
-                    <tr style={{ textAlign: 'right', background: '#fafaf8' }}>
-                      <td style={{ padding: '6px 10px', textAlign: 'left', color: '#888' }}>TVA à payer</td>
-                      <td colSpan={5} style={{ padding: '6px 10px' }}></td>
-                      <td style={{ padding: '6px 10px', color: '#888' }}>{fmt(tvaApayer(totaux.tva[21], 21))}</td>
-                      <td style={{ padding: '6px 10px', color: '#888' }}>{fmt(tvaApayer(totaux.tva[6], 6))}</td>
-                      <td style={{ padding: '6px 10px', color: '#888' }}>{fmt(tvaApayer(totaux.tva[12], 12))}</td>
-                      <td style={{ padding: '6px 10px' }}></td>
-                    </tr>
-                  </tfoot>
-                </table>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 820 }}>
-                  <thead>
-                    <tr style={{ background: '#fafaf8', textAlign: 'right' }}>
-                      <th style={{ padding: '8px 10px', textAlign: 'left' }}>Jour</th>
-                      <th style={{ padding: '8px 10px' }}>Total analysé</th>
-                      <th style={{ padding: '8px 10px' }}>Carte</th>
-                      <th style={{ padding: '8px 10px' }}>Cash analysé</th>
-                      <th style={{ padding: '8px 10px' }} title="Carte + Cash analysé : doit être proche du Total analysé">Contrôle</th>
-                      <th style={{ padding: '8px 10px' }}>TVA 21%</th>
-                      <th style={{ padding: '8px 10px' }}>TVA 6%</th>
-                      <th style={{ padding: '8px 10px' }}>TVA 12%</th>
-                      <th style={{ padding: '8px 10px' }}>Km A/R</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {jours.map(j => {
-                      const d = parJour[j];
-                      const aRecette = d.totalAnalyse !== 0 || d.carte !== 0 || d.cashAnalyse !== 0;
-                      const controle = d.carte + d.cashAnalyse;
-                      const ecart = controle - d.totalAnalyse;
-                      const ecartImportant = Math.abs(ecart) >= 0.01;
-                      return (
-                        <tr key={j} style={{ borderTop: '1px solid #f0f0ee', textAlign: 'right' }}>
-                          <td
-                            style={{ padding: '4px 10px', textAlign: 'left', whiteSpace: 'nowrap', color: aRecette ? '#111' : '#aaa', cursor: 'pointer', textDecoration: 'underline dotted' }}
-                            title="Ouvrir les encaissements de ce jour pour corriger"
-                            onClick={() => ouvrirJour(j)}
-                          >
-                            {pad2(j)} <span style={{ color: '#999', textTransform: 'capitalize' }}>{nomJourSemaine(j)}</span>
-                          </td>
-                          <td style={{ padding: '4px 10px', fontWeight: aRecette ? 700 : 400, color: aRecette ? '#111' : '#ccc' }}>{fmt(d.totalAnalyse)}</td>
-                          <td style={{ padding: '4px 10px', color: aRecette ? '#2563eb' : '#ccc' }}>{fmt(d.carte)}</td>
-                          <td style={{ padding: '4px 10px', color: aRecette ? '#b45309' : '#ccc' }}>{fmt(d.cashAnalyse)}</td>
-                          <td style={{ padding: '4px 10px', fontWeight: 600, color: !aRecette ? '#ccc' : (ecartImportant ? '#dc2626' : '#16a34a') }}>
-                            {fmt(controle)}{aRecette && ecartImportant ? ' (' + (ecart > 0 ? '+' : '') + fmt(ecart) + ')' : ''}
-                          </td>
-                          <td style={{ padding: '4px 10px', color: '#666' }}>{fmt(d.tvaAnalyse[21])}</td>
-                          <td style={{ padding: '4px 10px', color: '#666' }}>{fmt(d.tvaAnalyse[6])}</td>
-                          <td style={{ padding: '4px 10px', color: '#666' }}>{fmt(d.tvaAnalyse[12])}</td>
-                          <td style={{ padding: '2px 6px' }}>
-                            <input
-                              type="number" step="0.1" min="0"
-                              defaultValue={fmt(kmDuJour(j))}
-                              onBlur={(e) => changerKm(j, e.target.value)}
-                              style={{ width: 64, padding: '2px 6px', borderRadius: 5, border: '1px solid #ddd', fontSize: 12, textAlign: 'right' }}
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ borderTop: '2px solid #e5e5e0', textAlign: 'right', fontWeight: 700, background: '#fafaf8' }}>
-                      <td style={{ padding: '8px 10px', textAlign: 'left' }}>Totaux {MOIS_NOMS[mois - 1]}</td>
-                      <td style={{ padding: '8px 10px' }}>{fmt(totaux.totalAnalyse)}</td>
-                      <td style={{ padding: '8px 10px', color: '#2563eb' }}>{fmt(totaux.carte)}</td>
-                      <td style={{ padding: '8px 10px', color: '#b45309' }}>{fmt(totaux.cashAnalyse)}</td>
-                      <td style={{ padding: '8px 10px' }}>{fmt(totaux.carte + totaux.cashAnalyse)}</td>
-                      <td style={{ padding: '8px 10px' }}>{fmt(totaux.tvaAnalyse[21])}</td>
-                      <td style={{ padding: '8px 10px' }}>{fmt(totaux.tvaAnalyse[6])}</td>
-                      <td style={{ padding: '8px 10px' }}>{fmt(totaux.tvaAnalyse[12])}</td>
-                      <td style={{ padding: '8px 10px', color: '#6b7280' }}>{fmt(totalKm)}</td>
-                    </tr>
-                    <tr style={{ textAlign: 'right', background: '#fafaf8' }}>
-                      <td style={{ padding: '6px 10px', textAlign: 'left', color: '#888' }}>TVA à payer</td>
-                      <td colSpan={4} style={{ padding: '6px 10px' }}></td>
-                      <td style={{ padding: '6px 10px', color: '#888' }}>{fmt(tvaApayer(totaux.tvaAnalyse[21], 21))}</td>
-                      <td style={{ padding: '6px 10px', color: '#888' }}>{fmt(tvaApayer(totaux.tvaAnalyse[6], 6))}</td>
-                      <td style={{ padding: '6px 10px', color: '#888' }}>{fmt(tvaApayer(totaux.tvaAnalyse[12], 12))}</td>
-                      <td style={{ padding: '6px 10px' }}></td>
-                    </tr>
-                  </tfoot>
-                </table>
-              )}
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 900 }}>
+                <thead>
+                  <tr style={{ background: '#fafaf8', textAlign: 'right' }}>
+                    <th style={{ ...thStyle, textAlign: 'center' }}>Fermé</th>
+                    <th style={{ ...thStyle, textAlign: 'left' }}>Jour</th>
+                    <th style={thStyle}>{vue === 'analyse' ? 'Total analysé' : 'Total'}</th>
+                    {vue === 'tous' && <th style={thStyle}>Cash</th>}
+                    <th style={thStyle}>Cash analysé</th>
+                    <th style={thStyle}>Carte</th>
+                    {vue === 'tous' && <th style={thStyle}>Dépenses</th>}
+                    <th style={thStyle}>TVA 6%</th>
+                    <th style={thStyle}>TVA 12%</th>
+                    <th style={thStyle}>TVA 21%</th>
+                    <th style={thStyle}>Ctl</th>
+                    <th style={thStyle}>Km A/R</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {jours.map(j => {
+                    const d = parJour[j];
+                    const tvaJour = vue === 'analyse' ? d.tvaAnalyse : d.tva;
+                    const totalJour = vue === 'analyse' ? d.totalAnalyse : d.total;
+                    const ctl = tvaJour[6] + tvaJour[12] + tvaJour[21];
+                    const ecart = ctl - totalJour;
+                    const ecartImportant = Math.abs(ecart) >= 0.01;
+                    const ouverture = estJourOuverture(j);
+                    const actif = totalJour !== 0 || d.cashAnalyse !== 0 || d.carte !== 0 || d.depenses !== 0;
+                    return (
+                      <tr key={j} style={{ textAlign: 'right' }}>
+                        <td style={{ ...tdStyle, textAlign: 'center' }}>
+                          <input type="checkbox" disabled title="Mémorisation à venir" style={{ width: 14, height: 14, opacity: 0.4 }} />
+                        </td>
+                        <td
+                          style={{ ...tdStyle, textAlign: 'left', whiteSpace: 'nowrap', cursor: 'pointer', textDecoration: 'underline dotted',
+                                   color: ouverture ? '#dc2626' : (actif ? '#111' : '#aaa'),
+                                   fontWeight: ouverture ? 700 : 400 }}
+                          title="Ouvrir les encaissements de ce jour"
+                          onClick={() => ouvrirJour(j)}
+                        >
+                          {pad2(j)} <span style={{ textTransform: 'capitalize' }}>{nomJourSemaine(j)}</span>
+                        </td>
+                        <td style={{ ...tdStyle, fontWeight: actif ? 700 : 400, color: actif ? '#111' : '#ccc' }}>{fmt(totalJour)}</td>
+                        {vue === 'tous' && <td style={{ ...tdStyle, color: actif ? '#16a34a' : '#ccc' }}>{fmt(d.cash)}</td>}
+                        <td style={{ ...tdStyle, color: actif ? '#b45309' : '#ccc' }}>{fmt(d.cashAnalyse)}</td>
+                        <td style={{ ...tdStyle, color: actif ? '#2563eb' : '#ccc' }}>{fmt(d.carte)}</td>
+                        {vue === 'tous' && <td style={{ ...tdStyle, color: d.depenses !== 0 ? '#dc2626' : '#ccc' }}>{fmt(d.depenses)}</td>}
+                        <td style={{ ...tdStyle, color: '#666' }}>{fmt(tvaJour[6])}</td>
+                        <td style={{ ...tdStyle, color: '#666' }}>{fmt(tvaJour[12])}</td>
+                        <td style={{ ...tdStyle, color: '#666' }}>{fmt(tvaJour[21])}</td>
+                        <td style={{ ...tdStyle, fontWeight: 600, color: !actif ? '#ccc' : (ecartImportant ? '#dc2626' : '#16a34a') }}>
+                          {fmt(ctl)}
+                        </td>
+                        <td style={{ padding: '2px 6px', borderBottom: '1px solid #f0f0ee' }}>
+                          <input
+                            type="number" step="0.1" min="0"
+                            defaultValue={fmt(kmDuJour(j))}
+                            onBlur={(e) => changerKm(j, e.target.value)}
+                            style={{ width: 60, padding: '2px 6px', borderRadius: 5, border: '1px solid #ddd', fontSize: 12, textAlign: 'right' }}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{ textAlign: 'right', fontWeight: 700, background: '#fafaf8', borderTop: '2px solid #e5e5e0' }}>
+                    <td style={{ padding: '8px 10px' }}></td>
+                    <td style={{ padding: '8px 10px', textAlign: 'left' }}>Totaux {MOIS_NOMS[mois - 1]}</td>
+                    <td style={{ padding: '8px 10px' }}>{fmt(vue === 'analyse' ? totaux.totalAnalyse : totaux.total)}</td>
+                    {vue === 'tous' && <td style={{ padding: '8px 10px', color: '#16a34a' }}>{fmt(totaux.cash)}</td>}
+                    <td style={{ padding: '8px 10px', color: '#b45309' }}>{fmt(totaux.cashAnalyse)}</td>
+                    <td style={{ padding: '8px 10px', color: '#2563eb' }}>{fmt(totaux.carte)}</td>
+                    {vue === 'tous' && <td style={{ padding: '8px 10px', color: '#dc2626' }}>{fmt(totaux.depenses)}</td>}
+                    <td style={{ padding: '8px 10px' }}>{fmt(tvaActive[6])}</td>
+                    <td style={{ padding: '8px 10px' }}>{fmt(tvaActive[12])}</td>
+                    <td style={{ padding: '8px 10px' }}>{fmt(tvaActive[21])}</td>
+                    <td style={{ padding: '8px 10px' }}>{fmt(tvaActive[6] + tvaActive[12] + tvaActive[21])}</td>
+                    <td style={{ padding: '8px 10px', color: '#6b7280' }}>{fmt(totalKm)}</td>
+                  </tr>
+                  <tr style={{ textAlign: 'right', background: '#fafaf8' }}>
+                    <td style={{ padding: '6px 10px' }}></td>
+                    <td style={{ padding: '6px 10px', textAlign: 'left', color: '#888' }}>TVA à payer</td>
+                    <td style={{ padding: '6px 10px' }}></td>
+                    {vue === 'tous' && <td style={{ padding: '6px 10px' }}></td>}
+                    <td style={{ padding: '6px 10px' }}></td>
+                    <td style={{ padding: '6px 10px' }}></td>
+                    {vue === 'tous' && <td style={{ padding: '6px 10px' }}></td>}
+                    <td style={{ padding: '6px 10px', color: '#888' }}>{fmt(tvaApayer(tvaActive[6], 6))}</td>
+                    <td style={{ padding: '6px 10px', color: '#888' }}>{fmt(tvaApayer(tvaActive[12], 12))}</td>
+                    <td style={{ padding: '6px 10px', color: '#888' }}>{fmt(tvaApayer(tvaActive[21], 21))}</td>
+                    <td style={{ padding: '6px 10px', fontWeight: 700, color: '#555' }}>
+                      {fmt(tvaApayer(tvaActive[6], 6) + tvaApayer(tvaActive[12], 12) + tvaApayer(tvaActive[21], 21))}
+                    </td>
+                    <td style={{ padding: '6px 10px' }}></td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
 
             {/* Mémo du mois */}
