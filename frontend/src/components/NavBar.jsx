@@ -51,6 +51,7 @@ export default function NavBar() {
       <Link to="/reservations" style={linkStyle('/reservations')}>Réservations</Link>
       <Link to={'/historique' + suffixeDate} style={linkStyle('/historique')}>Historique</Link>
       <Link to={'/encaissements' + suffixeDate} style={linkStyle('/encaissements')}>Encaissements</Link>
+      <Link to={'/recap' + suffixeDate} style={linkStyle('/recap')}>Récap</Link>
     </div>
   );
 }
