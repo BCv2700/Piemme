@@ -1,8 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-from app.routers import tables, articles, clients, commandes, encaissements, reservations
 from app.routers import table_position_jour
+from app.routers import tables, articles, clients, commandes, encaissements, reservations, recap_mensuel
+
 import os
 
 load_dotenv()
@@ -27,6 +28,7 @@ app.include_router(commandes.router)
 app.include_router(encaissements.router)
 app.include_router(reservations.router)
 app.include_router(table_position_jour.router)
+app.include_router(recap_mensuel.router)
 
 @app.get("/")
 def root():
