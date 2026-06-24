@@ -84,14 +84,22 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
     }
   };
 
-  // cash_analyse n'est plus saisi à la main : c'est toujours la somme des lignes
-  // cochées "Analysée" (prix_vente × quantité). On la recalcule et on la
-  // persiste côté backend chaque fois que l'état "analysée" d'une ligne change.
-  const calculerCashAnalyse = (lignes) =>
-    lignes.reduce((s, l) => s + (l.vente_analysee ? Number(l.prix_vente) * Number(l.quantite) : 0), 0);
+  // cash_analyse = part CASH des lignes cochées "Analysée".
+  // Règle (b1) : on prend la somme des lignes analysées, mais plafonnée au
+  // montant réellement payé en espèces (montant_cash). Ainsi, un ticket payé
+  // entièrement en carte donne toujours 0, et le cash analysé ne peut jamais
+  // dépasser le cash encaissé.
+  const calculerCashAnalyse = (lignes, montantCash) => {
+    const sommeAnalysee = lignes.reduce(
+      (s, l) => s + (l.vente_analysee ? Number(l.prix_vente) * Number(l.quantite) : 0),
+      0
+    );
+    const cash = Number(montantCash) || 0;
+    return Math.max(0, Math.min(sommeAnalysee, cash));
+  };
 
   const syncCashAnalyse = async (lignes) => {
-    const nouveauCashAnalyse = calculerCashAnalyse(lignes);
+    const nouveauCashAnalyse = calculerCashAnalyse(lignes, enc.montant_cash);
     majLocal('cash_analyse', nouveauCashAnalyse);
     try {
       await api.patch('/encaissements/' + enc.id, { cash_analyse: nouveauCashAnalyse });
