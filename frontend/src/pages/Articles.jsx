@@ -200,7 +200,7 @@ export default function Articles() {
   };
 
   // Styles de cellules avec quadrillage
-  const thCell = (extra = {}) => ({ padding: '6px 14px', border: BORDURE, ...extra });
+  const thCell = (extra = {}) => ({ padding: '6px 14px', border: BORDURE, whiteSpace: 'nowrap', ...extra });
   const tdCell = (extra = {}) => ({ padding: '4px 14px', border: BORDURE, ...extra });
 
   return (
@@ -347,17 +347,15 @@ export default function Articles() {
                           style={{ width: 16, height: 16, cursor: 'pointer' }}
                         />
                       </td>
-                      <td style={tdCell()}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <button
-                            className="btn"
-                            style={{ color: '#dc2626', borderColor: '#fca5a5', fontSize: 12, padding: '2px 8px' }}
-                            onClick={(e) => { e.stopPropagation(); demanderSuppression(article); }}
-                          >
-                            Supprimer
-                          </button>
-                          <span style={{ color: '#888', fontSize: 12 }}>Modifier →</span>
-                        </div>
+                      <td style={tdCell({ textAlign: 'center' })}>
+                        <button
+                          className="btn"
+                          title="Supprimer cet article"
+                          style={{ color: '#dc2626', borderColor: '#fca5a5', fontSize: 14, padding: '2px 8px', lineHeight: 1 }}
+                          onClick={(e) => { e.stopPropagation(); demanderSuppression(article); }}
+                        >
+                          🗑
+                        </button>
                       </td>
                       <td style={tdCell({ color: '#aaa' })}>{article.id}</td>
                       <td style={tdCell({ fontWeight: 500 })}>{article.nom}</td>
@@ -389,7 +387,7 @@ export default function Articles() {
                           <span style={{ color: '#ccc' }}>—</span>
                         )}
                       </td>
-                      <td style={tdCell({ textAlign: 'right' })}>{Number(article.prix_vente).toFixed(2)} €</td>
+                      <td style={tdCell({ textAlign: 'right', whiteSpace: 'nowrap' })}>{Number(article.prix_vente).toFixed(2)} €</td>
                       <td style={tdCell({ textAlign: 'right', color: stockBas ? '#dc2626' : 'inherit', fontWeight: stockBas ? 600 : 400 })}>{article.stock}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#666' })}>{article.stock_min}</td>
                       <td style={tdCell()}>{article.stock_a_suivre ? '✓' : ''}</td>
