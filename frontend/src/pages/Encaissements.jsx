@@ -137,6 +137,13 @@ export default function Encaissements() {
   return (
     <div>
       <div className="content">
+        <style>{`
+          .cell-input:focus {
+            outline: none;
+            border: 1px solid #bbb !important;
+            background: #fff !important;
+          }
+        `}</style>
 
         {msg && (
           <div style={{
@@ -244,7 +251,7 @@ export default function Encaissements() {
                         </span>
                       ) : (
                         <input
-                          style={{ ...inputStyle, width: '100%' }}
+                          className="cell-input" style={{ ...inputStyle, width: '100%' }}
                           value={enc.table_nom || ''}
                           onChange={(e) => majLocal(enc.id, 'table_nom', e.target.value)}
                           onBlur={() => saveEncaissement(enc)}
@@ -261,7 +268,7 @@ export default function Encaissements() {
                     <td style={tdCell({ padding: '2px 6px' })}>
                       <input
                         type="number" step="0.01"
-                        style={{ ...inputStyle, width: '100%', textAlign: 'right' }}
+                        className="cell-input" style={{ ...inputStyle, width: '100%', textAlign: 'right' }}
                         value={enc.montant_cash}
                         onChange={(e) => majLocal(enc.id, 'montant_cash', e.target.value)}
                         onBlur={() => saveEncaissement(enc)}
@@ -270,7 +277,7 @@ export default function Encaissements() {
                     <td style={tdCell({ padding: '2px 6px' })}>
                       <input
                         type="number" step="0.01"
-                        style={{ ...inputStyle, width: '100%', textAlign: 'right' }}
+                        className="cell-input" style={{ ...inputStyle, width: '100%', textAlign: 'right' }}
                         value={enc.montant_carte}
                         onChange={(e) => majLocal(enc.id, 'montant_carte', e.target.value)}
                         onBlur={() => saveEncaissement(enc)}
@@ -279,7 +286,7 @@ export default function Encaissements() {
                     <td style={tdCell({ padding: '2px 6px' })}>
                       <input
                         type="number" step="0.01"
-                        style={{ ...inputStyle, width: '100%', textAlign: 'right', fontWeight: 700 }}
+                        className="cell-input" style={{ ...inputStyle, width: '100%', textAlign: 'right', fontWeight: 700 }}
                         value={enc.montant_total}
                         onChange={(e) => majLocal(enc.id, 'montant_total', e.target.value)}
                         onBlur={() => saveEncaissement(enc)}
@@ -311,7 +318,8 @@ const inputStyle = {
   width: '100%',
   padding: '2px 6px',
   borderRadius: 5,
-  border: '1px solid #ddd',
+  border: '1px solid transparent',
+  background: 'transparent',
   fontSize: 12,
   boxSizing: 'border-box',
 };
