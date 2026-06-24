@@ -10,6 +10,15 @@ import api from '../api/api';
 // ───────────────────────────────────────────────────────────────────────────
 const CODE_VENTE_DEPENSE = 9001;
 
+// Normalise un nom de table pour le comparer sans tenir compte de la casse ni
+// des accents : "DÉPENSES", "Dépenses", "depenses" donnent tous "depenses".
+const normaliser = (s) =>
+  (s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+
 export default function Caddy() {
   const { tableId } = useParams();
   const navigate = useNavigate();
@@ -57,11 +66,12 @@ export default function Caddy() {
     9001: 'Dépenses',
   };
 
-  // Cet écran est-il un écran de dépenses ? On le détecte de façon fiable :
-  // dès qu'il existe au moins un article en code_vente 9001 / type "depense".
-  const estEcranDepense = articles.some(
-    a => a.code_vente === CODE_VENTE_DEPENSE || a.type === 'depense'
-  );
+  // Cet écran est-il un écran de dépenses ? Il l'est UNIQUEMENT pour la table
+  // nommée « Dépenses » (la seule du plan de salle à porter ce nom). On se base
+  // donc sur le nom de la table cliquée, et non sur la simple présence d'articles
+  // 9001 dans la base (qui existent toujours et rendaient la détection toujours
+  // vraie, affichant les dépenses sur toutes les tables).
+  const estEcranDepense = table != null && normaliser(table.nom) === 'depenses';
 
   // Niveau 1 : codes de vente présents (Boissons Alcools, Nourriture...), dans l'ordre des codes
   const codesVente = [...new Set(articles.map(a => a.code_vente))]
