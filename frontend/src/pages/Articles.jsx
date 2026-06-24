@@ -3,6 +3,9 @@ import api from '../api/api';
 
 const CODE_VENTE_DEPENSE = 9001;
 
+// Bordure de quadrillage commune à toutes les cellules du tableau
+const BORDURE = '1px solid #e5e5e0';
+
 const ARTICLE_VIDE = {
   nom: '',
   categorie: '',
@@ -196,6 +199,10 @@ export default function Articles() {
     setTimeout(() => setMsg(null), 4000);
   };
 
+  // Styles de cellules avec quadrillage
+  const thCell = (extra = {}) => ({ padding: '6px 14px', border: BORDURE, ...extra });
+  const tdCell = (extra = {}) => ({ padding: '4px 14px', border: BORDURE, ...extra });
+
   return (
     <div>
       <div className="content">
@@ -291,11 +298,11 @@ export default function Articles() {
         {loading ? (
           <div style={{ color: '#888' }}>Chargement...</div>
         ) : (
-          <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ background: 'white', border: BORDURE, borderRadius: 10, overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
-                  <th style={{ padding: '6px 14px' }}>
+                  <th style={thCell()}>
                     <input
                       type="checkbox"
                       checked={toutAfficheCoche}
@@ -304,35 +311,35 @@ export default function Articles() {
                       style={{ width: 16, height: 16, cursor: 'pointer' }}
                     />
                   </th>
-                  <th style={{ padding: '6px 14px' }}></th>
-                  <th style={{ padding: '6px 14px' }}>ID</th>
-                  <th style={{ padding: '6px 14px' }}>Nom</th>
-                  <th style={{ padding: '6px 14px' }}>Type</th>
-                  <th style={{ padding: '6px 14px' }}>Code vente</th>
-                  <th style={{ padding: '6px 14px' }}>Catégorie</th>
-                  <th style={{ padding: '6px 14px', textAlign: 'right' }}>Prix vente</th>
-                  <th style={{ padding: '6px 14px', textAlign: 'right' }}>Stock</th>
-                  <th style={{ padding: '6px 14px', textAlign: 'right' }}>Stock min</th>
-                  <th style={{ padding: '6px 14px' }}>À suivre</th>
-                  <th style={{ padding: '6px 14px' }}>Boisson</th>
-                  <th style={{ padding: '6px 14px' }}>Actif</th>
+                  <th style={thCell()}></th>
+                  <th style={thCell()}>ID</th>
+                  <th style={thCell()}>Nom</th>
+                  <th style={thCell()}>Type</th>
+                  <th style={thCell()}>Code vente</th>
+                  <th style={thCell()}>Catégorie</th>
+                  <th style={thCell({ textAlign: 'right' })}>Prix vente</th>
+                  <th style={thCell({ textAlign: 'right' })}>Stock</th>
+                  <th style={thCell({ textAlign: 'right' })}>Stock min</th>
+                  <th style={thCell()}>À suivre</th>
+                  <th style={thCell()}>Boisson</th>
+                  <th style={thCell()}>Actif</th>
                 </tr>
               </thead>
               <tbody>
                 {articlesAffiches.map((article, index) => {
                   const stockBas = article.stock_min > 0 && article.stock < article.stock_min;
                   const fondAlterne = index % 2 === 1 ? '#f0f0ec' : 'transparent';
+                  const fondLigne = stockBas ? '#fee2e2' : fondAlterne;
                   return (
                     <tr
                       key={article.id}
                       onClick={() => ouvrirEdition(article)}
                       style={{
-                        borderTop: '1px solid #f0f0ee',
                         cursor: 'pointer',
-                        background: stockBas ? '#fee2e2' : fondAlterne,
+                        background: fondLigne,
                       }}
                     >
-                      <td style={{ padding: '4px 14px' }} onClick={(e) => e.stopPropagation()}>
+                      <td style={tdCell()} onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={selection.includes(article.id)}
@@ -340,7 +347,7 @@ export default function Articles() {
                           style={{ width: 16, height: 16, cursor: 'pointer' }}
                         />
                       </td>
-                      <td style={{ padding: '4px 14px' }}>
+                      <td style={tdCell()}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <button
                             className="btn"
@@ -352,11 +359,11 @@ export default function Articles() {
                           <span style={{ color: '#888', fontSize: 12 }}>Modifier →</span>
                         </div>
                       </td>
-                      <td style={{ padding: '4px 14px', color: '#aaa' }}>{article.id}</td>
-                      <td style={{ padding: '4px 14px', fontWeight: 500 }}>{article.nom}</td>
-                      <td style={{ padding: '4px 14px', color: '#666' }}>{article.type_article || '—'}</td>
-                      <td style={{ padding: '4px 14px', color: '#666' }}>{LIBELLES_CODE_VENTE[article.code_vente] || article.code_vente || '—'}</td>
-                      <td style={{ padding: '4px 14px' }} onClick={(e) => e.stopPropagation()}>
+                      <td style={tdCell({ color: '#aaa' })}>{article.id}</td>
+                      <td style={tdCell({ fontWeight: 500 })}>{article.nom}</td>
+                      <td style={tdCell({ color: '#666' })}>{article.type_article || '—'}</td>
+                      <td style={tdCell({ color: '#666' })}>{LIBELLES_CODE_VENTE[article.code_vente] || article.code_vente || '—'}</td>
+                      <td style={tdCell()} onClick={(e) => e.stopPropagation()}>
                         {article.code_vente === CODE_VENTE_DEPENSE ? (
                           <select
                             value={article.categorie || ''}
@@ -382,12 +389,12 @@ export default function Articles() {
                           <span style={{ color: '#ccc' }}>—</span>
                         )}
                       </td>
-                      <td style={{ padding: '4px 14px', textAlign: 'right' }}>{Number(article.prix_vente).toFixed(2)} €</td>
-                      <td style={{ padding: '4px 14px', textAlign: 'right', color: stockBas ? '#dc2626' : 'inherit', fontWeight: stockBas ? 600 : 400 }}>{article.stock}</td>
-                      <td style={{ padding: '4px 14px', textAlign: 'right', color: '#666' }}>{article.stock_min}</td>
-                      <td style={{ padding: '4px 14px' }}>{article.stock_a_suivre ? '✓' : ''}</td>
-                      <td style={{ padding: '4px 14px' }}>{article.est_boisson ? '✓' : ''}</td>
-                      <td style={{ padding: '4px 14px' }}>
+                      <td style={tdCell({ textAlign: 'right' })}>{Number(article.prix_vente).toFixed(2)} €</td>
+                      <td style={tdCell({ textAlign: 'right', color: stockBas ? '#dc2626' : 'inherit', fontWeight: stockBas ? 600 : 400 })}>{article.stock}</td>
+                      <td style={tdCell({ textAlign: 'right', color: '#666' })}>{article.stock_min}</td>
+                      <td style={tdCell()}>{article.stock_a_suivre ? '✓' : ''}</td>
+                      <td style={tdCell()}>{article.est_boisson ? '✓' : ''}</td>
+                      <td style={tdCell()}>
                         <span style={{
                           display: 'inline-block',
                           width: 10, height: 10, borderRadius: '50%',
@@ -399,7 +406,7 @@ export default function Articles() {
                 })}
                 {articlesAffiches.length === 0 && (
                   <tr>
-                    <td colSpan={13} style={{ padding: 20, textAlign: 'center', color: '#888' }}>
+                    <td colSpan={13} style={{ padding: 20, textAlign: 'center', color: '#888', border: BORDURE }}>
                       Aucun article ne correspond à la recherche
                     </td>
                   </tr>
