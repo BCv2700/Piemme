@@ -10,6 +10,21 @@ const inputStyle = {
   boxSizing: 'border-box',
 };
 
+// Champ de saisie à l'intérieur d'une cellule de tableau : sans bordure propre
+// (le quadrillage de la cellule suffit), contour léger seulement au focus.
+const cellInputStyle = {
+  width: '100%',
+  padding: '4px 6px',
+  borderRadius: 5,
+  border: '1px solid transparent',
+  background: 'transparent',
+  fontSize: 12,
+  boxSizing: 'border-box',
+};
+
+// Bordure de quadrillage commune à toutes les cellules du tableau de lignes
+const BORDURE = '1px solid #e5e5e0';
+
 const labelStyle = { fontSize: 11, color: '#888', display: 'block', marginBottom: 4, fontWeight: 600 };
 
 // Modale de correction complète d'un encaissement : montants + détail des lignes.
@@ -210,6 +225,13 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
         style={{ background: 'white', borderRadius: 12, padding: 24, width: 760, maxHeight: '85vh', overflowY: 'auto' }}
         onClick={(e) => e.stopPropagation()}
       >
+        <style>{`
+          .cell-input:focus {
+            outline: none;
+            border: 1px solid #bbb !important;
+            background: #fff !important;
+          }
+        `}</style>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ fontWeight: 700, fontSize: 17 }}>
             Encaissement #{encaissementId}
@@ -289,67 +311,71 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
             <div style={{ fontSize: 12, color: '#888', fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 }}>
               Détail des articles
             </div>
-            <div style={{ border: '1px solid #e5e5e0', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
+            <div style={{ border: BORDURE, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
                   <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
-                    <th style={{ padding: '6px 10px' }}>Article</th>
-                    <th style={{ padding: '6px 10px', textAlign: 'right' }}>Qté</th>
-                    <th style={{ padding: '6px 10px', textAlign: 'right' }}>Px vente</th>
-                    <th style={{ padding: '6px 10px', textAlign: 'right' }}>TVA %</th>
-                    <th style={{ padding: '6px 10px', textAlign: 'right' }}>Prix payé</th>
+                    <th style={{ padding: '6px 10px', border: BORDURE }}>Article</th>
+                    <th style={{ padding: '6px 10px', border: BORDURE, textAlign: 'center' }}>Qté</th>
+                    <th style={{ padding: '6px 10px', border: BORDURE, textAlign: 'center' }}>Px vente</th>
+                    <th style={{ padding: '6px 10px', border: BORDURE, textAlign: 'center' }}>TVA %</th>
+                    <th style={{ padding: '6px 10px', border: BORDURE, textAlign: 'right' }}>Prix payé</th>
                     <th
-                      style={{ padding: '6px 10px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                      style={{ padding: '6px 10px', border: BORDURE, textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
                       onClick={toggleToutesAnalysees}
                       title="Cliquer pour tout cocher / décocher"
                     >
                       Analysée
                     </th>
-                    <th style={{ padding: '6px 10px' }}></th>
+                    <th style={{ padding: '6px 10px', border: BORDURE }}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {(enc.lignes || []).map(ligne => (
-                    <tr key={ligne.id} style={{ borderTop: '1px solid #f0f0ee' }}>
-                      <td style={{ padding: '2px 6px' }}>
+                    <tr key={ligne.id}>
+                      <td style={{ padding: '2px 6px', border: BORDURE }}>
                         <input
-                          style={inputStyle}
+                          className="cell-input"
+                          style={cellInputStyle}
                           value={ligne.article_nom}
                           onChange={(e) => majLigneLocal(ligne.id, 'article_nom', e.target.value)}
                           onBlur={() => saveLigne(ligne)}
                         />
                       </td>
-                      <td style={{ padding: '2px 6px' }}>
+                      <td style={{ padding: '2px 6px', border: BORDURE }}>
                         <input
                           type="number" step="0.01"
-                          style={{ ...inputStyle, width: 65, textAlign: 'right' }}
+                          className="cell-input"
+                          style={{ ...cellInputStyle, textAlign: 'right' }}
                           value={ligne.quantite}
                           onChange={(e) => majLigneLocal(ligne.id, 'quantite', e.target.value)}
                           onBlur={() => saveLigne(ligne)}
                         />
                       </td>
-                      <td style={{ padding: '2px 6px' }}>
+                      <td style={{ padding: '2px 6px', border: BORDURE }}>
                         <input
                           type="number" step="0.01"
-                          style={{ ...inputStyle, width: 75, textAlign: 'right' }}
+                          className="cell-input"
+                          style={{ ...cellInputStyle, textAlign: 'right' }}
                           value={ligne.prix_vente}
                           onChange={(e) => majLigneLocal(ligne.id, 'prix_vente', e.target.value)}
                           onBlur={() => saveLigne(ligne)}
                         />
                       </td>
-                      <td style={{ padding: '2px 6px' }}>
+                      <td style={{ padding: '2px 6px', border: BORDURE }}>
                         <input
                           type="number" step="1"
-                          style={{ ...inputStyle, width: 55, textAlign: 'right' }}
+                          className="cell-input"
+                          style={{ ...cellInputStyle, textAlign: 'right' }}
                           value={Math.round(ligne.tva)}
                           onChange={(e) => majLigneLocal(ligne.id, 'tva', e.target.value)}
                           onBlur={() => saveLigne(ligne)}
                         />
                       </td>
-                      <td style={{ padding: '4px 10px', textAlign: 'right', fontWeight: 600 }}>
+                      <td style={{ padding: '4px 10px', border: BORDURE, textAlign: 'right', fontWeight: 600 }}>
                         {(Number(ligne.prix_vente) * Number(ligne.quantite)).toFixed(2)} €
                       </td>
-                      <td style={{ padding: '4px 10px', textAlign: 'center' }}>
+                      <td style={{ padding: '4px 10px', border: BORDURE, textAlign: 'center' }}>
                         <input
                           type="checkbox"
                           checked={!!ligne.vente_analysee}
@@ -357,7 +383,7 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
                           style={{ width: 15, height: 15, cursor: 'pointer' }}
                         />
                       </td>
-                      <td style={{ padding: '4px 10px' }}>
+                      <td style={{ padding: '4px 10px', border: BORDURE }}>
                         <button
                           className="btn"
                           style={{ width: 22, height: 22, padding: 0, fontSize: 11, color: '#dc2626', borderColor: '#fca5a5' }}
