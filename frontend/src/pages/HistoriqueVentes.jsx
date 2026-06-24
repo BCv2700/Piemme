@@ -14,6 +14,9 @@ function addDays(dateKey, delta) {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
+// Bordure de quadrillage commune à toutes les cellules du tableau
+const BORDURE = '1px solid #e5e5e0';
+
 export default function HistoriqueVentes() {
   const [searchParams] = useSearchParams();
   // Lit la date transmise par le Plan de salle (NavBar) au montage du composant.
@@ -97,15 +100,18 @@ export default function HistoriqueVentes() {
     }
   };
 
-  // cash_analyse n'est plus saisi à la main : c'est toujours la somme des lignes
-  // de l'encaissement cochées "Analysée" (prix_vente × quantité). On la recalcule
-  // et on la persiste côté backend chaque fois que l'état "analysée" d'une ligne
-  // change, pour que ce total reste cohérent même si on coche/décoche depuis
-  // cet écran Historique (et non depuis la modale de détail).
-  const syncCashAnalyse = async (encId, lignesMaj) => {
-    const nouveauCashAnalyse = lignesMaj.reduce(
+  // cash_analyse = part CASH des lignes cochées "Analysée".
+  // Règle (b1) : somme des lignes analysées (prix_vente × quantité), mais
+  // PLAFONNÉE au montant réellement payé en espèces (montant_cash), et jamais
+  // négative. Ainsi un ticket payé entièrement en carte donne 0, et le cash
+  // analysé ne dépasse jamais le cash encaissé. Identique à la règle de la
+  // modale de détail, pour rester cohérent où qu'on coche "Analysée".
+  const syncCashAnalyse = async (encId, lignesMaj, montantCash) => {
+    const sommeAnalysee = lignesMaj.reduce(
       (s, l) => s + (l.vente_analysee ? Number(l.prix_vente) * Number(l.quantite) : 0), 0
     );
+    const cash = Number(montantCash) || 0;
+    const nouveauCashAnalyse = Math.max(0, Math.min(sommeAnalysee, cash));
     setEncaissements(prev => prev.map(e => e.id === encId ? { ...e, cash_analyse: nouveauCashAnalyse } : e));
     try {
       await api.patch('/encaissements/' + encId, { cash_analyse: nouveauCashAnalyse });
@@ -122,7 +128,7 @@ export default function HistoriqueVentes() {
       await api.patch('/encaissements/lignes/' + ligne.id, { vente_analysee: nouvelleValeur });
       const enc = encaissements.find(e => e.id === encId);
       const lignesMaj = enc.lignes.map(l => l.id === ligne.id ? { ...l, vente_analysee: nouvelleValeur } : l);
-      await syncCashAnalyse(encId, lignesMaj);
+      await syncCashAnalyse(encId, lignesMaj, enc.montant_cash);
     } catch (e) {
       showMsg('error', errMsg(e, 'Erreur'));
       load();
@@ -145,9 +151,20 @@ export default function HistoriqueVentes() {
 
   const totalPeriode = lignesAPlat.reduce((s, { ligne }) => s + Number(ligne.prix_vente) * Number(ligne.quantite), 0);
 
+  // Styles de cellules avec quadrillage
+  const thCell = (extra = {}) => ({ padding: '6px 10px', border: BORDURE, ...extra });
+  const tdCell = (extra = {}) => ({ padding: '4px 10px', border: BORDURE, ...extra });
+
   return (
     <div>
       <div className="content">
+        <style>{`
+          .cell-input:focus {
+            outline: none;
+            border: 1px solid #bbb !important;
+            background: #fff !important;
+          }
+        `}</style>
 
         {msg && (
           <div style={{
@@ -205,82 +222,86 @@ export default function HistoriqueVentes() {
         ) : lignesAPlat.length === 0 ? (
           <div style={{ color: '#888', textAlign: 'center', padding: '40px 0' }}>Aucune vente sur cette période</div>
         ) : (
-          <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ background: 'white', border: BORDURE, borderRadius: 10, overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
-                  <th style={{ padding: '6px 10px' }}>Réf enc.</th>
-                  <th style={{ padding: '6px 10px' }}></th>
-                  <th style={{ padding: '6px 10px' }}>Date</th>
-                  <th style={{ padding: '6px 10px' }}>Article</th>
-                  <th style={{ padding: '6px 10px', textAlign: 'right' }}>Qté</th>
-                  <th style={{ padding: '6px 10px', textAlign: 'right' }}>Px vente</th>
-                  <th style={{ padding: '6px 10px', textAlign: 'right' }}>TVA %</th>
-                  <th style={{ padding: '6px 10px', textAlign: 'right' }}>Prix payé</th>
-                  <th style={{ padding: '6px 10px', textAlign: 'center' }}>Analysée</th>
-                  <th style={{ padding: '6px 10px' }}>Ticket</th>
-                  <th style={{ padding: '6px 10px' }}>Réservation</th>
+                  <th style={thCell()}>Réf enc.</th>
+                  <th style={thCell()}></th>
+                  <th style={thCell()}>Date</th>
+                  <th style={thCell()}>Article</th>
+                  <th style={thCell({ textAlign: 'center' })}>Qté</th>
+                  <th style={thCell({ textAlign: 'center' })}>Px vente</th>
+                  <th style={thCell({ textAlign: 'center' })}>TVA %</th>
+                  <th style={thCell({ textAlign: 'right' })}>Prix payé</th>
+                  <th style={thCell({ textAlign: 'center' })}>Analysée</th>
+                  <th style={thCell()}>Ticket</th>
+                  <th style={thCell()}>Réservation</th>
                 </tr>
               </thead>
               <tbody>
                 {lignesAPlat.map(({ enc, ligne }) => (
-                  <tr key={ligne.id} style={{ borderTop: '1px solid #f0f0ee' }}>
+                  <tr key={ligne.id}>
                     <td
-                      style={{ padding: '4px 10px', color: '#2563eb', cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted' }}
+                      style={tdCell({ color: '#2563eb', cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted' })}
                       onClick={() => setDetailOuvert(enc.id)}
                       title="Voir / corriger le détail de cet encaissement"
                     >
                       {enc.id}
                     </td>
-                    <td style={{ padding: '4px 10px' }}>
+                    <td style={tdCell()}>
                       <button
                         className="btn"
                         style={{ width: 22, height: 22, padding: 0, fontSize: 11, color: '#dc2626', borderColor: '#fca5a5' }}
                         onClick={() => deleteLigne(enc.id, ligne.id)}
                       >✕</button>
                     </td>
-                    <td style={{ padding: '4px 10px', whiteSpace: 'nowrap', color: '#666' }}>
+                    <td style={tdCell({ whiteSpace: 'nowrap', color: '#666' })}>
                       {new Date(enc.date_encaissement).toLocaleString('fr-BE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </td>
-                    <td style={{ padding: '2px 6px' }}>
+                    <td style={tdCell({ padding: '2px 6px' })}>
                       <input
+                        className="cell-input"
                         style={inputStyle}
                         value={ligne.article_nom}
                         onChange={(e) => majLigneLocal(enc.id, ligne.id, 'article_nom', e.target.value)}
                         onBlur={() => saveLigne(ligne)}
                       />
                     </td>
-                    <td style={{ padding: '2px 6px' }}>
+                    <td style={tdCell({ padding: '2px 6px' })}>
                       <input
                         type="number" step="0.01"
-                        style={{ ...inputStyle, width: 60, textAlign: 'right' }}
+                        className="cell-input"
+                        style={{ ...inputStyle, textAlign: 'right' }}
                         value={ligne.quantite}
                         onChange={(e) => majLigneLocal(enc.id, ligne.id, 'quantite', e.target.value)}
                         onBlur={() => saveLigne(ligne)}
                       />
                     </td>
-                    <td style={{ padding: '2px 6px' }}>
+                    <td style={tdCell({ padding: '2px 6px' })}>
                       <input
                         type="number" step="0.01"
-                        style={{ ...inputStyle, width: 80, textAlign: 'right' }}
+                        className="cell-input"
+                        style={{ ...inputStyle, textAlign: 'right' }}
                         value={ligne.prix_vente}
                         onChange={(e) => majLigneLocal(enc.id, ligne.id, 'prix_vente', e.target.value)}
                         onBlur={() => saveLigne(ligne)}
                       />
                     </td>
-                    <td style={{ padding: '2px 6px' }}>
+                    <td style={tdCell({ padding: '2px 6px' })}>
                       <input
                         type="number" step="1"
-                        style={{ ...inputStyle, width: 55, textAlign: 'right' }}
+                        className="cell-input"
+                        style={{ ...inputStyle, textAlign: 'right' }}
                         value={Math.round(ligne.tva)}
                         onChange={(e) => majLigneLocal(enc.id, ligne.id, 'tva', e.target.value)}
                         onBlur={() => saveLigne(ligne)}
                       />
                     </td>
-                    <td style={{ padding: '4px 10px', textAlign: 'right', fontWeight: 600 }}>
+                    <td style={tdCell({ textAlign: 'right', fontWeight: 600 })}>
                       {(Number(ligne.prix_vente) * Number(ligne.quantite)).toFixed(2)} €
                     </td>
-                    <td style={{ padding: '4px 10px', textAlign: 'center' }}>
+                    <td style={tdCell({ textAlign: 'center' })}>
                       <input
                         type="checkbox"
                         checked={!!ligne.vente_analysee}
@@ -288,8 +309,8 @@ export default function HistoriqueVentes() {
                         style={{ width: 15, height: 15, cursor: 'pointer' }}
                       />
                     </td>
-                    <td style={{ padding: '4px 10px', color: '#666' }}>{enc.table_nom || '—'}</td>
-                    <td style={{ padding: '4px 10px', color: '#666' }}>{enc.nom_reservation_archive || '—'}</td>
+                    <td style={tdCell({ color: '#666' })}>{enc.table_nom || '—'}</td>
+                    <td style={tdCell({ color: '#666' })}>{enc.nom_reservation_archive || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -313,7 +334,8 @@ const inputStyle = {
   width: '100%',
   padding: '2px 6px',
   borderRadius: 5,
-  border: '1px solid #ddd',
+  border: '1px solid transparent',
+  background: 'transparent',
   fontSize: 12,
   boxSizing: 'border-box',
 };
