@@ -4,11 +4,13 @@ from app.database import get_db
 from app.models.commande import Commande
 from app.models.table import Table
 from app.schemas.commande import CommandeOut, CommandeCreate, CommandeUpdate
+from app.deps import get_current_user
+from app.models.utilisateur import Utilisateur
 
 router = APIRouter(prefix="/commandes", tags=["Commandes"])
 
 @router.get("/", response_model=list[CommandeOut])
-def list_commandes(table_id: int = None, db: Session = Depends(get_db)):
+def list_commandes(table_id: int = None, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     """Liste les lignes de commande en cours. Filtrable par table (le caddy d'une table)."""
     query = db.query(Commande)
     if table_id is not None:
@@ -16,7 +18,7 @@ def list_commandes(table_id: int = None, db: Session = Depends(get_db)):
     return query.order_by(Commande.date_commande).all()
 
 @router.post("/", response_model=CommandeOut)
-def create_commande(commande: CommandeCreate, db: Session = Depends(get_db)):
+def create_commande(commande: CommandeCreate, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     db_commande = Commande(**commande.dict())
     db.add(db_commande)
 
@@ -30,7 +32,7 @@ def create_commande(commande: CommandeCreate, db: Session = Depends(get_db)):
     return db_commande
 
 @router.patch("/{commande_id}", response_model=CommandeOut)
-def update_commande(commande_id: int, commande: CommandeUpdate, db: Session = Depends(get_db)):
+def update_commande(commande_id: int, commande: CommandeUpdate, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     db_commande = db.query(Commande).filter(Commande.id == commande_id).first()
     if not db_commande:
         raise HTTPException(status_code=404, detail="Ligne de commande introuvable")
@@ -41,7 +43,7 @@ def update_commande(commande_id: int, commande: CommandeUpdate, db: Session = De
     return db_commande
 
 @router.delete("/{commande_id}")
-def delete_commande(commande_id: int, db: Session = Depends(get_db)):
+def delete_commande(commande_id: int, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     db_commande = db.query(Commande).filter(Commande.id == commande_id).first()
     if not db_commande:
         raise HTTPException(status_code=404, detail="Ligne de commande introuvable")
@@ -50,7 +52,7 @@ def delete_commande(commande_id: int, db: Session = Depends(get_db)):
     return {"message": "Ligne supprimée"}
 
 @router.delete("/table/{table_id}")
-def clear_commandes_table(table_id: int, db: Session = Depends(get_db)):
+def clear_commandes_table(table_id: int, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     """Vide le caddy d'une table (utilisé après paiement)."""
     db.query(Commande).filter(Commande.table_id == table_id).delete()
     table = db.query(Table).filter(Table.id == table_id).first()

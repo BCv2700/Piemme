@@ -11,6 +11,8 @@ from app.schemas.table_position_jour import (
     TablePositionJourUpsert,
     TablePositionJourStatutUpsert,
 )
+from app.deps import get_current_user
+from app.models.utilisateur import Utilisateur
 
 router = APIRouter(prefix="/table-positions-jour", tags=["TablePositionsJour"])
 
@@ -19,6 +21,7 @@ router = APIRouter(prefix="/table-positions-jour", tags=["TablePositionsJour"])
 def list_positions_jour(
     date_jour: Optional[date] = None,
     db: Session = Depends(get_db),
+    utilisateur: Utilisateur = Depends(get_current_user),
 ):
     """
     Renvoie les exceptions de position pour un jour donné.
@@ -32,7 +35,7 @@ def list_positions_jour(
 
 
 @router.put("/", response_model=TablePositionJourOut)
-def upsert_position_jour(payload: TablePositionJourUpsert, db: Session = Depends(get_db)):
+def upsert_position_jour(payload: TablePositionJourUpsert, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     """
     Enregistre la position d'une table pour un jour donné.
 
@@ -94,7 +97,7 @@ def upsert_position_jour(payload: TablePositionJourUpsert, db: Session = Depends
 
 
 @router.put("/statut", response_model=TablePositionJourOut)
-def upsert_statut_jour(payload: TablePositionJourStatutUpsert, db: Session = Depends(get_db)):
+def upsert_statut_jour(payload: TablePositionJourStatutUpsert, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     """
     Enregistre le statut manuel (libre/occupee/reservee/indisponible) d'une table
     pour un jour donné, sans toucher à sa position éventuelle ce jour-là.
@@ -131,7 +134,7 @@ def upsert_statut_jour(payload: TablePositionJourStatutUpsert, db: Session = Dep
 
 
 @router.delete("/{position_id}")
-def delete_position_jour(position_id: int, db: Session = Depends(get_db)):
+def delete_position_jour(position_id: int, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     """
     Supprime une exception de position pour un jour précis (la table retombe
     alors sur la disposition de référence ce jour-là).
@@ -145,7 +148,7 @@ def delete_position_jour(position_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/jour/{date_jour}")
-def reset_positions_jour(date_jour: date, db: Session = Depends(get_db)):
+def reset_positions_jour(date_jour: date, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     """
     Supprime TOUTES les exceptions de position pour le jour donné en une seule fois.
     Toutes les tables de ce jour retombent alors sur la disposition de référence.

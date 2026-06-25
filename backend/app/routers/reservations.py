@@ -5,6 +5,8 @@ from typing import Optional
 from app.database import get_db
 from app.models.reservation import Reservation
 from app.schemas.reservation import ReservationOut, ReservationCreate, ReservationUpdate
+from app.deps import get_current_user
+from app.models.utilisateur import Utilisateur
 
 router = APIRouter(prefix="/reservations", tags=["Reservations"])
 
@@ -12,6 +14,7 @@ router = APIRouter(prefix="/reservations", tags=["Reservations"])
 def list_reservations(
     date_reservation: Optional[date] = None,
     db: Session = Depends(get_db),
+    utilisateur: Utilisateur = Depends(get_current_user),
 ):
     query = db.query(Reservation)
     if date_reservation:
@@ -19,7 +22,7 @@ def list_reservations(
     return query.order_by(Reservation.date_reservation, Reservation.heure).all()
 
 @router.post("/", response_model=ReservationOut)
-def create_reservation(reservation: ReservationCreate, db: Session = Depends(get_db)):
+def create_reservation(reservation: ReservationCreate, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     db_reservation = Reservation(**reservation.dict())
     db.add(db_reservation)
     db.commit()
@@ -27,7 +30,7 @@ def create_reservation(reservation: ReservationCreate, db: Session = Depends(get
     return db_reservation
 
 @router.patch("/{reservation_id}", response_model=ReservationOut)
-def update_reservation(reservation_id: int, reservation: ReservationUpdate, db: Session = Depends(get_db)):
+def update_reservation(reservation_id: int, reservation: ReservationUpdate, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     db_reservation = db.query(Reservation).filter(Reservation.id == reservation_id).first()
     if not db_reservation:
         raise HTTPException(status_code=404, detail="Réservation introuvable")
@@ -38,7 +41,7 @@ def update_reservation(reservation_id: int, reservation: ReservationUpdate, db: 
     return db_reservation
 
 @router.delete("/{reservation_id}")
-def delete_reservation(reservation_id: int, db: Session = Depends(get_db)):
+def delete_reservation(reservation_id: int, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     db_reservation = db.query(Reservation).filter(Reservation.id == reservation_id).first()
     if not db_reservation:
         raise HTTPException(status_code=404, detail="Réservation introuvable")

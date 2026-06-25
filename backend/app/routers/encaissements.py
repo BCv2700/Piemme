@@ -15,6 +15,8 @@ from app.schemas.encaissement import (
     EncaissementLigneCreate,
     EncaissementLigneUpdate,
 )
+from app.deps import get_current_user
+from app.models.utilisateur import Utilisateur
 
 router = APIRouter(prefix="/encaissements", tags=["Encaissements"])
 
@@ -24,6 +26,7 @@ def list_encaissements(
     date_debut: Optional[date] = None,
     date_fin: Optional[date] = None,
     db: Session = Depends(get_db),
+    utilisateur: Utilisateur = Depends(get_current_user),
 ):
     query = db.query(Encaissement)
     if date_debut:
@@ -38,7 +41,7 @@ def list_encaissements(
 
 
 @router.get("/{encaissement_id}", response_model=EncaissementOut)
-def get_encaissement(encaissement_id: int, db: Session = Depends(get_db)):
+def get_encaissement(encaissement_id: int, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     enc = db.query(Encaissement).filter(Encaissement.id == encaissement_id).first()
     if not enc:
         raise HTTPException(status_code=404, detail="Encaissement introuvable")
@@ -46,7 +49,7 @@ def get_encaissement(encaissement_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=EncaissementOut)
-def create_encaissement(payload: EncaissementCreate, db: Session = Depends(get_db)):
+def create_encaissement(payload: EncaissementCreate, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     """
     Finalise le paiement d'une table : crée l'encaissement + ses lignes,
     puis vide le caddy (commandes) de la table et la repasse à 'libre'.
@@ -73,7 +76,7 @@ def create_encaissement(payload: EncaissementCreate, db: Session = Depends(get_d
 
 
 @router.patch("/{encaissement_id}", response_model=EncaissementOut)
-def update_encaissement(encaissement_id: int, payload: EncaissementUpdate, db: Session = Depends(get_db)):
+def update_encaissement(encaissement_id: int, payload: EncaissementUpdate, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     """
     Modifie les champs d'un encaissement (montants, date, table, remarque...),
     sans toucher aux lignes. Utiliser les endpoints /lignes pour le détail des articles.
@@ -89,7 +92,7 @@ def update_encaissement(encaissement_id: int, payload: EncaissementUpdate, db: S
 
 
 @router.delete("/{encaissement_id}")
-def delete_encaissement(encaissement_id: int, db: Session = Depends(get_db)):
+def delete_encaissement(encaissement_id: int, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     """
     Supprime un encaissement et toutes ses lignes (cascade défini sur le modèle).
     """
@@ -102,7 +105,7 @@ def delete_encaissement(encaissement_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{encaissement_id}/lignes", response_model=EncaissementLigneOut)
-def add_ligne(encaissement_id: int, payload: EncaissementLigneCreate, db: Session = Depends(get_db)):
+def add_ligne(encaissement_id: int, payload: EncaissementLigneCreate, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     """
     Ajoute une ligne (article) à un encaissement existant.
     """
@@ -117,7 +120,7 @@ def add_ligne(encaissement_id: int, payload: EncaissementLigneCreate, db: Sessio
 
 
 @router.patch("/lignes/{ligne_id}", response_model=EncaissementLigneOut)
-def update_ligne(ligne_id: int, payload: EncaissementLigneUpdate, db: Session = Depends(get_db)):
+def update_ligne(ligne_id: int, payload: EncaissementLigneUpdate, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     """
     Modifie une ligne (article, quantité, prix, tva) sans toucher aux autres lignes
     ni au montant_total de l'encaissement parent.
@@ -133,7 +136,7 @@ def update_ligne(ligne_id: int, payload: EncaissementLigneUpdate, db: Session = 
 
 
 @router.delete("/lignes/{ligne_id}")
-def delete_ligne(ligne_id: int, db: Session = Depends(get_db)):
+def delete_ligne(ligne_id: int, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     """
     Supprime une ligne individuelle d'un encaissement.
     """
