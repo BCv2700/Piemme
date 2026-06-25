@@ -1,5 +1,6 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import NavBar from './components/NavBar';
+import Login from './pages/Login';
 import PlanSalle from './pages/PlanSalle';
 import Caddy from './pages/Caddy';
 import Paiement from './pages/Paiement';
@@ -10,19 +11,38 @@ import Encaissements from './pages/Encaissements';
 import RecapMensuel from './pages/RecapMensuel';
 import './App.css';
 
+// Empêche l'accès à une page si aucun jeton n'est présent : redirige vers /login.
+function RouteProtegee({ children }) {
+  const token = localStorage.getItem('lolive_token');
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+}
+
+// Affiche la NavBar uniquement sur les pages protégées (pas sur /login).
+function MiseEnPage({ children }) {
+  return (
+    <>
+      <NavBar />
+      {children}
+    </>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
-      <NavBar />
       <Routes>
-        <Route path="/" element={<PlanSalle />} />
-        <Route path="/caddy/:tableId" element={<Caddy />} />
-        <Route path="/paiement/:tableId" element={<Paiement />} />
-        <Route path="/articles" element={<Articles />} />
-        <Route path="/reservations" element={<Reservations />} />
-        <Route path="/historique" element={<HistoriqueVentes />} />
-        <Route path="/encaissements" element={<Encaissements />} />
-        <Route path="/recap" element={<RecapMensuel />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<RouteProtegee><MiseEnPage><PlanSalle /></MiseEnPage></RouteProtegee>} />
+        <Route path="/caddy/:tableId" element={<RouteProtegee><MiseEnPage><Caddy /></MiseEnPage></RouteProtegee>} />
+        <Route path="/paiement/:tableId" element={<RouteProtegee><MiseEnPage><Paiement /></MiseEnPage></RouteProtegee>} />
+        <Route path="/articles" element={<RouteProtegee><MiseEnPage><Articles /></MiseEnPage></RouteProtegee>} />
+        <Route path="/reservations" element={<RouteProtegee><MiseEnPage><Reservations /></MiseEnPage></RouteProtegee>} />
+        <Route path="/historique" element={<RouteProtegee><MiseEnPage><HistoriqueVentes /></MiseEnPage></RouteProtegee>} />
+        <Route path="/encaissements" element={<RouteProtegee><MiseEnPage><Encaissements /></MiseEnPage></RouteProtegee>} />
+        <Route path="/recap" element={<RouteProtegee><MiseEnPage><RecapMensuel /></MiseEnPage></RouteProtegee>} />
       </Routes>
     </BrowserRouter>
   );

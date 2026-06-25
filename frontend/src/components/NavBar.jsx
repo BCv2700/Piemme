@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 function toDateKey(date) {
   const y = date.getFullYear();
@@ -10,7 +10,9 @@ function toDateKey(date) {
 
 export default function NavBar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [dernierDatePlanSalle, setDernierDatePlanSalle] = useState(null);
+  const username = localStorage.getItem('lolive_username');
 
   // Mémorise la date du Plan de salle chaque fois qu'on s'y trouve, pour pouvoir
   // y revenir avec cette même date même après avoir visité un autre écran.
@@ -38,9 +40,16 @@ export default function NavBar() {
   const urlPlanSalle = dernierDatePlanSalle ? '/?date=' + dernierDatePlanSalle : '/';
   const suffixeDate = dernierDatePlanSalle ? '?date=' + dernierDatePlanSalle : '';
 
+  const seDeconnecter = () => {
+    localStorage.removeItem('lolive_token');
+    localStorage.removeItem('lolive_username');
+    navigate('/login');
+  };
+
   return (
     <div style={{
       display: 'flex',
+      alignItems: 'center',
       gap: 8,
       padding: '12px 24px',
       borderBottom: '1px solid #e5e5e0',
@@ -52,6 +61,19 @@ export default function NavBar() {
       <Link to={'/historique' + suffixeDate} style={linkStyle('/historique')}>Historique</Link>
       <Link to={'/encaissements' + suffixeDate} style={linkStyle('/encaissements')}>Encaissements</Link>
       <Link to={'/recap' + suffixeDate} style={linkStyle('/recap')}>Récap</Link>
+
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+        {username && <span style={{ fontSize: 13, color: '#888' }}>{username}</span>}
+        <button
+          onClick={seDeconnecter}
+          style={{
+            padding: '6px 14px', borderRadius: 8, border: '1px solid #ddd',
+            background: 'white', color: '#888', fontSize: 13, cursor: 'pointer',
+          }}
+        >
+          Se déconnecter
+        </button>
+      </div>
     </div>
   );
 }
