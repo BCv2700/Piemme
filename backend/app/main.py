@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from app.routers import table_position_jour
 from app.routers import tables, articles, clients, commandes, encaissements, reservations, recap_mensuel
+from app.routers import tables, articles, clients, commandes, encaissements, reservations, recap_mensuel, auth
 
 import os
 
@@ -29,6 +30,7 @@ app.include_router(encaissements.router)
 app.include_router(reservations.router)
 app.include_router(table_position_jour.router)
 app.include_router(recap_mensuel.router)
+app.include_router(auth.router)
 
 @app.get("/")
 def root():
