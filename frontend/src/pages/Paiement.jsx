@@ -25,13 +25,21 @@ export default function Paiement() {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   })();
 
+  // Date à utiliser pour cet encaissement : celle du plan de salle (retourDate)
+  // si elle est présente dans l'URL (cas d'un encodage en différé, jour différent
+  // d'aujourd'hui), sinon la date du jour réel.
+  const dateEncodage = retourDate || todayKey;
+
   const load = async () => {
     try {
       const [tableRes, lignesRes, articlesRes, reservationsRes] = await Promise.all([
         api.get('/tables/' + tableId),
         api.get('/commandes/', { params: { table_id: tableId } }),
         api.get('/articles/'),
-        api.get('/reservations/', { params: { date_reservation: todayKey } }),
+        // La réservation à associer doit correspondre au jour encodé (dateEncodage),
+        // pas forcément au jour réel : si on encode en différé, on veut la résa de
+        // ce jour-là, pas celle d'aujourd'hui.
+        api.get('/reservations/', { params: { date_reservation: dateEncodage } }),
       ]);
       setTable(tableRes.data);
       setLignes(lignesRes.data);
@@ -91,6 +99,10 @@ export default function Paiement() {
         nb_personnes: 1,
         emporte: lignes.some(l => l.emporte),
         nom_reservation_archive: nomReservation,
+        // Date du plan de salle (dateEncodage), avec une heure neutre (midi) car
+        // l'heure réelle de l'encodage en différé n'a pas de sens ici. Modifiable
+        // ensuite depuis l'écran Encaissements / la modale de détail.
+        date_encaissement: dateEncodage + 'T12:00:00',
         lignes: lignes.map(l => ({
           article_id: l.article_id,
           article_nom: nomArticle(l.article_id),

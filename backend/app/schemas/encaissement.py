@@ -44,6 +44,7 @@ class EncaissementBase(BaseModel):
     nom_reservation_archive: Optional[str] = None
 
 class EncaissementCreate(EncaissementBase):
+    date_encaissement: Optional[datetime] = None
     lignes: List[EncaissementLigneBase] = []
 
 class EncaissementUpdate(BaseModel):
