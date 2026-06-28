@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import api from '../api/api';
 
 const TAUX_TVA = [6, 12, 21];
@@ -276,6 +278,115 @@ export default function RecapMensuel() {
   const thCell = (extra = {}) => ({ padding: '6px 10px', border: BORDURE, ...extra });
   const tdCell = (extra = {}) => ({ padding: '4px 10px', border: BORDURE, ...extra });
 
+  // ───── Export PDF ─────────────────────────────────────────────────────
+  // genere le PDF pour la vue "tous" ou "analyse". Toutes les colonnes
+  // restent remplies même sur un jour fermé ; on ajoute juste "Fermé" en
+  // rouge à côté de la date.
+  const genererPdf = (vueExport) => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const nomMois = MOIS_NOMS[mois - 1];
+    const nomMoisMaj = nomMois.charAt(0).toUpperCase() + nomMois.slice(1);
+    const estTous = vueExport === 'tous';
+
+    doc.setFontSize(16);
+    doc.setFont(undefined, 'bold');
+    doc.text('Récapitulatif Mensuel', 14, 15);
+    doc.setFontSize(13);
+    doc.text(nomMoisMaj + ' ' + annee, 90, 15);
+    doc.setFont(undefined, 'normal');
+
+    // ligne de totaux / pourcentages TVA, juste sous le titre (comme l'ancien PDF Access)
+    const tvaRef = estTous ? totaux.tva : totaux.tvaAnalyse;
+    doc.setFontSize(8);
+    let ligneInfo = (estTous ? 'Total ' + fmt(totaux.total) : 'Total analysé ' + fmt(totaux.totalAnalyse))
+      + '   Cash ' + fmt(estTous ? totaux.cash : totaux.cashAnalyse)
+      + '   Carte ' + fmt(totaux.carte)
+      + '   Km A/R ' + fmt(totalKm);
+    doc.text(ligneInfo, 14, 21);
+    let lignePourcent = TAUX_TVA.map(t => t + '% : ' + pourcentage(tvaRef[t]).toFixed(2) + '%').join('    ');
+    doc.text(lignePourcent, 14, 26);
+
+    // En-têtes et colonnes selon la vue
+    const head = estTous
+      ? ['Jour', 'Total', 'Dépenses', 'Cash', 'Carte', 'Cash analysé', 'TVA 6%', 'TVA 12%', 'TVA 21%', 'Km A/R']
+      : ['Jour', 'Total analysé', 'Dépenses', 'Carte', 'Cash analysé', 'Contrôle', 'TVA 6%', 'TVA 12%', 'TVA 21%', 'Km A/R'];
+
+    const body = jours.map(j => {
+      const d = parJour[j];
+      const ferme = estFerme(j);
+      const ouverture = estJourOuverture(j);
+      const libelleJour = pad2(j) + ' ' + nomJourSemaine(j) + (ferme ? '  Fermé' : '');
+      if (estTous) {
+        return [
+          libelleJour, fmt(d.total), fmt(d.depenses), fmt(d.cash), fmt(d.carte), fmt(d.cashAnalyse),
+          fmt(d.tva[6]), fmt(d.tva[12]), fmt(d.tva[21]), fmt(kmDuJour(j)),
+        ];
+      }
+      const controle = d.carte + d.cashAnalyse;
+      return [
+        libelleJour, fmt(d.totalAnalyse), fmt(d.depenses), fmt(d.carte), fmt(d.cashAnalyse), fmt(controle),
+        fmt(d.tvaAnalyse[6]), fmt(d.tvaAnalyse[12]), fmt(d.tvaAnalyse[21]), fmt(kmDuJour(j)),
+      ];
+    });
+
+    const ligneTotaux = estTous
+      ? ['Totaux ' + nomMois, fmt(totaux.total), fmt(totaux.depenses), fmt(totaux.cash), fmt(totaux.carte), fmt(totaux.cashAnalyse), fmt(totaux.tva[6]), fmt(totaux.tva[12]), fmt(totaux.tva[21]), fmt(totalKm)]
+      : ['Totaux ' + nomMois, fmt(totaux.totalAnalyse), fmt(totaux.depenses), fmt(totaux.carte), fmt(totaux.cashAnalyse), fmt(totaux.carte + totaux.cashAnalyse), fmt(totaux.tvaAnalyse[6]), fmt(totaux.tvaAnalyse[12]), fmt(totaux.tvaAnalyse[21]), fmt(totalKm)];
+
+    const ligneTvaApayer = estTous
+      ? ['TVA à payer', '', '', '', '', '', fmt(tvaApayer(totaux.tva[6], 6)), fmt(tvaApayer(totaux.tva[12], 12)), fmt(tvaApayer(totaux.tva[21], 21)), '']
+      : ['TVA à payer', '', '', '', '', '', fmt(tvaApayer(totaux.tvaAnalyse[6], 6)), fmt(tvaApayer(totaux.tvaAnalyse[12], 12)), fmt(tvaApayer(totaux.tvaAnalyse[21], 21)), ''];
+
+    const sommeTva = estTous ? totalTvaApayer(totaux.tva) : totalTvaApayer(totaux.tvaAnalyse);
+    const ligneSomme = ['Somme des 3 TVA', '', '', '', '', '', '', '', fmt(sommeTva), ''];
+
+    autoTable(doc, {
+      startY: 30,
+      head: [head],
+      body: [...body, ligneTotaux, ligneTvaApayer, ligneSomme],
+      styles: { fontSize: 7, cellPadding: 1.2, lineColor: [229, 229, 224], lineWidth: 0.1 },
+      headStyles: { fillColor: [250, 250, 248], textColor: [40, 40, 40], fontStyle: 'bold' },
+      columnStyles: {
+        0: { halign: 'left', cellWidth: 38 },
+      },
+      bodyStyles: { halign: 'right' },
+      didParseCell: (data) => {
+        // Mise en évidence des 3 dernières lignes (totaux / tva à payer / somme)
+        const nbLignesSpeciales = 3;
+        const estLigneSpeciale = data.row.index >= body.length;
+        if (estLigneSpeciale) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [250, 250, 248];
+        }
+        // Jour ouverture -> rouge gras dans la 1re colonne
+        if (data.column.index === 0 && data.row.index < body.length) {
+          const j = data.row.index + 1;
+          if (estJourOuverture(j)) {
+            data.cell.styles.textColor = [220, 38, 38];
+            data.cell.styles.fontStyle = 'bold';
+          }
+        }
+      },
+      margin: { left: 14, right: 14 },
+    });
+
+    // Mémo du mois, si présent
+    if (memoLocal && memoLocal.trim()) {
+      const yFinTableau = doc.lastAutoTable.finalY + 10;
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'bold');
+      doc.text('Annotations du mois', 14, yFinTableau);
+      doc.setFont(undefined, 'normal');
+      doc.setFontSize(8);
+      const lignesMemo = doc.splitTextToSize(memoLocal, 180);
+      doc.text(lignesMemo, 14, yFinTableau + 5);
+    }
+
+    const suffixe = estTous ? 'tous' : 'comptable';
+    const nomFichier = 'récap ' + suffixe + ' ' + nomMois.charAt(0).toUpperCase() + nomMois.slice(1) + ' ' + String(annee).slice(2) + '.pdf';
+    doc.save(nomFichier);
+  };
+
   // Cellule "Jour" commune aux deux tableaux : case à cocher Fermé + nom du jour + mention "Fermé"
   const celluleJour = (j, aRecette) => {
     const ouverture = estJourOuverture(j);
@@ -362,6 +473,28 @@ export default function RecapMensuel() {
           <span style={{ fontSize: 13, color: '#888' }}>
             {vue === 'analyse' ? 'Ventes analysées uniquement' : 'Tous les encaissements'}
           </span>
+          <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+            <button
+              onClick={() => genererPdf('tous')}
+              style={{
+                padding: '6px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8,
+                border: '1px solid #ddd', background: 'white', color: '#333', cursor: 'pointer',
+              }}
+              title="Exporter le PDF de la vue Tous"
+            >
+              📄 PDF Tous
+            </button>
+            <button
+              onClick={() => genererPdf('analyse')}
+              style={{
+                padding: '6px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8,
+                border: '1px solid #ddd', background: 'white', color: '#333', cursor: 'pointer',
+              }}
+              title="Exporter le PDF de la vue Analysé (comptable)"
+            >
+              📄 PDF Comptable
+            </button>
+          </div>
         </div>
 
         {loading ? (
