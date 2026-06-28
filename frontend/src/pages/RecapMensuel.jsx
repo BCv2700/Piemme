@@ -384,7 +384,11 @@ export default function RecapMensuel() {
 
     const suffixe = estTous ? 'tous' : 'comptable';
     const nomFichier = 'récap ' + suffixe + ' ' + nomMois.charAt(0).toUpperCase() + nomMois.slice(1) + ' ' + String(annee).slice(2) + '.pdf';
-    doc.save(nomFichier);
+    // Ouvre le PDF dans un nouvel onglet plutôt que de le télécharger directement.
+    // L'utilisateur peut ensuite l'imprimer ou l'enregistrer lui-même depuis le navigateur.
+    doc.setProperties({ title: nomFichier });
+    const blobUrl = doc.output('bloburl');
+    window.open(blobUrl, '_blank');
   };
 
   // Cellule "Jour" commune aux deux tableaux : case à cocher Fermé + nom du jour + mention "Fermé"
