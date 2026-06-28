@@ -26,3 +26,7 @@ class Article(Base):
     # uniquement sur la table fictive DÉPENSES pour encoder des sorties de caisse
     # ('depense'). Filtré côté Caddy selon le type de la table active.
     type             = Column(String(20), nullable=False, default='vente')
+    # Si True, cet article doit apparaître sur le ticket cuisine imprimé depuis
+    # le Caddy (plats à préparer). Les boissons et autres articles sans
+    # préparation cuisine restent à False.
+    imprimer_cuisine = Column(Boolean, default=False)

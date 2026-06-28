@@ -24,6 +24,8 @@ class ArticleBase(BaseModel):
     # 'vente' (défaut) ou 'depense' : détermine si l'article apparaît dans le
     # Caddy d'une table de salle classique ou uniquement sur la table DÉPENSES
     type: str = "vente"
+    # True si l'article doit apparaître sur le ticket cuisine imprimé depuis le Caddy
+    imprimer_cuisine: bool = False
 
 class ArticleCreate(ArticleBase):
     pass
@@ -48,6 +50,7 @@ class ArticleUpdate(BaseModel):
     localisation: Optional[str] = None
     actif: Optional[bool] = None
     type: Optional[str] = None
+    imprimer_cuisine: Optional[bool] = None
 
 class ArticleOut(ArticleBase):
     id: int
