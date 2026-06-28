@@ -10,8 +10,6 @@ const inputStyle = {
   boxSizing: 'border-box',
 };
 
-// Champ de saisie à l'intérieur d'une cellule de tableau : sans bordure propre
-// (le quadrillage de la cellule suffit), contour léger seulement au focus.
 const cellInputStyle = {
   width: '100%',
   padding: '4px 6px',
@@ -22,27 +20,23 @@ const cellInputStyle = {
   boxSizing: 'border-box',
 };
 
-// Bordure de quadrillage commune à toutes les cellules du tableau de lignes
 const BORDURE = '1px solid #e5e5e0';
-
 const labelStyle = { fontSize: 11, color: '#888', display: 'block', marginBottom: 4, fontWeight: 600 };
 
-// Modale de correction complète d'un encaissement : montants + détail des lignes.
-// Réutilisable depuis Encaissements.jsx (clic sur une ligne) et HistoriqueVentes.jsx
-// (clic sur la réf encaissement). Tout y est éditable, comme dans les deux écrans
-// d'origine, mais regroupé en un seul endroit pour corriger une vente complète
-// sans devoir naviguer entre les deux écrans.
-//
-// Props :
-// - encaissementId : id de l'encaissement à afficher/corriger
-// - onClose() : appelé à la fermeture (croix ou après suppression)
-// - onChanged() : appelé après toute modification réussie (pour que l'écran
-//   parent puisse recharger sa liste)
+function decomposerDateHeure(dateIso) {
+  const d = new Date(dateIso);
+  const date = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const heure = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  return { date, heure };
+}
+
 export default function DetailEncaissementModal({ encaissementId, onClose, onChanged }) {
   const [enc, setEnc] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
+  const [dateSaisie, setDateSaisie] = useState('');
+  const [heureSaisie, setHeureSaisie] = useState('');
 
   const showMsg = (type, text) => {
     setMsg({ type, text });
@@ -60,7 +54,12 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
   const load = () => {
     setLoading(true);
     api.get('/encaissements/' + encaissementId)
-      .then(r => setEnc(r.data))
+      .then(r => {
+        setEnc(r.data);
+        const { date, heure } = decomposerDateHeure(r.data.date_encaissement);
+        setDateSaisie(date);
+        setHeureSaisie(heure);
+      })
       .catch(() => setError('Impossible de charger cet encaissement'))
       .finally(() => setLoading(false));
   };
@@ -78,7 +77,10 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
     }));
   };
 
-  const saveEncaissement = async (champsSupplementaires = {}) => {
+  // Sauvegarde les champs généraux de l'encaissement (table, réservation, montants).
+  // N'accepte jamais d'argument positionnel venant d'un événement DOM : on l'appelle
+  // toujours via onBlur={() => saveEncaissement()}, jamais onBlur={saveEncaissement}.
+  const saveEncaissement = async () => {
     try {
       await api.patch('/encaissements/' + enc.id, {
         table_nom: enc.table_nom,
@@ -89,7 +91,6 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
         emporte: !!enc.emporte,
         nb_personnes: Number(enc.nb_personnes) || 1,
         nom_reservation_archive: enc.nom_reservation_archive,
-        ...champsSupplementaires,
       });
       showMsg('success', 'Encaissement mis à jour');
       onChanged && onChanged();
@@ -99,11 +100,20 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
     }
   };
 
-  // cash_analyse = part CASH des lignes cochées "Analysée".
-  // Règle (b1) : on prend la somme des lignes analysées, mais plafonnée au
-  // montant réellement payé en espèces (montant_cash). Ainsi, un ticket payé
-  // entièrement en carte donne toujours 0, et le cash analysé ne peut jamais
-  // dépasser le cash encaissé.
+  const saveDateHeure = async (nouvelleDate, nouvelleHeure) => {
+    if (!nouvelleDate || !nouvelleHeure) return;
+    const dateEncaissement = nouvelleDate + 'T' + nouvelleHeure + ':00';
+    majLocal('date_encaissement', dateEncaissement);
+    try {
+      await api.patch('/encaissements/' + enc.id, { date_encaissement: dateEncaissement });
+      showMsg('success', 'Date mise à jour');
+      onChanged && onChanged();
+    } catch (e) {
+      showMsg('error', errMsg(e, 'Erreur lors de la mise à jour de la date'));
+      load();
+    }
+  };
+
   const calculerCashAnalyse = (lignes, montantCash) => {
     const sommeAnalysee = lignes.reduce(
       (s, l) => s + (l.vente_analysee ? Number(l.prix_vente) * Number(l.quantite) : 0),
@@ -167,9 +177,6 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
     }
   };
 
-  // Clic sur l'en-tête "Analysée" : bascule TOUTES les lignes en une fois.
-  // Si elles ne sont pas toutes cochées -> on coche tout. Si elles le sont déjà
-  // toutes -> on décoche tout. Un seul recalcul de cash_analyse à la fin.
   const toggleToutesAnalysees = async () => {
     if (!enc.lignes || enc.lignes.length === 0) return;
     const toutesCochees = enc.lignes.every(l => l.vente_analysee);
@@ -254,23 +261,39 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
           <div style={{ color: '#888' }}>Chargement...</div>
         ) : !enc ? null : (
           <>
-            {/* Infos générales + montants */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
               <div>
                 <label style={labelStyle}>Date</label>
-                <div style={{ fontSize: 13, padding: '6px 0' }}>
-                  {new Date(enc.date_encaissement).toLocaleString('fr-BE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                </div>
+                <input
+                  type="date"
+                  style={inputStyle}
+                  value={dateSaisie}
+                  onChange={(e) => setDateSaisie(e.target.value)}
+                  onBlur={() => saveDateHeure(dateSaisie, heureSaisie)}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Heure</label>
+                <input
+                  type="time"
+                  style={inputStyle}
+                  value={heureSaisie}
+                  onChange={(e) => setHeureSaisie(e.target.value)}
+                  onBlur={() => saveDateHeure(dateSaisie, heureSaisie)}
+                />
               </div>
               <div>
                 <label style={labelStyle}>Table</label>
-                <input style={inputStyle} value={enc.table_nom || ''} onChange={(e) => majLocal('table_nom', e.target.value)} onBlur={saveEncaissement} />
+                <input style={inputStyle} value={enc.table_nom || ''} onChange={(e) => majLocal('table_nom', e.target.value)} onBlur={() => saveEncaissement()} />
               </div>
               <div>
                 <label style={labelStyle}>Réservation</label>
-                <input style={inputStyle} value={enc.nom_reservation_archive || ''} onChange={(e) => majLocal('nom_reservation_archive', e.target.value)} onBlur={saveEncaissement} />
+                <input style={inputStyle} value={enc.nom_reservation_archive || ''} onChange={(e) => majLocal('nom_reservation_archive', e.target.value)} onBlur={() => saveEncaissement()} />
               </div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16 }}>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
                   <input type="checkbox" checked={!!enc.emporte} onChange={() => toggleBool('emporte')} />
                   Emporté
@@ -285,15 +308,15 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
               <div>
                 <label style={labelStyle}>Cash</label>
-                <input type="number" step="0.01" style={inputStyle} value={enc.montant_cash} onChange={(e) => majLocal('montant_cash', e.target.value)} onBlur={saveEncaissement} />
+                <input type="number" step="0.01" style={inputStyle} value={enc.montant_cash} onChange={(e) => majLocal('montant_cash', e.target.value)} onBlur={() => saveEncaissement()} />
               </div>
               <div>
                 <label style={labelStyle}>Carte</label>
-                <input type="number" step="0.01" style={inputStyle} value={enc.montant_carte} onChange={(e) => majLocal('montant_carte', e.target.value)} onBlur={saveEncaissement} />
+                <input type="number" step="0.01" style={inputStyle} value={enc.montant_carte} onChange={(e) => majLocal('montant_carte', e.target.value)} onBlur={() => saveEncaissement()} />
               </div>
               <div>
                 <label style={labelStyle}>Total</label>
-                <input type="number" step="0.01" style={{ ...inputStyle, fontWeight: 700 }} value={enc.montant_total} onChange={(e) => majLocal('montant_total', e.target.value)} onBlur={saveEncaissement} />
+                <input type="number" step="0.01" style={{ ...inputStyle, fontWeight: 700 }} value={enc.montant_total} onChange={(e) => majLocal('montant_total', e.target.value)} onBlur={() => saveEncaissement()} />
               </div>
               <div>
                 <label style={labelStyle}>Cash analysé</label>
@@ -307,7 +330,6 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
               </div>
             </div>
 
-            {/* Détail des lignes (= Historique) */}
             <div style={{ fontSize: 12, color: '#888', fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 }}>
               Détail des articles
             </div>

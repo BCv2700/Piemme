@@ -53,8 +53,12 @@ def create_encaissement(payload: EncaissementCreate, db: Session = Depends(get_d
     """
     Finalise le paiement d'une table : crée l'encaissement + ses lignes,
     puis vide le caddy (commandes) de la table et la repasse à 'libre'.
+
+    Si payload.date_encaissement est fourni (ex: encodage en différé depuis une
+    date différente d'aujourd'hui dans le plan de salle), on l'utilise. Sinon,
+    on laisse le server_default de la colonne (= now()) s'appliquer.
     """
-    data = payload.dict(exclude={"lignes"})
+    data = payload.dict(exclude={"lignes"}, exclude_none=True)
     db_encaissement = Encaissement(**data)
     db.add(db_encaissement)
     db.flush()  # pour obtenir db_encaissement.id avant le commit
