@@ -1,602 +1,716 @@
 import { useState, useEffect } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import jsPDF from 'jspdf';
 import api from '../api/api';
 
+// ───────────────────────────────────────────────────────────────────────────
+// Les dépenses (code_vente 9001) sont regroupées par leur champ « categorie »,
+// défini pour chaque dépense dans l'onglet Articles. Aucune liste en dur ici :
+// les catégories sont relevées automatiquement depuis la base. Une dépense sans
+// catégorie apparaît dans « Non classé ».
+// ───────────────────────────────────────────────────────────────────────────
 const CODE_VENTE_DEPENSE = 9001;
 
-// Bordure de quadrillage commune à toutes les cellules du tableau
-const BORDURE = '1px solid #e5e5e0';
+// Normalise un nom de table pour le comparer sans tenir compte de la casse ni
+// des accents : "DÉPENSES", "Dépenses", "depenses" donnent tous "depenses".
+const normaliser = (s) =>
+  (s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
 
-const ARTICLE_VIDE = {
-  nom: '',
-  categorie: '',
-  type_article: '',
-  code_vente: '',
-  tva: 21,
-  tva_away: '',
-  prix_achat: 0,
-  prix_vente: 0,
-  prix_vente_away: '',
-  stock: 0,
-  stock_min: 0,
-  stock_max: 0,
-  stock_a_suivre: false,
-  est_boisson: false,
-  ean: '',
-  fournisseur: '',
-  localisation: '',
-  actif: true,
-};
+export default function Caddy() {
+  const { tableId } = useParams();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const retourDate = searchParams.get('retourDate');
+  const urlRetourPlan = retourDate ? '/?date=' + retourDate : '/';
 
-const LIBELLES_CODE_VENTE = {
-  7001: 'Boissons Alcools',
-  7002: 'Nourriture',
-  7003: 'Boissons Softs',
-  7004: 'Boissons Vins',
-  7005: 'Divers',
-  9001: 'Dépenses',
-};
-
-export default function Articles() {
+  const [table, setTable] = useState(null);
   const [articles, setArticles] = useState([]);
-  const [recherche, setRecherche] = useState('');
-  const [filtreType, setFiltreType] = useState('');
-  const [filtreCodeVente, setFiltreCodeVente] = useState('');
-  const [filtreASuivre, setFiltreASuivre] = useState(false);
-  const [edition, setEdition] = useState(null); // null = pas de formulaire ouvert, sinon = objet article (ou ARTICLE_VIDE pour créer)
-  const [nouvelleCategorie, setNouvelleCategorie] = useState(false); // true = saisie libre d'une nouvelle catégorie de dépense
+  const [lignes, setLignes] = useState([]);
+  const [codeVente, setCodeVente] = useState(null); // niveau 1 : code_vente (Boissons Alcools, Nourriture...)
+  const [categorie, setCategorie] = useState(null); // niveau 2 : type_article (2. APERITIF, VIN ROUGE...)
+  const [emporte, setEmporte] = useState(false);
   const [error, setError] = useState('');
-  const [msg, setMsg] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [selection, setSelection] = useState([]); // ids des articles cochés
-  const [suppressionEnCours, setSuppressionEnCours] = useState(false);
 
-  const load = () => {
-    setLoading(true);
-    api.get('/articles/')
-      .then(r => setArticles(r.data))
-      .catch(() => setError('Impossible de charger les articles'))
-      .finally(() => setLoading(false));
+  // Saisie d'un montant de dépense (null = fenêtre fermée)
+  const [saisieDepense, setSaisieDepense] = useState(null); // { article, montant }
+
+  const load = async () => {
+    try {
+      const [tableRes, articlesRes, lignesRes] = await Promise.all([
+        api.get('/tables/' + tableId),
+        api.get('/articles/', { params: { actif: true } }),
+        api.get('/commandes/', { params: { table_id: tableId } }),
+      ]);
+      setTable(tableRes.data);
+      setArticles(articlesRes.data);
+      setLignes(lignesRes.data);
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Impossible de charger le caddy');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [tableId]);
 
-  const types = [...new Set(articles.map(a => a.type_article).filter(Boolean))].sort();
+  const LIBELLES_CODE_VENTE = {
+    7001: 'Boissons Alcools',
+    7002: 'Nourriture',
+    7003: 'Boissons Softs',
+    7004: 'Boissons Vins',
+    7005: 'Divers',
+    9001: 'Dépenses',
+  };
 
-  // Codes de vente réellement présents dans les articles, triés
-  const codesVente = [...new Set(articles.map(a => a.code_vente).filter(c => c != null))]
+  // Cet écran est-il un écran de dépenses ? Il l'est UNIQUEMENT pour la table
+  // nommée « Dépenses » (la seule du plan de salle à porter ce nom). On se base
+  // donc sur le nom de la table cliquée, et non sur la simple présence d'articles
+  // 9001 dans la base (qui existent toujours et rendaient la détection toujours
+  // vraie, affichant les dépenses sur toutes les tables).
+  const estEcranDepense = table != null && normaliser(table.nom) === 'depenses';
+
+  // Niveau 1 : codes de vente présents (Boissons Alcools, Nourriture...), dans l'ordre des codes
+  const codesVente = [...new Set(articles.map(a => a.code_vente))]
+    .filter(c => c != null)
     .sort((a, b) => a - b);
 
-  // Catégories de dépense déjà saisies (pour la liste déroulante), triées
-  const categoriesDepense = [...new Set(
+  useEffect(() => {
+    if (!codeVente && codesVente.length > 0) setCodeVente(codesVente[0]);
+  }, [codesVente, codeVente]);
+
+  // ───── MODE DÉPENSE ──────────────────────────────────────────────────────
+  // On ne montre que les articles 9001, regroupés par leur champ « categorie ».
+  // Le "niveau 2" devient la catégorie (Magasins, Frais fixes, ...).
+  const articlesDepense = articles.filter(a => a.code_vente === CODE_VENTE_DEPENSE);
+
+  // Pour chaque dépense, sa catégorie vient du champ « categorie » (saisi dans
+  // l'onglet Articles). Vide ou absent => 'Non classé'.
+  const categorieDe = (article) => {
+    const c = (article.categorie || '').trim();
+    return c === '' ? 'Non classé' : c;
+  };
+
+  // Liste des catégories présentes, par ordre alphabétique, 'Non classé' à la fin
+  const categoriesDepense = (() => {
+    const presentes = [...new Set(articlesDepense.map(a => categorieDe(a)))];
+    const sansNonClasse = presentes.filter(c => c !== 'Non classé')
+      .sort((a, b) => a.localeCompare(b, 'fr'));
+    if (presentes.includes('Non classé')) sansNonClasse.push('Non classé');
+    return sansNonClasse;
+  })();
+
+  // ───── MODE VENTE (inchangé) ─────────────────────────────────────────────
+  // Niveau 2 : types précis disponibles pour le code de vente sélectionné
+  const typesNiveau2 = [...new Set(
     articles
-      .filter(a => a.code_vente === CODE_VENTE_DEPENSE)
-      .map(a => a.categorie)
-      .filter(Boolean)
-  )].sort((a, b) => a.localeCompare(b, 'fr'));
+      .filter(a => a.code_vente === codeVente)
+      .map(a => a.type_article || 'Sans type')
+  )].sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
 
-  const articlesAffiches = articles.filter(a =>
-    (a.nom.toLowerCase().includes(recherche.toLowerCase()) ||
-      (a.type_article || '').toLowerCase().includes(recherche.toLowerCase())) &&
-    (filtreType === '' || a.type_article === filtreType) &&
-    (filtreCodeVente === '' || String(a.code_vente) === filtreCodeVente) &&
-    (!filtreASuivre || a.stock_a_suivre)
-  );
-
-  const ouvrirCreation = () => { setNouvelleCategorie(false); setEdition({ ...ARTICLE_VIDE }); };
-  const ouvrirEdition = (article) => { setNouvelleCategorie(false); setEdition({ ...article }); };
-  const fermerFormulaire = () => { setNouvelleCategorie(false); setEdition(null); };
-
-  const majChamp = (champ, valeur) => setEdition(prev => ({ ...prev, [champ]: valeur }));
-
-  const enregistrer = async () => {
-    setError('');
-    const payload = {
-      ...edition,
-      categorie: edition.categorie === '' ? null : edition.categorie,
-      code_vente: edition.code_vente === '' ? null : Number(edition.code_vente),
-      tva: Number(edition.tva),
-      tva_away: edition.tva_away === '' ? null : Number(edition.tva_away),
-      prix_achat: Number(edition.prix_achat),
-      prix_vente: Number(edition.prix_vente),
-      prix_vente_away: edition.prix_vente_away === '' ? null : Number(edition.prix_vente_away),
-      stock: Number(edition.stock),
-      stock_min: Number(edition.stock_min),
-      stock_max: Number(edition.stock_max),
-    };
-
-    try {
-      if (edition.id) {
-        await api.patch('/articles/' + edition.id, payload);
-        setMsg({ type: 'success', text: 'Article mis à jour' });
-      } else {
-        await api.post('/articles/', payload);
-        setMsg({ type: 'success', text: 'Article créé' });
+  // Quand on change de code de vente (niveau 1), on resélectionne le premier type disponible.
+  // En mode dépense, le niveau 2 = catégories de dépense.
+  useEffect(() => {
+    if (estEcranDepense) {
+      if (categoriesDepense.length > 0 && !categoriesDepense.includes(categorie)) {
+        setCategorie(categoriesDepense[0]);
       }
-      setEdition(null);
-      load();
-    } catch (e) {
-      setError(e.response?.data?.detail || "Erreur lors de l'enregistrement");
-    }
-    setTimeout(() => setMsg(null), 3000);
-  };
-
-  const demanderSuppression = (article) => {
-    if (window.confirm('Supprimer définitivement « ' + article.nom + ' » ?')) {
-      supprimer(article);
-    }
-  };
-
-  const supprimer = async (article) => {
-    setError('');
-    try {
-      await api.delete('/articles/' + article.id);
-      setMsg({ type: 'success', text: 'Article supprimé' });
-      setEdition(null);
-      load();
-    } catch (e) {
-      setError(e.response?.data?.detail || 'Erreur lors de la suppression');
-    }
-    setTimeout(() => setMsg(null), 3000);
-  };
-
-  // Changement de catégorie directement depuis le tableau (dépenses), enregistré aussitôt
-  const changerCategorieLigne = async (article, nouvelleCat) => {
-    setError('');
-    const valeur = nouvelleCat === '' ? null : nouvelleCat;
-    try {
-      const res = await api.patch('/articles/' + article.id, { categorie: valeur });
-      setArticles(prev => prev.map(a => a.id === article.id ? { ...a, categorie: res.data.categorie } : a));
-    } catch (e) {
-      setError(e.response?.data?.detail || 'Erreur lors du changement de catégorie');
-    }
-  };
-
-  // ───── Sélection multiple ────────────────────────────────────────────────
-  const basculerSelection = (id) => {
-    setSelection(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
-  };
-
-  // Ids actuellement affichés (après filtres)
-  const idsAffiches = articlesAffiches.map(a => a.id);
-  const toutAfficheCoche = idsAffiches.length > 0 && idsAffiches.every(id => selection.includes(id));
-
-  const basculerToutAffiche = () => {
-    if (toutAfficheCoche) {
-      // décoche uniquement ce qui est affiché
-      setSelection(prev => prev.filter(id => !idsAffiches.includes(id)));
     } else {
-      // coche tout ce qui est affiché (en gardant d'éventuels cochés hors filtre)
-      setSelection(prev => [...new Set([...prev, ...idsAffiches])]);
+      if (typesNiveau2.length > 0 && !typesNiveau2.includes(categorie)) {
+        setCategorie(typesNiveau2[0]);
+      }
+    }
+  }, [estEcranDepense, typesNiveau2, categoriesDepense, categorie]);
+
+  // Niveau 3 : articles affichés
+  const articlesAffiches = estEcranDepense
+    ? articlesDepense.filter(a => categorieDe(a) === categorie)
+        .sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { numeric: true }))
+    : articles.filter(a =>
+        a.code_vente === codeVente &&
+        (a.type_article || 'Sans type') === categorie
+      );
+
+  // ───── AJOUT D'UN ARTICLE DE VENTE (inchangé) ────────────────────────────
+  const ajouterArticle = async (article) => {
+    setError('');
+    const prix = emporte && article.prix_vente_away != null ? article.prix_vente_away : article.prix_vente;
+    const tva = emporte && article.tva_away != null ? article.tva_away : article.tva;
+
+    const ligneExistante = lignes.find(l => l.article_id === article.id && l.emporte === emporte);
+
+    try {
+      if (ligneExistante) {
+        const nouvelleQuantite = Number(ligneExistante.quantite) + 1;
+        const res = await api.patch('/commandes/' + ligneExistante.id, { quantite: nouvelleQuantite });
+        setLignes(prev => prev.map(l => l.id === ligneExistante.id ? res.data : l));
+      } else {
+        const res = await api.post('/commandes/', {
+          table_id: Number(tableId),
+          article_id: article.id,
+          quantite: 1,
+          prix_unitaire: prix,
+          tva: tva,
+          emporte: emporte,
+        });
+        setLignes(prev => [...prev, res.data]);
+      }
+    } catch (e) {
+      setError(e.response?.data?.detail || "Erreur lors de l'ajout");
     }
   };
 
-  const supprimerSelection = async () => {
-    if (selection.length === 0) return;
-    if (!window.confirm('Supprimer définitivement ' + selection.length + ' article(s) ? Cette action est irréversible.')) {
+  // ───── AJOUT D'UNE DÉPENSE (avec saisie du montant) ──────────────────────
+  const ouvrirSaisieDepense = (article) => {
+    setSaisieDepense({ article, montant: '' });
+  };
+
+  const validerSaisieDepense = async () => {
+    if (!saisieDepense) return;
+    const montant = Number(String(saisieDepense.montant).replace(',', '.'));
+    if (!Number.isFinite(montant) || montant <= 0) {
+      setError('Montant invalide');
       return;
     }
     setError('');
-    setSuppressionEnCours(true);
-    let echecs = 0;
-    // L'API supprime un article à la fois : on enchaîne les suppressions.
-    for (const id of selection) {
-      try {
-        await api.delete('/articles/' + id);
-      } catch (e) {
-        echecs++;
-      }
+    try {
+      const res = await api.post('/commandes/', {
+        table_id: Number(tableId),
+        article_id: saisieDepense.article.id,
+        quantite: 1,
+        prix_unitaire: montant,
+        tva: saisieDepense.article.tva,
+        emporte: false,
+      });
+      setLignes(prev => [...prev, res.data]);
+      setSaisieDepense(null);
+    } catch (e) {
+      setError(e.response?.data?.detail || "Erreur lors de l'ajout de la dépense");
     }
-    setSuppressionEnCours(false);
-    setSelection([]);
-    if (echecs === 0) {
-      setMsg({ type: 'success', text: 'Articles supprimés' });
-    } else {
-      setMsg({ type: 'error', text: echecs + ' suppression(s) ont échoué' });
-    }
-    load();
-    setTimeout(() => setMsg(null), 4000);
   };
 
-  // Styles de cellules avec quadrillage
-  const thCell = (extra = {}) => ({ padding: '6px 14px', border: BORDURE, whiteSpace: 'nowrap', ...extra });
-  const tdCell = (extra = {}) => ({ padding: '4px 14px', border: BORDURE, ...extra });
+  // ───── ÉDITION DU MONTANT D'UNE LIGNE (dépense) ──────────────────────────
+  const modifierMontantLigne = async (ligne, nouveauMontantStr) => {
+    const montant = Number(String(nouveauMontantStr).replace(',', '.'));
+    if (!Number.isFinite(montant) || montant < 0) return;
+    setError('');
+    try {
+      const res = await api.patch('/commandes/' + ligne.id, { prix_unitaire: montant });
+      setLignes(prev => prev.map(l => l.id === ligne.id ? res.data : l));
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Erreur lors de la mise à jour du montant');
+    }
+  };
+
+  const changerQuantite = async (ligne, delta) => {
+    const nouvelleQuantite = Number(ligne.quantite) + delta;
+    setError('');
+    try {
+      if (nouvelleQuantite <= 0) {
+        await api.delete('/commandes/' + ligne.id);
+        setLignes(prev => prev.filter(l => l.id !== ligne.id));
+      } else {
+        const res = await api.patch('/commandes/' + ligne.id, { quantite: nouvelleQuantite });
+        setLignes(prev => prev.map(l => l.id === ligne.id ? res.data : l));
+      }
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Erreur lors de la mise à jour');
+    }
+  };
+
+  const supprimerLigne = async (ligne) => {
+    setError('');
+    try {
+      await api.delete('/commandes/' + ligne.id);
+      setLignes(prev => prev.filter(l => l.id !== ligne.id));
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Erreur lors de la suppression');
+    }
+  };
+
+  const nomArticle = (articleId) => {
+    const a = articles.find(a => a.id === articleId);
+    return a ? a.nom : 'Article #' + articleId;
+  };
+
+  // ───── TICKET CUISINE ─────────────────────────────────────────────────────
+  // Une ligne de commande va sur le ticket cuisine si son article est coché
+  // "imprimer_cuisine" dans l'onglet Articles. On exclut le mode dépense (la
+  // table Dépenses n'a pas de ticket cuisine).
+  const estArticleCuisine = (articleId) => {
+    const a = articles.find(a => a.id === articleId);
+    return !!(a && a.imprimer_cuisine);
+  };
+
+  const lignesCuisineTotales = estEcranDepense ? [] : lignes.filter(l => estArticleCuisine(l.article_id));
+  const lignesCuisineNonImprimees = lignesCuisineTotales.filter(l => !l.imprime);
+
+  // Construit le contenu texte du ticket (table + réservation + liste articles,
+  // sans prix) à partir d'une liste de lignes données.
+  const construireContenuTicket = (lignesTicket) => {
+    const items = lignesTicket.map(l => ({
+      nom: nomArticle(l.article_id),
+      quantite: Number(l.quantite),
+    }));
+    return {
+      table: table ? table.nom : '',
+      reservation: table ? (table.nom_reservation || '') : '',
+      items,
+    };
+  };
+
+  // Ouvre une fenêtre d'impression avec une mise en page adaptée à un ticket
+  // thermique (largeur ~72mm), via l'impression standard du navigateur.
+  const imprimerTicket = (contenu) => {
+    const fenetre = window.open('', '_blank', 'width=400,height=600');
+    if (!fenetre) {
+      setError("Impossible d'ouvrir la fenêtre d'impression (pop-up bloqué ?)");
+      return;
+    }
+    const ligneItems = contenu.items.map(it =>
+      '<div class="item"><span class="qte">' + it.quantite + ' ×</span> <span class="nom">' + escapeHtml(it.nom) + '</span></div>'
+    ).join('');
+    fenetre.document.write(`
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Ticket cuisine</title>
+          <style>
+            @page { size: 72mm auto; margin: 2mm; }
+            body { font-family: 'Courier New', monospace; width: 68mm; margin: 0; padding: 4px; }
+            h1 { font-size: 16px; text-align: center; margin: 0 0 8px; }
+            .table { font-size: 15px; font-weight: bold; text-align: center; margin-bottom: 4px; }
+            .reservation { font-size: 13px; text-align: center; margin-bottom: 10px; }
+            hr { border: none; border-top: 1px dashed #000; margin: 8px 0; }
+            .item { font-size: 14px; margin-bottom: 6px; }
+            .qte { font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>🍳 CUISINE</h1>
+          <div class="table">${escapeHtml(contenu.table)}</div>
+          ${contenu.reservation ? '<div class="reservation">' + escapeHtml(contenu.reservation) + '</div>' : ''}
+          <hr />
+          ${ligneItems || '<div class="item">(aucun article)</div>'}
+        </body>
+      </html>
+    `);
+    fenetre.document.close();
+    fenetre.focus();
+    setTimeout(() => { fenetre.print(); }, 250);
+  };
+
+  const escapeHtml = (s) =>
+    String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  // Marque une liste de lignes comme imprimées (statut "imprime" sur la commande)
+  const marquerImprimees = async (lignesAMarquer) => {
+    try {
+      await Promise.all(lignesAMarquer.map(l => api.patch('/commandes/' + l.id, { imprime: true })));
+      setLignes(prev => prev.map(l =>
+        lignesAMarquer.some(m => m.id === l.id) ? { ...l, imprime: true } : l
+      ));
+    } catch (e) {
+      setError("Erreur lors de la mise à jour du statut d'impression");
+    }
+  };
+
+  // Bouton "Imprimer cuisine" : uniquement les nouvelles lignes, puis on les marque imprimées
+  const handleImprimerCuisine = async () => {
+    if (lignesCuisineNonImprimees.length === 0) {
+      setError('Aucun nouvel article à envoyer en cuisine');
+      return;
+    }
+    setError('');
+    imprimerTicket(construireContenuTicket(lignesCuisineNonImprimees));
+    await marquerImprimees(lignesCuisineNonImprimees);
+  };
+
+  // Bouton "Réimprimer le ticket complet" : toutes les lignes cuisine, sans toucher au statut
+  const handleReimprimerComplet = () => {
+    if (lignesCuisineTotales.length === 0) {
+      setError('Aucun article cuisine sur cette commande');
+      return;
+    }
+    setError('');
+    imprimerTicket(construireContenuTicket(lignesCuisineTotales));
+  };
+
+  // Bouton "Voir en PDF" : même contenu que le ticket complet, pour test ou secours.
+  // Ne modifie jamais le statut imprimé.
+  const handleVoirPdf = () => {
+    if (lignesCuisineTotales.length === 0) {
+      setError('Aucun article cuisine sur cette commande');
+      return;
+    }
+    setError('');
+    const contenu = construireContenuTicket(lignesCuisineTotales);
+    // Format proche d'un ticket : 72mm de large, hauteur étendue selon le nombre de lignes
+    const hauteurMm = 40 + contenu.items.length * 8;
+    const doc = new jsPDF({ unit: 'mm', format: [72, hauteurMm] });
+    let y = 10;
+    doc.setFontSize(13);
+    doc.setFont(undefined, 'bold');
+    doc.text('CUISINE', 36, y, { align: 'center' });
+    y += 7;
+    doc.setFontSize(12);
+    doc.text(contenu.table, 36, y, { align: 'center' });
+    y += 6;
+    if (contenu.reservation) {
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text(contenu.reservation, 36, y, { align: 'center' });
+      y += 6;
+    }
+    doc.setLineDashPattern([1, 1], 0);
+    doc.line(4, y, 68, y);
+    y += 6;
+    doc.setFontSize(11);
+    contenu.items.forEach(it => {
+      doc.setFont(undefined, 'bold');
+      const prefixe = it.quantite + ' x ';
+      doc.text(prefixe, 4, y);
+      doc.setFont(undefined, 'normal');
+      doc.text(it.nom, 4 + doc.getTextWidth(prefixe), y);
+      y += 6;
+    });
+    const blobUrl = doc.output('bloburl');
+    window.open(blobUrl, '_blank');
+  };
+
+  const total = lignes.reduce((sum, l) => sum + Number(l.prix_unitaire) * Number(l.quantite), 0);
+
+  if (loading) {
+    return (
+      <div>
+        <div className="content">Chargement...</div>
+      </div>
+    );
+  }
 
   return (
     <div>
       <div className="content">
 
-        {msg && (
-          <div style={{
-            padding: '10px 16px', borderRadius: 8, marginBottom: 16, fontSize: 13, fontWeight: 500,
-            background: msg.type === 'success' ? '#dcfce7' : '#fee2e2',
-            color: msg.type === 'success' ? '#16a34a' : '#dc2626',
-            border: '1px solid ' + (msg.type === 'success' ? '#86efac' : '#fca5a5')
-          }}>
-            {msg.text}
-          </div>
-        )}
-
         {error && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13, color: '#888', fontWeight: 600, whiteSpace: 'nowrap' }}>
-            {articles.length} article{articles.length !== 1 ? 's' : ''}
-          </span>
-          <button className="btn" onClick={ouvrirCreation}>+ Nouvel article</button>
-          <input
-            type="text"
-            placeholder="Rechercher par nom ou type..."
-            value={recherche}
-            onChange={(e) => setRecherche(e.target.value)}
-            style={{
-              flex: 1,
-              minWidth: 200,
-              padding: '10px 14px',
-              borderRadius: 8,
-              border: '1px solid #ddd',
-              fontSize: 14,
-            }}
-          />
-          <select
-            value={filtreCodeVente}
-            onChange={(e) => setFiltreCodeVente(e.target.value)}
-            style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}
-          >
-            <option value="">Tous les codes de vente</option>
-            {codesVente.map(c => (
-              <option key={c} value={String(c)}>{LIBELLES_CODE_VENTE[c] || c}</option>
-            ))}
-          </select>
-          <select
-            value={filtreType}
-            onChange={(e) => setFiltreType(e.target.value)}
-            style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}
-          >
-            <option value="">Tous les types</option>
-            {types.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer', padding: '0 4px' }}>
-            <input
-              type="checkbox"
-              checked={filtreASuivre}
-              onChange={(e) => setFiltreASuivre(e.target.checked)}
-              style={{ width: 16, height: 16 }}
-            />
-            À suivre uniquement
-          </label>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button className="btn" onClick={() => navigate(urlRetourPlan)}>← Retour au plan de salle</button>
+            <span style={{
+              fontSize: 13, fontWeight: 700, color: '#111',
+              background: '#f0f0ee', borderRadius: 6, padding: '6px 12px',
+            }}>
+              {table ? table.nom : 'Table'}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            {!estEcranDepense && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={emporte}
+                  onChange={(e) => setEmporte(e.target.checked)}
+                  style={{ width: 16, height: 16 }}
+                />
+                À emporter
+              </label>
+            )}
+            <button
+              className="btn"
+              style={{ background: '#15803d', color: 'white', fontWeight: 600 }}
+              onClick={() => navigate('/paiement/' + tableId + (retourDate ? '?retourDate=' + retourDate : ''))}
+            >
+              Payer →
+            </button>
+          </div>
         </div>
 
-        {selection.length > 0 && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            padding: '10px 16px', marginBottom: 12, borderRadius: 8,
-            background: '#fef3c7', border: '1px solid #fcd34d',
-          }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#92400e' }}>
-              {selection.length} article{selection.length > 1 ? 's' : ''} sélectionné{selection.length > 1 ? 's' : ''}
-            </span>
-            <button
-              className="btn"
-              disabled={suppressionEnCours}
-              style={{ color: '#dc2626', borderColor: '#fca5a5', fontWeight: 600 }}
-              onClick={supprimerSelection}
-            >
-              {suppressionEnCours ? 'Suppression…' : 'Supprimer la sélection'}
-            </button>
-            <button
-              className="btn"
-              disabled={suppressionEnCours}
-              onClick={() => setSelection([])}
-            >
-              Tout décocher
-            </button>
-          </div>
-        )}
+        <div style={{ display: 'flex', gap: 16 }}>
 
-        {loading ? (
-          <div style={{ color: '#888' }}>Chargement...</div>
-        ) : (
-          <div style={{ background: 'white', border: BORDURE, borderRadius: 10, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
-                  <th style={thCell()}>
-                    <input
-                      type="checkbox"
-                      checked={toutAfficheCoche}
-                      onChange={basculerToutAffiche}
-                      title="Tout sélectionner (lignes affichées)"
-                      style={{ width: 16, height: 16, cursor: 'pointer' }}
-                    />
-                  </th>
-                  <th style={thCell()}></th>
-                  <th style={thCell()}>ID</th>
-                  <th style={thCell()}>Nom</th>
-                  <th style={thCell()}>Type</th>
-                  <th style={thCell()}>Code vente</th>
-                  <th style={thCell()}>Catégorie</th>
-                  <th style={thCell({ textAlign: 'right' })}>Prix vente</th>
-                  <th style={thCell({ textAlign: 'right' })}>Stock</th>
-                  <th style={thCell({ textAlign: 'right' })}>Stock min</th>
-                  <th style={thCell()}>À suivre</th>
-                  <th style={thCell()}>Boisson</th>
-                  <th style={thCell()}>Actif</th>
-                </tr>
-              </thead>
-              <tbody>
-                {articlesAffiches.map((article, index) => {
-                  const stockBas = article.stock_min > 0 && article.stock < article.stock_min;
-                  const fondAlterne = index % 2 === 1 ? '#f0f0ec' : 'transparent';
-                  const fondLigne = stockBas ? '#fee2e2' : fondAlterne;
-                  return (
-                    <tr
-                      key={article.id}
-                      onClick={() => ouvrirEdition(article)}
-                      style={{
-                        cursor: 'pointer',
-                        background: fondLigne,
-                      }}
-                    >
-                      <td style={tdCell()} onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selection.includes(article.id)}
-                          onChange={() => basculerSelection(article.id)}
-                          style={{ width: 16, height: 16, cursor: 'pointer' }}
-                        />
-                      </td>
-                      <td style={tdCell({ textAlign: 'center' })}>
-                        <button
-                          className="btn"
-                          title="Supprimer cet article"
-                          style={{ color: '#dc2626', borderColor: '#fca5a5', fontSize: 14, padding: '2px 8px', lineHeight: 1 }}
-                          onClick={(e) => { e.stopPropagation(); demanderSuppression(article); }}
-                        >
-                          🗑
-                        </button>
-                      </td>
-                      <td style={tdCell({ color: '#aaa' })}>{article.id}</td>
-                      <td style={tdCell({ fontWeight: 500 })}>{article.nom}</td>
-                      <td style={tdCell({ color: '#666' })}>{article.type_article || '—'}</td>
-                      <td style={tdCell({ color: '#666' })}>{LIBELLES_CODE_VENTE[article.code_vente] || article.code_vente || '—'}</td>
-                      <td style={tdCell()} onClick={(e) => e.stopPropagation()}>
-                        {article.code_vente === CODE_VENTE_DEPENSE ? (
-                          <select
-                            value={article.categorie || ''}
-                            onChange={(e) => changerCategorieLigne(article, e.target.value)}
-                            style={{
-                              fontSize: 12,
-                              padding: '3px 6px',
-                              borderRadius: 6,
-                              border: '1px solid #ddd',
-                              background: 'white',
-                              color: article.categorie ? '#333' : '#b45309',
-                              fontStyle: article.categorie ? 'normal' : 'italic',
-                              cursor: 'pointer',
-                              maxWidth: 160,
-                            }}
-                          >
-                            <option value="">Non classé</option>
-                            {categoriesDepense.map(c => (
-                              <option key={c} value={c} style={{ color: '#333', fontStyle: 'normal' }}>{c}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <span style={{ color: '#ccc' }}>—</span>
-                        )}
-                      </td>
-                      <td style={tdCell({ textAlign: 'right', whiteSpace: 'nowrap' })}>{Number(article.prix_vente).toFixed(2)} €</td>
-                      <td style={tdCell({ textAlign: 'right', color: stockBas ? '#dc2626' : 'inherit', fontWeight: stockBas ? 600 : 400 })}>{article.stock}</td>
-                      <td style={tdCell({ textAlign: 'right', color: '#666' })}>{article.stock_min}</td>
-                      <td style={tdCell()}>{article.stock_a_suivre ? '✓' : ''}</td>
-                      <td style={tdCell()}>{article.est_boisson ? '✓' : ''}</td>
-                      <td style={tdCell()}>
-                        <span style={{
-                          display: 'inline-block',
-                          width: 10, height: 10, borderRadius: '50%',
-                          background: article.actif ? '#22c55e' : '#9ca3af',
-                        }} />
-                      </td>
-                    </tr>
-                  );
-                })}
-                {articlesAffiches.length === 0 && (
-                  <tr>
-                    <td colSpan={13} style={{ padding: 20, textAlign: 'center', color: '#888', border: BORDURE }}>
-                      Aucun article ne correspond à la recherche
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          {/* Colonne 1 : codes de vente — masquée en mode dépense (un seul code) */}
+          {!estEcranDepense && (
+            <div style={{ width: 130, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {codesVente.filter(c => c !== CODE_VENTE_DEPENSE).map(code => (
+                <button
+                  key={code}
+                  className="btn"
+                  style={{
+                    background: codeVente === code ? '#111' : 'white',
+                    color: codeVente === code ? 'white' : '#333',
+                    fontWeight: 600,
+                    padding: '12px 8px',
+                    fontSize: 13,
+                  }}
+                  onClick={() => setCodeVente(code)}
+                >
+                  {LIBELLES_CODE_VENTE[code] || code}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Colonne 2 : types précis (vente) OU catégories (dépense) */}
+          <div style={{
+            width: 150,
+            flexShrink: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+            background: 'white',
+            border: '1px solid #e5e5e0',
+            borderRadius: 10,
+            padding: 8,
+            height: 'fit-content',
+            maxHeight: 560,
+            overflowY: 'auto',
+          }}>
+            {(estEcranDepense ? categoriesDepense : typesNiveau2).map(t => (
+              <button
+                key={t}
+                onClick={() => setCategorie(t)}
+                style={{
+                  textAlign: 'left',
+                  padding: '10px 12px',
+                  borderRadius: 6,
+                  border: 'none',
+                  fontSize: 13,
+                  fontWeight: categorie === t ? 600 : 400,
+                  background: categorie === t ? '#f0f0ee' : 'transparent',
+                  color: '#222',
+                  cursor: 'pointer',
+                }}
+              >
+                {t}
+              </button>
+            ))}
+            {(estEcranDepense ? categoriesDepense : typesNiveau2).length === 0 && (
+              <div style={{ color: '#888', fontSize: 13, padding: 8 }}>
+                {estEcranDepense ? 'Aucune dépense' : 'Aucun type'}
+              </div>
+            )}
           </div>
-        )}
+
+          {/* Colonne 3 : articles de la catégorie sélectionnée */}
+          <div style={{ flex: '1 1 0%', minWidth: 0 }}>
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 8,
+            }}>
+              {articlesAffiches.map(article => {
+                const prix = emporte && article.prix_vente_away != null ? article.prix_vente_away : article.prix_vente;
+                return (
+                  <button
+                    key={article.id}
+                    className="btn"
+                    onClick={() => estEcranDepense ? ouvrirSaisieDepense(article) : ajouterArticle(article)}
+                    title={article.nom}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      justifyContent: 'space-between',
+                      textAlign: 'left',
+                      height: 64,
+                      width: 130,
+                      flexShrink: 0,
+                      padding: '6px 10px',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <span style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      lineHeight: 1.25,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}>{article.nom}</span>
+                    {estEcranDepense
+                      ? <span style={{ fontSize: 11, color: '#888', flexShrink: 0 }}>Saisir un montant</span>
+                      : <span style={{ fontSize: 11, color: '#888', flexShrink: 0 }}>{Number(prix).toFixed(2)} €</span>
+                    }
+                  </button>
+                );
+              })}
+              {articlesAffiches.length === 0 && (
+                <div style={{ color: '#888', fontSize: 13 }}>Aucun article dans cette catégorie</div>
+              )}
+            </div>
+          </div>
+
+          {/* Colonne 4 : ticket de caisse */}
+          <div style={{
+            width: 280,
+            flexShrink: 0,
+            background: 'white',
+            border: '1px solid #e5e5e0',
+            borderRadius: 10,
+            padding: 16,
+            height: 'fit-content',
+            position: 'sticky',
+            top: 16,
+          }}>
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>
+              {estEcranDepense ? 'Dépenses en cours' : 'Commande en cours'}
+            </div>
+
+            {!estEcranDepense && lignesCuisineTotales.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                <button
+                  className="btn"
+                  style={{
+                    background: lignesCuisineNonImprimees.length > 0 ? '#b91c1c' : '#e5e5e0',
+                    color: lignesCuisineNonImprimees.length > 0 ? 'white' : '#888',
+                    fontWeight: 600, fontSize: 13,
+                  }}
+                  onClick={handleImprimerCuisine}
+                  disabled={lignesCuisineNonImprimees.length === 0}
+                  title="Imprime uniquement les articles cuisine pas encore envoyés"
+                >
+                  🍳 Imprimer cuisine{lignesCuisineNonImprimees.length > 0 ? ' (' + lignesCuisineNonImprimees.length + ')' : ''}
+                </button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    className="btn"
+                    style={{ flex: 1, fontSize: 12, color: '#666' }}
+                    onClick={handleReimprimerComplet}
+                    title="Réimprime tout le ticket cuisine, sans tenir compte du statut déjà imprimé"
+                  >
+                    ↻ Réimprimer tout
+                  </button>
+                  <button
+                    className="btn"
+                    style={{ flex: 1, fontSize: 12, color: '#666' }}
+                    onClick={handleVoirPdf}
+                    title="Génère un PDF du ticket cuisine (test ou secours si l'imprimante ne fonctionne pas)"
+                  >
+                    📄 Voir en PDF
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {lignes.length === 0 && (
+              <div style={{ color: '#888', fontSize: 13, marginBottom: 12 }}>
+                {estEcranDepense ? 'Aucune dépense saisie' : 'Aucun article commandé'}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+              {lignes.map(ligne => (
+                <div key={ligne.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>
+                      {nomArticle(ligne.article_id)}
+                      {ligne.emporte && <span style={{ fontSize: 11, color: '#888' }}> (emporté)</span>}
+                    </div>
+                    {estEcranDepense ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          defaultValue={Number(ligne.prix_unitaire).toFixed(2)}
+                          onBlur={(e) => modifierMontantLigne(ligne, e.target.value)}
+                          style={{
+                            width: 80, padding: '4px 6px', borderRadius: 6,
+                            border: '1px solid #ddd', fontSize: 13,
+                          }}
+                        />
+                        <span style={{ fontSize: 12, color: '#888' }}>€</span>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 12, color: '#888' }}>
+                        {Number(ligne.prix_unitaire).toFixed(2)} € × {Number(ligne.quantite)}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Quantité : seulement en mode vente */}
+                  {!estEcranDepense && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <button
+                        className="btn"
+                        style={{ width: 26, height: 26, padding: 0, fontSize: 14, lineHeight: 1 }}
+                        onClick={() => changerQuantite(ligne, -1)}
+                      >−</button>
+                      <span style={{ fontSize: 13, minWidth: 18, textAlign: 'center' }}>{Number(ligne.quantite)}</span>
+                      <button
+                        className="btn"
+                        style={{ width: 26, height: 26, padding: 0, fontSize: 14, lineHeight: 1 }}
+                        onClick={() => changerQuantite(ligne, 1)}
+                      >+</button>
+                    </div>
+                  )}
+
+                  <button
+                    className="btn"
+                    style={{ width: 26, height: 26, padding: 0, fontSize: 12, lineHeight: 1, color: '#dc2626', borderColor: '#fca5a5' }}
+                    onClick={() => supprimerLigne(ligne)}
+                    title="Supprimer cette ligne"
+                  >✕</button>
+                </div>
+              ))}
+            </div>
+
+            <div style={{
+              borderTop: '1px solid #e5e5e0',
+              paddingTop: 12,
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontSize: 16,
+              fontWeight: 700,
+            }}>
+              <span>Total</span>
+              <span>{total.toFixed(2)} €</span>
+            </div>
+          </div>
+
+        </div>
       </div>
 
-      {edition && (
+      {/* Fenêtre de saisie du montant d'une dépense */}
+      {saisieDepense && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
-          padding: 20,
-        }}>
-          <div style={{
-            background: 'white', borderRadius: 10, width: 480, maxHeight: '90vh',
-            display: 'flex', flexDirection: 'column', overflow: 'hidden',
-          }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '16px 24px', borderBottom: '1px solid #e5e5e0', flexShrink: 0,
-            }}>
-              <div style={{ fontWeight: 600, fontSize: 16 }}>
-                {edition.id ? 'Modifier l\u2019article' : 'Nouvel article'}
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn" onClick={enregistrer}>
-                  {edition.id ? 'Enregistrer' : 'Créer'}
-                </button>
-                {edition.id && (
-                  <button
-                    className="btn"
-                    style={{ color: '#dc2626', borderColor: '#fca5a5' }}
-                    onClick={() => supprimer(edition)}
-                  >
-                    Supprimer
-                  </button>
-                )}
-                <button className="btn" onClick={fermerFormulaire}>Annuler</button>
-              </div>
-            </div>
+        }}
+          onClick={() => setSaisieDepense(null)}
+        >
+          <div
+            style={{ background: 'white', borderRadius: 10, padding: 24, width: 320 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 4 }}>{saisieDepense.article.nom}</div>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 16 }}>Montant de la dépense</div>
 
-            <div style={{ padding: 24, overflowY: 'auto' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              autoFocus
+              value={saisieDepense.montant}
+              onChange={(e) => setSaisieDepense({ ...saisieDepense, montant: e.target.value })}
+              onKeyDown={(e) => { if (e.key === 'Enter') validerSaisieDepense(); }}
+              placeholder="Ex: 47.30"
+              style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 15, marginBottom: 20, boxSizing: 'border-box' }}
+            />
 
-              <Champ label="Nom">
-                <input style={inputStyle} value={edition.nom} onChange={e => majChamp('nom', e.target.value)} />
-              </Champ>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <Champ label="Type d'article" style={{ flex: 1 }}>
-                  <input style={inputStyle} value={edition.type_article || ''} onChange={e => majChamp('type_article', e.target.value)} placeholder="2. APERITIF, VIN ROUGE, 4A. PÂTES..." />
-                </Champ>
-                <Champ label="Code de vente" style={{ flex: 1 }}>
-                  <select
-                    style={inputStyle}
-                    value={edition.code_vente ?? ''}
-                    onChange={e => majChamp('code_vente', e.target.value)}
-                  >
-                    <option value="">—</option>
-                    {Object.entries(LIBELLES_CODE_VENTE).map(([code, libelle]) => (
-                      <option key={code} value={code}>{libelle}</option>
-                    ))}
-                  </select>
-                </Champ>
-              </div>
-
-              {/* Catégorie : uniquement pour les dépenses (code de vente 9001).
-                  Regroupe les dépenses dans le caddy (Magasins, Charges fixes, Divers...). */}
-              {String(edition.code_vente) === String(CODE_VENTE_DEPENSE) && (
-                <Champ label="Catégorie de dépense">
-                  {nouvelleCategorie ? (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <input
-                        style={inputStyle}
-                        autoFocus
-                        value={edition.categorie || ''}
-                        onChange={e => majChamp('categorie', e.target.value)}
-                        placeholder="Ex: Charges fixes, Magasins, Divers..."
-                      />
-                      <button
-                        className="btn"
-                        type="button"
-                        onClick={() => { setNouvelleCategorie(false); majChamp('categorie', ''); }}
-                      >
-                        Choisir dans la liste
-                      </button>
-                    </div>
-                  ) : (
-                    <select
-                      style={inputStyle}
-                      value={edition.categorie || ''}
-                      onChange={e => {
-                        if (e.target.value === '__NOUVELLE__') {
-                          setNouvelleCategorie(true);
-                          majChamp('categorie', '');
-                        } else {
-                          majChamp('categorie', e.target.value);
-                        }
-                      }}
-                    >
-                      <option value="">— Non classé —</option>
-                      {categoriesDepense.map(c => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                      <option value="__NOUVELLE__">+ Nouvelle catégorie…</option>
-                    </select>
-                  )}
-                </Champ>
-              )}
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <Champ label="Prix de vente (sur place)" style={{ flex: 1 }}>
-                  <input type="number" step="0.01" style={inputStyle} value={edition.prix_vente} onChange={e => majChamp('prix_vente', e.target.value)} />
-                </Champ>
-                <Champ label="Prix de vente (à emporter)" style={{ flex: 1 }}>
-                  <input type="number" step="0.01" style={inputStyle} value={edition.prix_vente_away ?? ''} onChange={e => majChamp('prix_vente_away', e.target.value)} placeholder="laisser vide si identique" />
-                </Champ>
-              </div>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <Champ label="TVA sur place (%)" style={{ flex: 1 }}>
-                  <input type="number" step="0.01" style={inputStyle} value={edition.tva} onChange={e => majChamp('tva', e.target.value)} />
-                </Champ>
-                <Champ label="TVA à emporter (%)" style={{ flex: 1 }}>
-                  <input type="number" step="0.01" style={inputStyle} value={edition.tva_away ?? ''} onChange={e => majChamp('tva_away', e.target.value)} placeholder="laisser vide si identique" />
-                </Champ>
-              </div>
-
-              <Champ label="Prix d'achat">
-                <input type="number" step="0.01" style={inputStyle} value={edition.prix_achat} onChange={e => majChamp('prix_achat', e.target.value)} />
-              </Champ>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <Champ label="Stock" style={{ flex: 1 }}>
-                  <input type="number" style={inputStyle} value={edition.stock} onChange={e => majChamp('stock', e.target.value)} />
-                </Champ>
-                <Champ label="Stock min" style={{ flex: 1 }}>
-                  <input type="number" style={inputStyle} value={edition.stock_min} onChange={e => majChamp('stock_min', e.target.value)} />
-                </Champ>
-                <Champ label="Stock max" style={{ flex: 1 }}>
-                  <input type="number" style={inputStyle} value={edition.stock_max} onChange={e => majChamp('stock_max', e.target.value)} />
-                </Champ>
-              </div>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <Champ label="Fournisseur" style={{ flex: 1 }}>
-                  <input style={inputStyle} value={edition.fournisseur || ''} onChange={e => majChamp('fournisseur', e.target.value)} />
-                </Champ>
-                <Champ label="EAN" style={{ flex: 1 }}>
-                  <input style={inputStyle} value={edition.ean || ''} onChange={e => majChamp('ean', e.target.value)} />
-                </Champ>
-              </div>
-
-              <Champ label="Localisation">
-                <input style={inputStyle} value={edition.localisation || ''} onChange={e => majChamp('localisation', e.target.value)} />
-              </Champ>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-                  <input
-                    type="checkbox"
-                    checked={edition.actif}
-                    onChange={e => majChamp('actif', e.target.checked)}
-                    style={{ width: 16, height: 16 }}
-                  />
-                  Article actif (visible dans le caddy)
-                </label>
-
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-                  <input
-                    type="checkbox"
-                    checked={edition.stock_a_suivre || false}
-                    onChange={e => majChamp('stock_a_suivre', e.target.checked)}
-                    style={{ width: 16, height: 16 }}
-                  />
-                  À suivre (article important à surveiller)
-                </label>
-
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-                  <input
-                    type="checkbox"
-                    checked={edition.est_boisson || false}
-                    onChange={e => majChamp('est_boisson', e.target.checked)}
-                    style={{ width: 16, height: 16 }}
-                  />
-                  Boisson
-                </label>
-              </div>
-            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn" style={{ flex: 1 }} onClick={() => setSaisieDepense(null)}>Annuler</button>
+              <button
+                className="btn"
+                style={{ flex: 1, background: '#22c55e', color: 'white', borderColor: '#22c55e' }}
+                onClick={validerSaisieDepense}
+              >Ajouter</button>
             </div>
           </div>
         </div>
@@ -604,21 +718,3 @@ export default function Articles() {
     </div>
   );
 }
-
-function Champ({ label, children, style }) {
-  return (
-    <div style={style}>
-      <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>{label}</div>
-      {children}
-    </div>
-  );
-}
-
-const inputStyle = {
-  width: '100%',
-  padding: '8px 10px',
-  borderRadius: 6,
-  border: '1px solid #ddd',
-  fontSize: 14,
-  boxSizing: 'border-box',
-};
