@@ -306,39 +306,40 @@ export default function RecapMensuel() {
     let lignePourcent = TAUX_TVA.map(t => t + '% : ' + pourcentage(tvaRef[t]).toFixed(2) + '%').join('    ');
     doc.text(lignePourcent, 14, 26);
 
-    // En-têtes et colonnes selon la vue
+    // En-têtes et colonnes selon la vue (la colonne Dépenses est inutile dans le PDF comptable)
     const head = estTous
-      ? ['Jour', 'Total', 'Dépenses', 'Cash', 'Carte', 'Cash analysé', 'TVA 6%', 'TVA 12%', 'TVA 21%', 'Km A/R']
-      : ['Jour', 'Total analysé', 'Dépenses', 'Carte', 'Cash analysé', 'Contrôle', 'TVA 6%', 'TVA 12%', 'TVA 21%', 'Km A/R'];
+      ? ['Jour', 'Total', 'Total analysé', 'Dépenses', 'Cash', 'Carte', 'Cash analysé', 'TVA 6%', 'TVA 12%', 'TVA 21%', 'Km A/R']
+      : ['Jour', 'Total analysé', 'Carte', 'Cash analysé', 'Contrôle', 'TVA 6%', 'TVA 12%', 'TVA 21%', 'Km A/R'];
 
     const body = jours.map(j => {
       const d = parJour[j];
       const ferme = estFerme(j);
-      const ouverture = estJourOuverture(j);
       const libelleJour = pad2(j) + ' ' + nomJourSemaine(j) + (ferme ? '  Fermé' : '');
       if (estTous) {
         return [
-          libelleJour, fmt(d.total), fmt(d.depenses), fmt(d.cash), fmt(d.carte), fmt(d.cashAnalyse),
+          libelleJour, fmt(d.total), fmt(d.totalAnalyse), fmt(d.depenses), fmt(d.cash), fmt(d.carte), fmt(d.cashAnalyse),
           fmt(d.tva[6]), fmt(d.tva[12]), fmt(d.tva[21]), fmt(kmDuJour(j)),
         ];
       }
       const controle = d.carte + d.cashAnalyse;
       return [
-        libelleJour, fmt(d.totalAnalyse), fmt(d.depenses), fmt(d.carte), fmt(d.cashAnalyse), fmt(controle),
+        libelleJour, fmt(d.totalAnalyse), fmt(d.carte), fmt(d.cashAnalyse), fmt(controle),
         fmt(d.tvaAnalyse[6]), fmt(d.tvaAnalyse[12]), fmt(d.tvaAnalyse[21]), fmt(kmDuJour(j)),
       ];
     });
 
     const ligneTotaux = estTous
-      ? ['Totaux ' + nomMois, fmt(totaux.total), fmt(totaux.depenses), fmt(totaux.cash), fmt(totaux.carte), fmt(totaux.cashAnalyse), fmt(totaux.tva[6]), fmt(totaux.tva[12]), fmt(totaux.tva[21]), fmt(totalKm)]
-      : ['Totaux ' + nomMois, fmt(totaux.totalAnalyse), fmt(totaux.depenses), fmt(totaux.carte), fmt(totaux.cashAnalyse), fmt(totaux.carte + totaux.cashAnalyse), fmt(totaux.tvaAnalyse[6]), fmt(totaux.tvaAnalyse[12]), fmt(totaux.tvaAnalyse[21]), fmt(totalKm)];
+      ? ['Totaux ' + nomMois, fmt(totaux.total), fmt(totaux.totalAnalyse), fmt(totaux.depenses), fmt(totaux.cash), fmt(totaux.carte), fmt(totaux.cashAnalyse), fmt(totaux.tva[6]), fmt(totaux.tva[12]), fmt(totaux.tva[21]), fmt(totalKm)]
+      : ['Totaux ' + nomMois, fmt(totaux.totalAnalyse), fmt(totaux.carte), fmt(totaux.cashAnalyse), fmt(totaux.carte + totaux.cashAnalyse), fmt(totaux.tvaAnalyse[6]), fmt(totaux.tvaAnalyse[12]), fmt(totaux.tvaAnalyse[21]), fmt(totalKm)];
 
     const ligneTvaApayer = estTous
-      ? ['TVA à payer', '', '', '', '', '', fmt(tvaApayer(totaux.tva[6], 6)), fmt(tvaApayer(totaux.tva[12], 12)), fmt(tvaApayer(totaux.tva[21], 21)), '']
-      : ['TVA à payer', '', '', '', '', '', fmt(tvaApayer(totaux.tvaAnalyse[6], 6)), fmt(tvaApayer(totaux.tvaAnalyse[12], 12)), fmt(tvaApayer(totaux.tvaAnalyse[21], 21)), ''];
+      ? ['TVA à payer', '', '', '', '', '', '', fmt(tvaApayer(totaux.tva[6], 6)), fmt(tvaApayer(totaux.tva[12], 12)), fmt(tvaApayer(totaux.tva[21], 21)), '']
+      : ['TVA à payer', '', '', '', '', fmt(tvaApayer(totaux.tvaAnalyse[6], 6)), fmt(tvaApayer(totaux.tvaAnalyse[12], 12)), fmt(tvaApayer(totaux.tvaAnalyse[21], 21)), ''];
 
     const sommeTva = estTous ? totalTvaApayer(totaux.tva) : totalTvaApayer(totaux.tvaAnalyse);
-    const ligneSomme = ['Somme des 3 TVA', '', '', '', '', '', '', '', fmt(sommeTva), ''];
+    const ligneSomme = estTous
+      ? ['Somme des 3 TVA', '', '', '', '', '', '', '', '', fmt(sommeTva), '']
+      : ['Somme des 3 TVA', '', '', '', '', '', '', fmt(sommeTva), ''];
 
     autoTable(doc, {
       startY: 30,
@@ -550,6 +551,7 @@ export default function RecapMensuel() {
                     <tr style={{ background: '#fafaf8' }}>
                       <th style={thCell({ textAlign: 'left' })}>Jour</th>
                       <th style={thCell({ textAlign: 'center' })}>Total</th>
+                      <th style={thCell({ textAlign: 'center' })} title="Total des ventes analysées (cochées)">Total analysé</th>
                       <th style={thCell({ textAlign: 'center' })}>Dépenses</th>
                       <th style={thCell({ textAlign: 'center' })}>Cash</th>
                       <th style={thCell({ textAlign: 'center' })}>Carte</th>
@@ -568,6 +570,7 @@ export default function RecapMensuel() {
                         <tr key={j}>
                           {celluleJour(j, aRecette)}
                           <td style={tdCell({ textAlign: 'right', fontWeight: aRecette ? 700 : 400, color: aRecette ? '#111' : '#ccc' })}>{fmt(d.total)}</td>
+                          <td style={tdCell({ textAlign: 'right', color: d.totalAnalyse !== 0 ? '#0f766e' : '#ccc' })}>{fmt(d.totalAnalyse)}</td>
                           <td style={tdCell({ textAlign: 'right', color: d.depenses !== 0 ? '#b91c1c' : '#ccc' })}>{fmt(d.depenses)}</td>
                           <td style={tdCell({ textAlign: 'right', color: aRecette ? '#16a34a' : '#ccc' })}>{fmt(d.cash)}</td>
                           <td style={tdCell({ textAlign: 'right', color: aRecette ? '#2563eb' : '#ccc' })}>{fmt(d.carte)}</td>
@@ -593,6 +596,7 @@ export default function RecapMensuel() {
                     <tr style={{ fontWeight: 700, background: '#fafaf8' }}>
                       <td style={tdCell({ textAlign: 'left' })}>Totaux {MOIS_NOMS[mois - 1]}</td>
                       <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.total)}</td>
+                      <td style={tdCell({ textAlign: 'right', color: '#0f766e' })}>{fmt(totaux.totalAnalyse)}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#b91c1c' })}>{fmt(totaux.depenses)}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#16a34a' })}>{fmt(totaux.cash)}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#2563eb' })}>{fmt(totaux.carte)}</td>
@@ -604,7 +608,7 @@ export default function RecapMensuel() {
                     </tr>
                     <tr style={{ background: '#fafaf8' }}>
                       <td style={tdCell({ textAlign: 'left', color: '#888' })}>TVA à payer</td>
-                      <td style={tdCell()} colSpan={5}></td>
+                      <td style={tdCell()} colSpan={6}></td>
                       <td style={tdCell({ textAlign: 'right', color: '#888' })}>{fmt(tvaApayer(totaux.tva[6], 6))}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#888' })}>{fmt(tvaApayer(totaux.tva[12], 12))}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#888' })}>{fmt(tvaApayer(totaux.tva[21], 21))}</td>
@@ -612,7 +616,7 @@ export default function RecapMensuel() {
                     </tr>
                     <tr style={{ background: '#fafaf8' }}>
                       <td style={tdCell({ textAlign: 'left', color: '#888', fontWeight: 700 })}>Somme des 3 TVA</td>
-                      <td style={tdCell()} colSpan={8}></td>
+                      <td style={tdCell()} colSpan={9}></td>
                       <td style={tdCell({ textAlign: 'right', color: '#888', fontWeight: 700 })}>{fmt(totalTvaApayer(totaux.tva))}</td>
                     </tr>
                   </tfoot>
