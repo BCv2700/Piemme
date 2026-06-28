@@ -32,6 +32,9 @@ export default function HistoriqueVentes() {
   const [dateUnique, setDateUnique] = useState(dateInitiale);
   const [dateDebut, setDateDebut] = useState(debutInitial || dateInitiale);
   const [dateFin, setDateFin] = useState(finInitial || dateInitiale);
+  // Filtre "Dépenses uniquement", activé depuis le bouton Dépenses du récap.
+  // Pré-rempli depuis l'URL (?depenses=1), mais modifiable ensuite via la case à cocher.
+  const [filtreDepenses, setFiltreDepenses] = useState(searchParams.get('depenses') === '1');
   const [encaissements, setEncaissements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -66,9 +69,12 @@ export default function HistoriqueVentes() {
 
   // Déplie les encaissements + leurs lignes en une liste plate, une entrée par article vendu,
   // triée par date d'encaissement puis par id de ligne (ordre d'ajout).
+  // Si filtreDepenses est actif, on ne garde que les lignes des encaissements de type dépense
+  // (enc.depenses === true) ; sinon, comportement habituel : tout est affiché.
   const lignesAPlat = useMemo(() => {
     const rows = [];
     encaissements.forEach(enc => {
+      if (filtreDepenses && !enc.depenses) return;
       (enc.lignes || []).forEach(ligne => {
         rows.push({ enc, ligne });
       });
@@ -80,7 +86,7 @@ export default function HistoriqueVentes() {
       return a.ligne.id - b.ligne.id;
     });
     return rows;
-  }, [encaissements]);
+  }, [encaissements, filtreDepenses]);
 
   const majLigneLocal = (encId, ligneId, champ, valeur) => {
     setEncaissements(prev => prev.map(e => {
@@ -217,6 +223,15 @@ export default function HistoriqueVentes() {
           <button className="btn" onClick={() => setModePlage(m => !m)} style={{ color: '#888' }}>
             {modePlage ? 'Revenir à un jour précis' : 'Filtrer sur une plage de dates'}
           </button>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#b91c1c', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={filtreDepenses}
+              onChange={(e) => setFiltreDepenses(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+            Dépenses uniquement
+          </label>
           <span style={{ marginLeft: 'auto', fontSize: 13, color: '#888' }}>
             {lignesAPlat.length} ligne{lignesAPlat.length !== 1 ? 's' : ''} · Total : <strong style={{ color: '#111' }}>{totalPeriode.toFixed(2)} €</strong>
           </span>

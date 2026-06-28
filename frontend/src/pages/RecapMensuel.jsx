@@ -268,11 +268,12 @@ export default function RecapMensuel() {
   };
 
   // Clic sur la carte "Dépenses" -> ouvre l'écran Historique en mode plage,
-  // positionné sur l'ensemble du mois affiché dans le récap.
+  // positionné sur l'ensemble du mois affiché dans le récap, filtré sur les
+  // dépenses uniquement (lignes individuelles, comme dans le tableau Historique).
   const ouvrirHistoriqueMois = () => {
     const debut = dateKey(annee, mois, 1);
     const fin = dateKey(annee, mois, joursDansMois(annee, mois));
-    navigate('/historique?debut=' + debut + '&fin=' + fin);
+    navigate('/historique?debut=' + debut + '&fin=' + fin + '&depenses=1');
   };
 
   // Jours d'ouverture du restaurant (jeudi=4, vendredi=5, samedi=6) -> affichés en rouge gras
