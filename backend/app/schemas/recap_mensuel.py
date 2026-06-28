@@ -9,12 +9,14 @@ class RecapMensuelBase(BaseModel):
     memo: Optional[str] = ""
     km_defaut: Decimal = Decimal("53.4")
     km_par_jour: Optional[Dict[str, Decimal]] = {}
+    ferme_par_jour: Optional[Dict[str, bool]] = {}
 
 
 class RecapMensuelUpdate(BaseModel):
     memo: Optional[str] = None
     km_defaut: Optional[Decimal] = None
     km_par_jour: Optional[Dict[str, Decimal]] = None
+    ferme_par_jour: Optional[Dict[str, bool]] = None
 
 
 class RecapMensuelOut(RecapMensuelBase):

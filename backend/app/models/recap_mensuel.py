@@ -16,6 +16,9 @@ class RecapMensuel(Base):
     # Exceptions de km : dictionnaire { "jour_du_mois": montant }, ex. {"4": 0, "11": 0}
     # Tout jour absent du dictionnaire utilise km_defaut.
     km_par_jour = Column(JSONB, default=dict)
+    # Jours marqués comme "Fermé" (étiquette visuelle uniquement, pas de calcul) :
+    # dictionnaire { "jour_du_mois": true/false }. Jour absent = pas fermé.
+    ferme_par_jour = Column(JSONB, default=dict)
 
     __table_args__ = (
         UniqueConstraint('annee', 'mois', name='uq_recap_annee_mois'),

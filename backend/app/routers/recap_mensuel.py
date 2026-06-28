@@ -13,7 +13,7 @@ router = APIRouter(prefix="/recap-mensuel", tags=["Récap mensuel"])
 @router.get("/{annee}/{mois}", response_model=RecapMensuelOut)
 def get_recap(annee: int, mois: int, db: Session = Depends(get_db)):
     """
-    Renvoie le récap (mémo + km) d'un mois donné.
+    Renvoie le récap (mémo + km + fermé) d'un mois donné.
     Si aucun récap n'existe encore pour ce mois, en crée un avec les valeurs
     par défaut (mémo vide, km_defaut = 53.4) puis le renvoie.
     """
@@ -23,7 +23,7 @@ def get_recap(annee: int, mois: int, db: Session = Depends(get_db)):
         .first()
     )
     if not recap:
-        recap = RecapMensuel(annee=annee, mois=mois, memo='', km_par_jour={})
+        recap = RecapMensuel(annee=annee, mois=mois, memo='', km_par_jour={}, ferme_par_jour={})
         db.add(recap)
         db.commit()
         db.refresh(recap)
@@ -33,7 +33,7 @@ def get_recap(annee: int, mois: int, db: Session = Depends(get_db)):
 @router.patch("/{annee}/{mois}", response_model=RecapMensuelOut)
 def update_recap(annee: int, mois: int, payload: RecapMensuelUpdate, db: Session = Depends(get_db)):
     """
-    Met à jour le mémo et/ou les km d'un mois. Crée la ligne du mois si besoin.
+    Met à jour le mémo, les km et/ou les jours fermés d'un mois. Crée la ligne du mois si besoin.
     """
     recap = (
         db.query(RecapMensuel)
@@ -41,7 +41,7 @@ def update_recap(annee: int, mois: int, payload: RecapMensuelUpdate, db: Session
         .first()
     )
     if not recap:
-        recap = RecapMensuel(annee=annee, mois=mois, memo='', km_par_jour={})
+        recap = RecapMensuel(annee=annee, mois=mois, memo='', km_par_jour={}, ferme_par_jour={})
         db.add(recap)
         db.flush()
 
