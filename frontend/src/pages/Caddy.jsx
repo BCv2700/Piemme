@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import jsPDF from 'jspdf';
 import api from '../api/api';
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -18,6 +19,20 @@ const normaliser = (s) =>
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim();
+
+// Extrait un message d'erreur affichable (toujours une chaîne) depuis une
+// erreur Axios. Le detail renvoyé par FastAPI peut être une simple chaîne,
+// ou un tableau d'objets {type, loc, msg, input} (erreurs de validation
+// Pydantic, ex: 422) — dans ce cas on ne doit JAMAIS afficher l'objet brut
+// dans le JSX, React plante sinon (erreur #31 : objects are not valid
+// as a React child).
+const errMsg = (e, fallback) => {
+  const detail = e.response?.data?.detail;
+  if (!detail) return fallback;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) return detail.map(d => d.msg || JSON.stringify(d)).join(' · ');
+  return fallback;
+};
 
 export default function Caddy() {
   const { tableId } = useParams();
@@ -39,6 +54,14 @@ export default function Caddy() {
   const [saisieDepense, setSaisieDepense] = useState(null); // { article, montant }
 
   const load = async () => {
+    // Garde-fou : si l'id de table est manquant ou invalide (ex: composant
+    // monté par erreur, navigation incomplète), on n'appelle jamais l'API
+    // avec un id "undefined" — on affiche un message clair à la place.
+    if (!tableId || tableId === 'undefined') {
+      setError('Aucune table sélectionnée (identifiant manquant).');
+      setLoading(false);
+      return;
+    }
     try {
       const [tableRes, articlesRes, lignesRes] = await Promise.all([
         api.get('/tables/' + tableId),
@@ -49,7 +72,7 @@ export default function Caddy() {
       setArticles(articlesRes.data);
       setLignes(lignesRes.data);
     } catch (e) {
-      setError(e.response?.data?.detail || 'Impossible de charger le caddy');
+      setError(errMsg(e, 'Impossible de charger le caddy'));
     } finally {
       setLoading(false);
     }
@@ -159,7 +182,7 @@ export default function Caddy() {
         setLignes(prev => [...prev, res.data]);
       }
     } catch (e) {
-      setError(e.response?.data?.detail || "Erreur lors de l'ajout");
+      setError(errMsg(e, "Erreur lors de l'ajout"));
     }
   };
 
@@ -188,7 +211,7 @@ export default function Caddy() {
       setLignes(prev => [...prev, res.data]);
       setSaisieDepense(null);
     } catch (e) {
-      setError(e.response?.data?.detail || "Erreur lors de l'ajout de la dépense");
+      setError(errMsg(e, "Erreur lors de l'ajout de la dépense"));
     }
   };
 
@@ -201,7 +224,7 @@ export default function Caddy() {
       const res = await api.patch('/commandes/' + ligne.id, { prix_unitaire: montant });
       setLignes(prev => prev.map(l => l.id === ligne.id ? res.data : l));
     } catch (e) {
-      setError(e.response?.data?.detail || 'Erreur lors de la mise à jour du montant');
+      setError(errMsg(e, 'Erreur lors de la mise à jour du montant'));
     }
   };
 
@@ -217,7 +240,7 @@ export default function Caddy() {
         setLignes(prev => prev.map(l => l.id === ligne.id ? res.data : l));
       }
     } catch (e) {
-      setError(e.response?.data?.detail || 'Erreur lors de la mise à jour');
+      setError(errMsg(e, 'Erreur lors de la mise à jour'));
     }
   };
 
@@ -227,13 +250,158 @@ export default function Caddy() {
       await api.delete('/commandes/' + ligne.id);
       setLignes(prev => prev.filter(l => l.id !== ligne.id));
     } catch (e) {
-      setError(e.response?.data?.detail || 'Erreur lors de la suppression');
+      setError(errMsg(e, 'Erreur lors de la suppression'));
     }
   };
 
   const nomArticle = (articleId) => {
     const a = articles.find(a => a.id === articleId);
     return a ? a.nom : 'Article #' + articleId;
+  };
+
+  // ───── TICKET CUISINE ─────────────────────────────────────────────────────
+  // Une ligne de commande va sur le ticket cuisine si son article est coché
+  // "imprimer_cuisine" dans l'onglet Articles. On exclut le mode dépense (la
+  // table Dépenses n'a pas de ticket cuisine).
+  const estArticleCuisine = (articleId) => {
+    const a = articles.find(a => a.id === articleId);
+    return !!(a && a.imprimer_cuisine);
+  };
+
+  const lignesCuisineTotales = estEcranDepense ? [] : lignes.filter(l => estArticleCuisine(l.article_id));
+  const lignesCuisineNonImprimees = lignesCuisineTotales.filter(l => !l.imprime);
+
+  // Construit le contenu texte du ticket (table + réservation + liste articles,
+  // sans prix) à partir d'une liste de lignes données.
+  const construireContenuTicket = (lignesTicket) => {
+    const items = lignesTicket.map(l => ({
+      nom: nomArticle(l.article_id),
+      quantite: Number(l.quantite),
+    }));
+    return {
+      table: table ? table.nom : '',
+      reservation: table ? (table.nom_reservation || '') : '',
+      items,
+    };
+  };
+
+  // Ouvre une fenêtre d'impression avec une mise en page adaptée à un ticket
+  // thermique (largeur ~72mm), via l'impression standard du navigateur.
+  const imprimerTicket = (contenu) => {
+    const fenetre = window.open('', '_blank', 'width=400,height=600');
+    if (!fenetre) {
+      setError("Impossible d'ouvrir la fenêtre d'impression (pop-up bloqué ?)");
+      return;
+    }
+    const ligneItems = contenu.items.map(it =>
+      '<div class="item"><span class="qte">' + it.quantite + ' ×</span> <span class="nom">' + escapeHtml(it.nom) + '</span></div>'
+    ).join('');
+    fenetre.document.write(`
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Ticket cuisine</title>
+          <style>
+            @page { size: 72mm auto; margin: 2mm; }
+            body { font-family: 'Courier New', monospace; width: 68mm; margin: 0; padding: 4px; }
+            h1 { font-size: 16px; text-align: center; margin: 0 0 8px; }
+            .table { font-size: 15px; font-weight: bold; text-align: center; margin-bottom: 4px; }
+            .reservation { font-size: 13px; text-align: center; margin-bottom: 10px; }
+            hr { border: none; border-top: 1px dashed #000; margin: 8px 0; }
+            .item { font-size: 14px; margin-bottom: 6px; }
+            .qte { font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>🍳 CUISINE</h1>
+          <div class="table">${escapeHtml(contenu.table)}</div>
+          ${contenu.reservation ? '<div class="reservation">' + escapeHtml(contenu.reservation) + '</div>' : ''}
+          <hr />
+          ${ligneItems || '<div class="item">(aucun article)</div>'}
+        </body>
+      </html>
+    `);
+    fenetre.document.close();
+    fenetre.focus();
+    setTimeout(() => { fenetre.print(); }, 250);
+  };
+
+  const escapeHtml = (s) =>
+    String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  // Marque une liste de lignes comme imprimées (statut "imprime" sur la commande)
+  const marquerImprimees = async (lignesAMarquer) => {
+    try {
+      await Promise.all(lignesAMarquer.map(l => api.patch('/commandes/' + l.id, { imprime: true })));
+      setLignes(prev => prev.map(l =>
+        lignesAMarquer.some(m => m.id === l.id) ? { ...l, imprime: true } : l
+      ));
+    } catch (e) {
+      setError("Erreur lors de la mise à jour du statut d'impression");
+    }
+  };
+
+  // Bouton "Imprimer cuisine" : uniquement les nouvelles lignes, puis on les marque imprimées
+  const handleImprimerCuisine = async () => {
+    if (lignesCuisineNonImprimees.length === 0) {
+      setError('Aucun nouvel article à envoyer en cuisine');
+      return;
+    }
+    setError('');
+    imprimerTicket(construireContenuTicket(lignesCuisineNonImprimees));
+    await marquerImprimees(lignesCuisineNonImprimees);
+  };
+
+  // Bouton "Réimprimer le ticket complet" : toutes les lignes cuisine, sans toucher au statut
+  const handleReimprimerComplet = () => {
+    if (lignesCuisineTotales.length === 0) {
+      setError('Aucun article cuisine sur cette commande');
+      return;
+    }
+    setError('');
+    imprimerTicket(construireContenuTicket(lignesCuisineTotales));
+  };
+
+  // Bouton "Voir en PDF" : même contenu que le ticket complet, pour test ou secours.
+  // Ne modifie jamais le statut imprimé.
+  const handleVoirPdf = () => {
+    if (lignesCuisineTotales.length === 0) {
+      setError('Aucun article cuisine sur cette commande');
+      return;
+    }
+    setError('');
+    const contenu = construireContenuTicket(lignesCuisineTotales);
+    // Format proche d'un ticket : 72mm de large, hauteur étendue selon le nombre de lignes
+    const hauteurMm = 40 + contenu.items.length * 8;
+    const doc = new jsPDF({ unit: 'mm', format: [72, hauteurMm] });
+    let y = 10;
+    doc.setFontSize(13);
+    doc.setFont(undefined, 'bold');
+    doc.text('CUISINE', 36, y, { align: 'center' });
+    y += 7;
+    doc.setFontSize(12);
+    doc.text(contenu.table, 36, y, { align: 'center' });
+    y += 6;
+    if (contenu.reservation) {
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text(contenu.reservation, 36, y, { align: 'center' });
+      y += 6;
+    }
+    doc.setLineDashPattern([1, 1], 0);
+    doc.line(4, y, 68, y);
+    y += 6;
+    doc.setFontSize(11);
+    contenu.items.forEach(it => {
+      doc.setFont(undefined, 'bold');
+      const prefixe = it.quantite + ' x ';
+      doc.text(prefixe, 4, y);
+      doc.setFont(undefined, 'normal');
+      doc.text(it.nom, 4 + doc.getTextWidth(prefixe), y);
+      y += 6;
+    });
+    const blobUrl = doc.output('bloburl');
+    window.open(blobUrl, '_blank');
   };
 
   const total = lignes.reduce((sum, l) => sum + Number(l.prix_unitaire) * Number(l.quantite), 0);
@@ -415,6 +583,42 @@ export default function Caddy() {
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>
               {estEcranDepense ? 'Dépenses en cours' : 'Commande en cours'}
             </div>
+
+            {!estEcranDepense && lignesCuisineTotales.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                <button
+                  className="btn"
+                  style={{
+                    background: lignesCuisineNonImprimees.length > 0 ? '#b91c1c' : '#e5e5e0',
+                    color: lignesCuisineNonImprimees.length > 0 ? 'white' : '#888',
+                    fontWeight: 600, fontSize: 13,
+                  }}
+                  onClick={handleImprimerCuisine}
+                  disabled={lignesCuisineNonImprimees.length === 0}
+                  title="Imprime uniquement les articles cuisine pas encore envoyés"
+                >
+                  🍳 Imprimer cuisine{lignesCuisineNonImprimees.length > 0 ? ' (' + lignesCuisineNonImprimees.length + ')' : ''}
+                </button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    className="btn"
+                    style={{ flex: 1, fontSize: 12, color: '#666' }}
+                    onClick={handleReimprimerComplet}
+                    title="Réimprime tout le ticket cuisine, sans tenir compte du statut déjà imprimé"
+                  >
+                    ↻ Réimprimer tout
+                  </button>
+                  <button
+                    className="btn"
+                    style={{ flex: 1, fontSize: 12, color: '#666' }}
+                    onClick={handleVoirPdf}
+                    title="Génère un PDF du ticket cuisine (test ou secours si l'imprimante ne fonctionne pas)"
+                  >
+                    📄 Voir en PDF
+                  </button>
+                </div>
+              </div>
+            )}
 
             {lignes.length === 0 && (
               <div style={{ color: '#888', fontSize: 13, marginBottom: 12 }}>
