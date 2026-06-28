@@ -556,6 +556,7 @@ export default function RecapMensuel() {
                       <th style={thCell({ textAlign: 'center' })}>Cash</th>
                       <th style={thCell({ textAlign: 'center' })}>Carte</th>
                       <th style={thCell({ textAlign: 'center' })}>Cash analysé</th>
+                      <th style={thCell({ textAlign: 'center' })} title="Somme des 3 TVA : doit être égale au Total">Contrôle</th>
                       <th style={thCell({ textAlign: 'center' })}>TVA 6%</th>
                       <th style={thCell({ textAlign: 'center' })}>TVA 12%</th>
                       <th style={thCell({ textAlign: 'center' })}>TVA 21%</th>
@@ -566,18 +567,26 @@ export default function RecapMensuel() {
                     {jours.map(j => {
                       const d = parJour[j];
                       const aRecette = d.total !== 0;
+                      const controleTva = d.tva[6] + d.tva[12] + d.tva[21];
+                      const ecartTva = controleTva - d.total;
+                      const tvaKo = aRecette && Math.abs(ecartTva) >= 0.01;
+                      const ecartPaiement = (d.cash + d.carte) - d.total;
+                      const paiementKo = aRecette && Math.abs(ecartPaiement) >= 0.01;
                       return (
                         <tr key={j}>
                           {celluleJour(j, aRecette)}
-                          <td style={tdCell({ textAlign: 'right', fontWeight: aRecette ? 700 : 400, color: aRecette ? '#111' : '#ccc' })}>{fmt(d.total)}</td>
+                          <td style={tdCell({ textAlign: 'right', fontWeight: aRecette ? 700 : 400, color: paiementKo ? '#dc2626' : (aRecette ? '#111' : '#ccc') })}>{fmt(d.total)}</td>
                           <td style={tdCell({ textAlign: 'right', color: d.totalAnalyse !== 0 ? '#0f766e' : '#ccc' })}>{fmt(d.totalAnalyse)}</td>
                           <td style={tdCell({ textAlign: 'right', color: d.depenses !== 0 ? '#b91c1c' : '#ccc' })}>{fmt(d.depenses)}</td>
-                          <td style={tdCell({ textAlign: 'right', color: aRecette ? '#16a34a' : '#ccc' })}>{fmt(d.cash)}</td>
-                          <td style={tdCell({ textAlign: 'right', color: aRecette ? '#2563eb' : '#ccc' })}>{fmt(d.carte)}</td>
+                          <td style={tdCell({ textAlign: 'right', color: !aRecette ? '#ccc' : (paiementKo ? '#dc2626' : '#16a34a') })}>{fmt(d.cash)}</td>
+                          <td style={tdCell({ textAlign: 'right', color: !aRecette ? '#ccc' : (paiementKo ? '#dc2626' : '#2563eb') })}>{fmt(d.carte)}</td>
                           <td style={tdCell({ textAlign: 'right', color: aRecette ? '#b45309' : '#ccc' })}>{fmt(d.cashAnalyse)}</td>
-                          <td style={tdCell({ textAlign: 'right', color: '#666' })}>{fmt(d.tva[6])}</td>
-                          <td style={tdCell({ textAlign: 'right', color: '#666' })}>{fmt(d.tva[12])}</td>
-                          <td style={tdCell({ textAlign: 'right', color: '#666' })}>{fmt(d.tva[21])}</td>
+                          <td style={tdCell({ textAlign: 'right', fontWeight: 600, color: !aRecette ? '#ccc' : (tvaKo ? '#dc2626' : '#16a34a') })}>
+                            {fmt(controleTva)}{aRecette && tvaKo ? ' (' + (ecartTva > 0 ? '+' : '') + fmt(ecartTva) + ')' : ''}
+                          </td>
+                          <td style={tdCell({ textAlign: 'right', color: tvaKo ? '#dc2626' : '#666' })}>{fmt(d.tva[6])}</td>
+                          <td style={tdCell({ textAlign: 'right', color: tvaKo ? '#dc2626' : '#666' })}>{fmt(d.tva[12])}</td>
+                          <td style={tdCell({ textAlign: 'right', color: tvaKo ? '#dc2626' : '#666' })}>{fmt(d.tva[21])}</td>
                           <td style={tdCell({ padding: '2px 6px' })}>
                             <input
                               type="number" step="0.1" min="0"
@@ -601,6 +610,7 @@ export default function RecapMensuel() {
                       <td style={tdCell({ textAlign: 'right', color: '#16a34a' })}>{fmt(totaux.cash)}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#2563eb' })}>{fmt(totaux.carte)}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#b45309' })}>{fmt(totaux.cashAnalyse)}</td>
+                      <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tva[6] + totaux.tva[12] + totaux.tva[21])}</td>
                       <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tva[6])}</td>
                       <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tva[12])}</td>
                       <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tva[21])}</td>
@@ -608,7 +618,7 @@ export default function RecapMensuel() {
                     </tr>
                     <tr style={{ background: '#fafaf8' }}>
                       <td style={tdCell({ textAlign: 'left', color: '#888' })}>TVA à payer</td>
-                      <td style={tdCell()} colSpan={6}></td>
+                      <td style={tdCell()} colSpan={7}></td>
                       <td style={tdCell({ textAlign: 'right', color: '#888' })}>{fmt(tvaApayer(totaux.tva[6], 6))}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#888' })}>{fmt(tvaApayer(totaux.tva[12], 12))}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#888' })}>{fmt(tvaApayer(totaux.tva[21], 21))}</td>
@@ -616,7 +626,7 @@ export default function RecapMensuel() {
                     </tr>
                     <tr style={{ background: '#fafaf8' }}>
                       <td style={tdCell({ textAlign: 'left', color: '#888', fontWeight: 700 })}>Somme des 3 TVA</td>
-                      <td style={tdCell()} colSpan={9}></td>
+                      <td style={tdCell()} colSpan={10}></td>
                       <td style={tdCell({ textAlign: 'right', color: '#888', fontWeight: 700 })}>{fmt(totalTvaApayer(totaux.tva))}</td>
                     </tr>
                   </tfoot>
@@ -626,11 +636,11 @@ export default function RecapMensuel() {
                   <thead>
                     <tr style={{ background: '#fafaf8' }}>
                       <th style={thCell({ textAlign: 'left' })}>Jour</th>
-                      <th style={thCell({ textAlign: 'center' })}>Total analysé</th>
+                      <th style={thCell({ textAlign: 'center' })}>Total</th>
                       <th style={thCell({ textAlign: 'center' })}>Dépenses</th>
                       <th style={thCell({ textAlign: 'center' })}>Carte</th>
                       <th style={thCell({ textAlign: 'center' })}>Cash analysé</th>
-                      <th style={thCell({ textAlign: 'center' })} title="Carte + Cash analysé : doit être proche du Total analysé">Contrôle</th>
+                      <th style={thCell({ textAlign: 'center' })} title="Somme des 3 TVA : doit être égale au Total">Contrôle</th>
                       <th style={thCell({ textAlign: 'center' })}>TVA 6%</th>
                       <th style={thCell({ textAlign: 'center' })}>TVA 12%</th>
                       <th style={thCell({ textAlign: 'center' })}>TVA 21%</th>
@@ -641,22 +651,24 @@ export default function RecapMensuel() {
                     {jours.map(j => {
                       const d = parJour[j];
                       const aRecette = d.totalAnalyse !== 0 || d.carte !== 0 || d.cashAnalyse !== 0;
-                      const controle = d.carte + d.cashAnalyse;
-                      const ecart = controle - d.totalAnalyse;
-                      const ecartImportant = Math.abs(ecart) >= 0.01;
+                      const controleTva = d.tvaAnalyse[6] + d.tvaAnalyse[12] + d.tvaAnalyse[21];
+                      const ecartTva = controleTva - d.totalAnalyse;
+                      const tvaKo = aRecette && Math.abs(ecartTva) >= 0.01;
+                      const ecartPaiement = (d.carte + d.cashAnalyse) - d.totalAnalyse;
+                      const paiementKo = aRecette && Math.abs(ecartPaiement) >= 0.01;
                       return (
                         <tr key={j}>
                           {celluleJour(j, aRecette)}
-                          <td style={tdCell({ textAlign: 'right', fontWeight: aRecette ? 700 : 400, color: aRecette ? '#111' : '#ccc' })}>{fmt(d.totalAnalyse)}</td>
+                          <td style={tdCell({ textAlign: 'right', fontWeight: aRecette ? 700 : 400, color: paiementKo ? '#dc2626' : (aRecette ? '#111' : '#ccc') })}>{fmt(d.totalAnalyse)}</td>
                           <td style={tdCell({ textAlign: 'right', color: d.depenses !== 0 ? '#b91c1c' : '#ccc' })}>{fmt(d.depenses)}</td>
-                          <td style={tdCell({ textAlign: 'right', color: aRecette ? '#2563eb' : '#ccc' })}>{fmt(d.carte)}</td>
-                          <td style={tdCell({ textAlign: 'right', color: aRecette ? '#b45309' : '#ccc' })}>{fmt(d.cashAnalyse)}</td>
-                          <td style={tdCell({ textAlign: 'right', fontWeight: 600, color: !aRecette ? '#ccc' : (ecartImportant ? '#dc2626' : '#16a34a') })}>
-                            {fmt(controle)}{aRecette && ecartImportant ? ' (' + (ecart > 0 ? '+' : '') + fmt(ecart) + ')' : ''}
+                          <td style={tdCell({ textAlign: 'right', color: !aRecette ? '#ccc' : (paiementKo ? '#dc2626' : '#2563eb') })}>{fmt(d.carte)}</td>
+                          <td style={tdCell({ textAlign: 'right', color: !aRecette ? '#ccc' : (paiementKo ? '#dc2626' : '#b45309') })}>{fmt(d.cashAnalyse)}</td>
+                          <td style={tdCell({ textAlign: 'right', fontWeight: 600, color: !aRecette ? '#ccc' : (tvaKo ? '#dc2626' : '#16a34a') })}>
+                            {fmt(controleTva)}{aRecette && tvaKo ? ' (' + (ecartTva > 0 ? '+' : '') + fmt(ecartTva) + ')' : ''}
                           </td>
-                          <td style={tdCell({ textAlign: 'right', color: '#666' })}>{fmt(d.tvaAnalyse[6])}</td>
-                          <td style={tdCell({ textAlign: 'right', color: '#666' })}>{fmt(d.tvaAnalyse[12])}</td>
-                          <td style={tdCell({ textAlign: 'right', color: '#666' })}>{fmt(d.tvaAnalyse[21])}</td>
+                          <td style={tdCell({ textAlign: 'right', color: tvaKo ? '#dc2626' : '#666' })}>{fmt(d.tvaAnalyse[6])}</td>
+                          <td style={tdCell({ textAlign: 'right', color: tvaKo ? '#dc2626' : '#666' })}>{fmt(d.tvaAnalyse[12])}</td>
+                          <td style={tdCell({ textAlign: 'right', color: tvaKo ? '#dc2626' : '#666' })}>{fmt(d.tvaAnalyse[21])}</td>
                           <td style={tdCell({ padding: '2px 6px' })}>
                             <input
                               type="number" step="0.1" min="0"
@@ -678,7 +690,7 @@ export default function RecapMensuel() {
                       <td style={tdCell({ textAlign: 'right', color: '#b91c1c' })}>{fmt(totaux.depenses)}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#2563eb' })}>{fmt(totaux.carte)}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#b45309' })}>{fmt(totaux.cashAnalyse)}</td>
-                      <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.carte + totaux.cashAnalyse)}</td>
+                      <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tvaAnalyse[6] + totaux.tvaAnalyse[12] + totaux.tvaAnalyse[21])}</td>
                       <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tvaAnalyse[6])}</td>
                       <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tvaAnalyse[12])}</td>
                       <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tvaAnalyse[21])}</td>
