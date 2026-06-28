@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../api/api';
 
-const TAUX_TVA = [21, 6, 12];
+const TAUX_TVA = [6, 12, 21];
 
 const MOIS_NOMS = [
   'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
@@ -41,7 +41,7 @@ export default function RecapMensuel() {
   const mois = Number(moisStr); // 1..12
 
   const [encaissements, setEncaissements] = useState([]);
-  const [recap, setRecap] = useState(null); // { memo, km_defaut, km_par_jour }
+  const [recap, setRecap] = useState(null); // { memo, km_defaut, km_par_jour, ferme_par_jour }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
@@ -162,9 +162,9 @@ export default function RecapMensuel() {
   // TVA à payer par taux = base × taux / (100 + taux)
   const tvaApayer = (base, taux) => base * taux / (100 + taux);
 
-  // Somme des 3 TVA à payer (21% + 6% + 12%), pour la vue active
+  // Somme des 3 TVA à payer (6% + 12% + 21%), pour la vue active
   const totalTvaApayer = (tvaParTaux) =>
-    tvaApayer(tvaParTaux[21], 21) + tvaApayer(tvaParTaux[6], 6) + tvaApayer(tvaParTaux[12], 12);
+    tvaApayer(tvaParTaux[6], 6) + tvaApayer(tvaParTaux[12], 12) + tvaApayer(tvaParTaux[21], 21);
 
   // ───── km : valeur par défaut + exceptions par jour ──────────────────────
   const kmDefaut = recap ? Number(recap.km_defaut) : 53.4;
@@ -209,6 +209,31 @@ export default function RecapMensuel() {
     changerKm(jour, nouvelleValeur);
   };
 
+  // ───── jours fermés (étiquette visuelle uniquement, pas de calcul) ───────
+  const estFerme = (jour) => {
+    return !!(recap && recap.ferme_par_jour && recap.ferme_par_jour[String(jour)]);
+  };
+
+  // Coche/décoche "Fermé" pour un jour et sauvegarde immédiatement
+  const basculerFerme = async (jour) => {
+    const nouvellesValeurs = { ...(recap?.ferme_par_jour || {}) };
+    const nouvelEtat = !estFerme(jour);
+    if (nouvelEtat) {
+      nouvellesValeurs[String(jour)] = true;
+    } else {
+      delete nouvellesValeurs[String(jour)];
+    }
+    // Mise à jour locale immédiate
+    setRecap(prev => ({ ...prev, ferme_par_jour: nouvellesValeurs }));
+    try {
+      const res = await api.patch('/recap-mensuel/' + annee + '/' + mois, { ferme_par_jour: nouvellesValeurs });
+      setRecap(res.data);
+    } catch (e) {
+      showMsg('error', 'Erreur lors de l\'enregistrement du jour fermé');
+      load();
+    }
+  };
+
   // Enregistre le mémo (au blur)
   const [memoLocal, setMemoLocal] = useState('');
   useEffect(() => { setMemoLocal(recap ? (recap.memo || '') : ''); }, [recap?.memo]);
@@ -250,6 +275,39 @@ export default function RecapMensuel() {
   // Styles de cellules avec quadrillage (mêmes helpers que Encaissements.jsx / Articles.jsx)
   const thCell = (extra = {}) => ({ padding: '6px 10px', border: BORDURE, ...extra });
   const tdCell = (extra = {}) => ({ padding: '4px 10px', border: BORDURE, ...extra });
+
+  // Cellule "Jour" commune aux deux tableaux : case à cocher Fermé + nom du jour + mention "Fermé"
+  const celluleJour = (j, aRecette) => {
+    const ouverture = estJourOuverture(j);
+    const ferme = estFerme(j);
+    return (
+      <td style={tdCell({ textAlign: 'left', whiteSpace: 'nowrap' })}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <input
+            type="checkbox"
+            checked={ferme}
+            onClick={(e) => e.stopPropagation()}
+            onChange={() => basculerFerme(j)}
+            title="Marquer ce jour comme fermé"
+            style={{ cursor: 'pointer' }}
+          />
+          <span
+            style={{
+              cursor: 'pointer',
+              textDecoration: 'underline dotted',
+              color: ouverture ? '#dc2626' : (aRecette ? '#111' : '#aaa'),
+              fontWeight: ouverture ? 700 : 400,
+            }}
+            title="Ouvrir les encaissements de ce jour"
+            onClick={() => ouvrirJour(j)}
+          >
+            {pad2(j)} <span style={{ color: ouverture ? '#dc2626' : '#999', textTransform: 'capitalize' }}>{nomJourSemaine(j)}</span>
+          </span>
+          {ferme && <span style={{ color: '#b91c1c', fontWeight: 700 }}>Fermé</span>}
+        </span>
+      </td>
+    );
+  };
 
   return (
     <div>
@@ -350,7 +408,7 @@ export default function RecapMensuel() {
             {/* Tableau jour par jour */}
             <div style={{ background: 'white', border: BORDURE, borderRadius: 10, overflow: 'auto', marginBottom: 20 }}>
               {vue === 'tous' ? (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 820 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 860 }}>
                   <thead>
                     <tr style={{ background: '#fafaf8' }}>
                       <th style={thCell({ textAlign: 'left' })}>Jour</th>
@@ -359,9 +417,9 @@ export default function RecapMensuel() {
                       <th style={thCell({ textAlign: 'center' })}>Cash</th>
                       <th style={thCell({ textAlign: 'center' })}>Carte</th>
                       <th style={thCell({ textAlign: 'center' })}>Cash analysé</th>
-                      <th style={thCell({ textAlign: 'center' })}>TVA 21%</th>
                       <th style={thCell({ textAlign: 'center' })}>TVA 6%</th>
                       <th style={thCell({ textAlign: 'center' })}>TVA 12%</th>
+                      <th style={thCell({ textAlign: 'center' })}>TVA 21%</th>
                       <th style={thCell({ textAlign: 'center' })} title="Double-clic : bascule entre 0 et la valeur par défaut">Km A/R</th>
                     </tr>
                   </thead>
@@ -369,29 +427,17 @@ export default function RecapMensuel() {
                     {jours.map(j => {
                       const d = parJour[j];
                       const aRecette = d.total !== 0;
-                      const ouverture = estJourOuverture(j);
                       return (
                         <tr key={j}>
-                          <td
-                            style={tdCell({
-                              textAlign: 'left', whiteSpace: 'nowrap', cursor: 'pointer',
-                              textDecoration: 'underline dotted',
-                              color: ouverture ? '#dc2626' : (aRecette ? '#111' : '#aaa'),
-                              fontWeight: ouverture ? 700 : 400,
-                            })}
-                            title="Ouvrir les encaissements de ce jour"
-                            onClick={() => ouvrirJour(j)}
-                          >
-                            {pad2(j)} <span style={{ color: ouverture ? '#dc2626' : '#999', textTransform: 'capitalize' }}>{nomJourSemaine(j)}</span>
-                          </td>
+                          {celluleJour(j, aRecette)}
                           <td style={tdCell({ textAlign: 'right', fontWeight: aRecette ? 700 : 400, color: aRecette ? '#111' : '#ccc' })}>{fmt(d.total)}</td>
                           <td style={tdCell({ textAlign: 'right', color: d.depenses !== 0 ? '#b91c1c' : '#ccc' })}>{fmt(d.depenses)}</td>
                           <td style={tdCell({ textAlign: 'right', color: aRecette ? '#16a34a' : '#ccc' })}>{fmt(d.cash)}</td>
                           <td style={tdCell({ textAlign: 'right', color: aRecette ? '#2563eb' : '#ccc' })}>{fmt(d.carte)}</td>
                           <td style={tdCell({ textAlign: 'right', color: aRecette ? '#b45309' : '#ccc' })}>{fmt(d.cashAnalyse)}</td>
-                          <td style={tdCell({ textAlign: 'right', color: '#666' })}>{fmt(d.tva[21])}</td>
                           <td style={tdCell({ textAlign: 'right', color: '#666' })}>{fmt(d.tva[6])}</td>
                           <td style={tdCell({ textAlign: 'right', color: '#666' })}>{fmt(d.tva[12])}</td>
+                          <td style={tdCell({ textAlign: 'right', color: '#666' })}>{fmt(d.tva[21])}</td>
                           <td style={tdCell({ padding: '2px 6px' })}>
                             <input
                               type="number" step="0.1" min="0"
@@ -414,17 +460,17 @@ export default function RecapMensuel() {
                       <td style={tdCell({ textAlign: 'right', color: '#16a34a' })}>{fmt(totaux.cash)}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#2563eb' })}>{fmt(totaux.carte)}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#b45309' })}>{fmt(totaux.cashAnalyse)}</td>
-                      <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tva[21])}</td>
                       <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tva[6])}</td>
                       <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tva[12])}</td>
+                      <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tva[21])}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#6b7280' })}>{fmt(totalKm)}</td>
                     </tr>
                     <tr style={{ background: '#fafaf8' }}>
                       <td style={tdCell({ textAlign: 'left', color: '#888' })}>TVA à payer</td>
                       <td style={tdCell()} colSpan={5}></td>
-                      <td style={tdCell({ textAlign: 'right', color: '#888' })}>{fmt(tvaApayer(totaux.tva[21], 21))}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#888' })}>{fmt(tvaApayer(totaux.tva[6], 6))}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#888' })}>{fmt(tvaApayer(totaux.tva[12], 12))}</td>
+                      <td style={tdCell({ textAlign: 'right', color: '#888' })}>{fmt(tvaApayer(totaux.tva[21], 21))}</td>
                       <td style={tdCell()}></td>
                     </tr>
                     <tr style={{ background: '#fafaf8' }}>
@@ -435,7 +481,7 @@ export default function RecapMensuel() {
                   </tfoot>
                 </table>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 880 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 920 }}>
                   <thead>
                     <tr style={{ background: '#fafaf8' }}>
                       <th style={thCell({ textAlign: 'left' })}>Jour</th>
@@ -444,9 +490,9 @@ export default function RecapMensuel() {
                       <th style={thCell({ textAlign: 'center' })}>Carte</th>
                       <th style={thCell({ textAlign: 'center' })}>Cash analysé</th>
                       <th style={thCell({ textAlign: 'center' })} title="Carte + Cash analysé : doit être proche du Total analysé">Contrôle</th>
-                      <th style={thCell({ textAlign: 'center' })}>TVA 21%</th>
                       <th style={thCell({ textAlign: 'center' })}>TVA 6%</th>
                       <th style={thCell({ textAlign: 'center' })}>TVA 12%</th>
+                      <th style={thCell({ textAlign: 'center' })}>TVA 21%</th>
                       <th style={thCell({ textAlign: 'center' })} title="Double-clic : bascule entre 0 et la valeur par défaut">Km A/R</th>
                     </tr>
                   </thead>
@@ -454,24 +500,12 @@ export default function RecapMensuel() {
                     {jours.map(j => {
                       const d = parJour[j];
                       const aRecette = d.totalAnalyse !== 0 || d.carte !== 0 || d.cashAnalyse !== 0;
-                      const ouverture = estJourOuverture(j);
                       const controle = d.carte + d.cashAnalyse;
                       const ecart = controle - d.totalAnalyse;
                       const ecartImportant = Math.abs(ecart) >= 0.01;
                       return (
                         <tr key={j}>
-                          <td
-                            style={tdCell({
-                              textAlign: 'left', whiteSpace: 'nowrap', cursor: 'pointer',
-                              textDecoration: 'underline dotted',
-                              color: ouverture ? '#dc2626' : (aRecette ? '#111' : '#aaa'),
-                              fontWeight: ouverture ? 700 : 400,
-                            })}
-                            title="Ouvrir les encaissements de ce jour pour corriger"
-                            onClick={() => ouvrirJour(j)}
-                          >
-                            {pad2(j)} <span style={{ color: ouverture ? '#dc2626' : '#999', textTransform: 'capitalize' }}>{nomJourSemaine(j)}</span>
-                          </td>
+                          {celluleJour(j, aRecette)}
                           <td style={tdCell({ textAlign: 'right', fontWeight: aRecette ? 700 : 400, color: aRecette ? '#111' : '#ccc' })}>{fmt(d.totalAnalyse)}</td>
                           <td style={tdCell({ textAlign: 'right', color: d.depenses !== 0 ? '#b91c1c' : '#ccc' })}>{fmt(d.depenses)}</td>
                           <td style={tdCell({ textAlign: 'right', color: aRecette ? '#2563eb' : '#ccc' })}>{fmt(d.carte)}</td>
@@ -479,9 +513,9 @@ export default function RecapMensuel() {
                           <td style={tdCell({ textAlign: 'right', fontWeight: 600, color: !aRecette ? '#ccc' : (ecartImportant ? '#dc2626' : '#16a34a') })}>
                             {fmt(controle)}{aRecette && ecartImportant ? ' (' + (ecart > 0 ? '+' : '') + fmt(ecart) + ')' : ''}
                           </td>
-                          <td style={tdCell({ textAlign: 'right', color: '#666' })}>{fmt(d.tvaAnalyse[21])}</td>
                           <td style={tdCell({ textAlign: 'right', color: '#666' })}>{fmt(d.tvaAnalyse[6])}</td>
                           <td style={tdCell({ textAlign: 'right', color: '#666' })}>{fmt(d.tvaAnalyse[12])}</td>
+                          <td style={tdCell({ textAlign: 'right', color: '#666' })}>{fmt(d.tvaAnalyse[21])}</td>
                           <td style={tdCell({ padding: '2px 6px' })}>
                             <input
                               type="number" step="0.1" min="0"
@@ -504,17 +538,17 @@ export default function RecapMensuel() {
                       <td style={tdCell({ textAlign: 'right', color: '#2563eb' })}>{fmt(totaux.carte)}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#b45309' })}>{fmt(totaux.cashAnalyse)}</td>
                       <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.carte + totaux.cashAnalyse)}</td>
-                      <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tvaAnalyse[21])}</td>
                       <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tvaAnalyse[6])}</td>
                       <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tvaAnalyse[12])}</td>
+                      <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tvaAnalyse[21])}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#6b7280' })}>{fmt(totalKm)}</td>
                     </tr>
                     <tr style={{ background: '#fafaf8' }}>
                       <td style={tdCell({ textAlign: 'left', color: '#888' })}>TVA à payer</td>
                       <td style={tdCell()} colSpan={5}></td>
-                      <td style={tdCell({ textAlign: 'right', color: '#888' })}>{fmt(tvaApayer(totaux.tvaAnalyse[21], 21))}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#888' })}>{fmt(tvaApayer(totaux.tvaAnalyse[6], 6))}</td>
                       <td style={tdCell({ textAlign: 'right', color: '#888' })}>{fmt(tvaApayer(totaux.tvaAnalyse[12], 12))}</td>
+                      <td style={tdCell({ textAlign: 'right', color: '#888' })}>{fmt(tvaApayer(totaux.tvaAnalyse[21], 21))}</td>
                       <td style={tdCell()}></td>
                     </tr>
                     <tr style={{ background: '#fafaf8' }}>
