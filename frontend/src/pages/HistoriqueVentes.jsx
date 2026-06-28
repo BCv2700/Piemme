@@ -22,11 +22,16 @@ export default function HistoriqueVentes() {
   // Lit la date transmise par le Plan de salle (NavBar) au montage du composant.
   // S'il n'y en a pas (accès direct à /historique), on retombe sur aujourd'hui.
   const dateInitiale = searchParams.get('date') || todayKey();
+  // Plage de dates transmise depuis le récap mensuel (bouton "Dépenses") :
+  // si présente, on démarre directement en mode plage sur ce mois.
+  const debutInitial = searchParams.get('debut');
+  const finInitial = searchParams.get('fin');
+  const modePlageInitial = !!(debutInitial && finInitial);
 
-  const [modePlage, setModePlage] = useState(false);
+  const [modePlage, setModePlage] = useState(modePlageInitial);
   const [dateUnique, setDateUnique] = useState(dateInitiale);
-  const [dateDebut, setDateDebut] = useState(dateInitiale);
-  const [dateFin, setDateFin] = useState(dateInitiale);
+  const [dateDebut, setDateDebut] = useState(debutInitial || dateInitiale);
+  const [dateFin, setDateFin] = useState(finInitial || dateInitiale);
   const [encaissements, setEncaissements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

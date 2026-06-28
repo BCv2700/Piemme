@@ -267,6 +267,14 @@ export default function RecapMensuel() {
     navigate('/encaissements?date=' + dateKey(annee, mois, jour));
   };
 
+  // Clic sur la carte "Dépenses" -> ouvre l'écran Historique en mode plage,
+  // positionné sur l'ensemble du mois affiché dans le récap.
+  const ouvrirHistoriqueMois = () => {
+    const debut = dateKey(annee, mois, 1);
+    const fin = dateKey(annee, mois, joursDansMois(annee, mois));
+    navigate('/historique?debut=' + debut + '&fin=' + fin);
+  };
+
   // Jours d'ouverture du restaurant (jeudi=4, vendredi=5, samedi=6) -> affichés en rouge gras
   const estJourOuverture = (jour) => {
     const d = new Date(annee, mois - 1, jour);
@@ -475,10 +483,7 @@ export default function RecapMensuel() {
               Analysé
             </button>
           </div>
-          <span style={{ fontSize: 13, color: '#888' }}>
-            {vue === 'analyse' ? 'Ventes analysées uniquement' : 'Tous les encaissements'}
-          </span>
-          <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+          <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={() => genererPdf('tous')}
               style={{
@@ -500,6 +505,9 @@ export default function RecapMensuel() {
               📄 PDF Comptable
             </button>
           </div>
+          <span style={{ fontSize: 13, color: '#888' }}>
+            {vue === 'analyse' ? 'Ventes analysées uniquement' : 'Tous les encaissements'}
+          </span>
         </div>
 
         {loading ? (
@@ -511,7 +519,10 @@ export default function RecapMensuel() {
               {vue === 'tous' ? (
                 <>
                   <CarteTotal label="Total" valeur={fmt(totaux.total)} fort />
-                  <CarteTotal label="Dépenses" valeur={fmt(totaux.depenses)} couleur="#b91c1c" />
+                  <CarteTotal
+                    label="Dépenses" valeur={fmt(totaux.depenses)} couleur="#b91c1c"
+                    onClick={ouvrirHistoriqueMois} title="Voir le détail des dépenses dans l'historique du mois"
+                  />
                   <CarteTotal label="Cash" valeur={fmt(totaux.cash)} couleur="#16a34a" />
                   <CarteTotal label="Carte" valeur={fmt(totaux.carte)} couleur="#2563eb" />
                   <CarteTotal label="Cash analysé" valeur={fmt(totaux.cashAnalyse)} couleur="#b45309" />
@@ -527,7 +538,10 @@ export default function RecapMensuel() {
               ) : (
                 <>
                   <CarteTotal label="Total" valeur={fmt(totaux.totalAnalyse)} fort />
-                  <CarteTotal label="Dépenses" valeur={fmt(totaux.depenses)} couleur="#b91c1c" />
+                  <CarteTotal
+                    label="Dépenses" valeur={fmt(totaux.depenses)} couleur="#b91c1c"
+                    onClick={ouvrirHistoriqueMois} title="Voir le détail des dépenses dans l'historique du mois"
+                  />
                   <CarteTotal label="Carte" valeur={fmt(totaux.carte)} couleur="#2563eb" />
                   <CarteTotal label="Cash analysé" valeur={fmt(totaux.cashAnalyse)} couleur="#b45309" />
                   {TAUX_TVA.map(taux => (
@@ -742,9 +756,16 @@ export default function RecapMensuel() {
   );
 }
 
-function CarteTotal({ label, valeur, couleur, fort }) {
+function CarteTotal({ label, valeur, couleur, fort, onClick, title }) {
   return (
-    <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '8px 14px', minWidth: 110 }}>
+    <div
+      onClick={onClick}
+      title={title}
+      style={{
+        background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '8px 14px', minWidth: 110,
+        cursor: onClick ? 'pointer' : 'default',
+      }}
+    >
       <div style={{ fontSize: 11, color: '#888' }}>{label}</div>
       <div style={{ fontSize: fort ? 18 : 16, fontWeight: 700, color: couleur || '#111' }}>{valeur} €</div>
     </div>
