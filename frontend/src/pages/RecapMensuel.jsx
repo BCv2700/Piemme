@@ -298,7 +298,7 @@ export default function RecapMensuel() {
     // ligne de totaux / pourcentages TVA, juste sous le titre (comme l'ancien PDF Access)
     const tvaRef = estTous ? totaux.tva : totaux.tvaAnalyse;
     doc.setFontSize(8);
-    let ligneInfo = (estTous ? 'Total ' + fmt(totaux.total) : 'Total analysé ' + fmt(totaux.totalAnalyse))
+    let ligneInfo = (estTous ? 'Total ' + fmt(totaux.total) : 'Total ' + fmt(totaux.totalAnalyse))
       + '   Cash ' + fmt(estTous ? totaux.cash : totaux.cashAnalyse)
       + '   Carte ' + fmt(totaux.carte)
       + '   Km A/R ' + fmt(totalKm);
@@ -309,7 +309,7 @@ export default function RecapMensuel() {
     // En-têtes et colonnes selon la vue (la colonne Dépenses est inutile dans le PDF comptable)
     const head = estTous
       ? ['Jour', 'Total', 'Total analysé', 'Dépenses', 'Cash', 'Carte', 'Cash analysé', 'TVA 6%', 'TVA 12%', 'TVA 21%', 'Km A/R']
-      : ['Jour', 'Total analysé', 'Carte', 'Cash analysé', 'Contrôle', 'TVA 6%', 'TVA 12%', 'TVA 21%', 'Km A/R'];
+      : ['Jour', 'Total', 'Carte', 'Cash', 'Contrôle', 'TVA 6%', 'TVA 12%', 'TVA 21%', 'Km A/R'];
 
     const body = jours.map(j => {
       const d = parJour[j];
@@ -526,7 +526,7 @@ export default function RecapMensuel() {
                 </>
               ) : (
                 <>
-                  <CarteTotal label="Total analysé" valeur={fmt(totaux.totalAnalyse)} fort />
+                  <CarteTotal label="Total" valeur={fmt(totaux.totalAnalyse)} fort />
                   <CarteTotal label="Dépenses" valeur={fmt(totaux.depenses)} couleur="#b91c1c" />
                   <CarteTotal label="Carte" valeur={fmt(totaux.carte)} couleur="#2563eb" />
                   <CarteTotal label="Cash analysé" valeur={fmt(totaux.cashAnalyse)} couleur="#b45309" />
