@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import jsPDF from 'jspdf';
 import api from '../api/api';
+import TicketImprimable from '../components/TicketImprimable';
+import { genererDonneesTicket } from '../utils/ticket';
 
 export default function Paiement() {
   const { tableId } = useParams();
@@ -19,15 +22,13 @@ export default function Paiement() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [enregistrement, setEnregistrement] = useState(false);
+  const [ticketData, setTicketData] = useState(null);
 
   const todayKey = (() => {
     const d = new Date();
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   })();
 
-  // Date à utiliser pour cet encaissement : celle du plan de salle (retourDate)
-  // si elle est présente dans l'URL (cas d'un encodage en différé, jour différent
-  // d'aujourd'hui), sinon la date du jour réel.
   const dateEncodage = retourDate || todayKey;
 
   const load = async () => {
@@ -36,9 +37,6 @@ export default function Paiement() {
         api.get('/tables/' + tableId),
         api.get('/commandes/', { params: { table_id: tableId } }),
         api.get('/articles/'),
-        // La réservation à associer doit correspondre au jour encodé (dateEncodage),
-        // pas forcément au jour réel : si on encode en différé, on veut la résa de
-        // ce jour-là, pas celle d'aujourd'hui.
         api.get('/reservations/', { params: { date_reservation: dateEncodage } }),
       ]);
       setTable(tableRes.data);
@@ -61,56 +59,98 @@ export default function Paiement() {
   };
 
   const total = lignes.reduce((sum, l) => sum + Number(l.prix_unitaire) * Number(l.quantite), 0);
-
   const carte = Number(montantCarte) || 0;
   const cash = Number(montantCash) || 0;
   const totalSaisi = carte + cash;
   const ecart = Math.round((totalSaisi - total) * 100) / 100;
 
-  const cliquerCarte = () => {
-    setMontantCarte(total.toFixed(2));
-    setMontantCash('');
-  };
+  const cliquerCarte = () => { setMontantCarte(total.toFixed(2)); setMontantCash(''); };
+  const cliquerCash = () => { setMontantCash(total.toFixed(2)); setMontantCarte(''); };
 
-  const cliquerCash = () => {
-    setMontantCash(total.toFixed(2));
-    setMontantCarte('');
-  };
-
-  const validerPaiement = async () => {
+  const verifierAvantEnregistrement = () => {
     setError('');
-
     if (lignes.length === 0) {
       setError('Aucun article à payer pour cette table');
-      return;
+      return false;
     }
     if (ecart !== 0) {
       setError('Le total Carte + Cash (' + totalSaisi.toFixed(2) + ' €) ne correspond pas au total à payer (' + total.toFixed(2) + ' €)');
-      return;
+      return false;
     }
+    return true;
+  };
 
+  const enregistrerEncaissement = async () => {
+    const res = await api.post('/encaissements/', {
+      table_nom: table.nom,
+      montant_carte: carte,
+      montant_cash: cash,
+      montant_total: total,
+      nb_personnes: 1,
+      emporte: lignes.some(l => l.emporte),
+      nom_reservation_archive: nomReservation,
+      date_encaissement: dateEncodage + 'T12:00:00',
+      lignes: lignes.map(l => ({
+        article_id: l.article_id,
+        article_nom: nomArticle(l.article_id),
+        quantite: l.quantite,
+        prix_vente: l.prix_unitaire,
+        tva: l.tva,
+      })),
+    });
+    return res.data;
+  };
+
+  const construireTicket = (encaissementCree) => genererDonneesTicket({
+    encaissementId: encaissementCree.id,
+    dateEncaissement: dateEncodage + 'T12:00:00',
+    tableNom: table.nom,
+    nomReservation,
+    lignes: lignes.map(l => ({
+      article_nom: nomArticle(l.article_id),
+      quantite: l.quantite,
+      prix_vente: l.prix_unitaire,
+      tva: l.tva,
+    })),
+    montantCash: cash,
+    montantCarte: carte,
+    montantTotal: total,
+  });
+
+  const validerEtImprimer = async () => {
+    if (!verifierAvantEnregistrement()) return;
     setEnregistrement(true);
     try {
-      await api.post('/encaissements/', {
-        table_nom: table.nom,
-        montant_carte: carte,
-        montant_cash: cash,
-        montant_total: total,
-        nb_personnes: 1,
-        emporte: lignes.some(l => l.emporte),
-        nom_reservation_archive: nomReservation,
-        // Date du plan de salle (dateEncodage), avec une heure neutre (midi) car
-        // l'heure réelle de l'encodage en différé n'a pas de sens ici. Modifiable
-        // ensuite depuis l'écran Encaissements / la modale de détail.
-        date_encaissement: dateEncodage + 'T12:00:00',
-        lignes: lignes.map(l => ({
-          article_id: l.article_id,
-          article_nom: nomArticle(l.article_id),
-          quantite: l.quantite,
-          prix_vente: l.prix_unitaire,
-          tva: l.tva,
-        })),
-      });
+      const encaissementCree = await enregistrerEncaissement();
+      setTicketData(construireTicket(encaissementCree));
+      setTimeout(() => {
+        window.print();
+        navigate(urlRetourPlan);
+      }, 200);
+    } catch (e) {
+      setError(e.response?.data?.detail || "Erreur lors de l'enregistrement du paiement");
+      setEnregistrement(false);
+    }
+  };
+
+  const validerSansTicket = async () => {
+    if (!verifierAvantEnregistrement()) return;
+    setEnregistrement(true);
+    try {
+      await enregistrerEncaissement();
+      navigate(urlRetourPlan);
+    } catch (e) {
+      setError(e.response?.data?.detail || "Erreur lors de l'enregistrement du paiement");
+      setEnregistrement(false);
+    }
+  };
+
+  const validerEtPdf = async () => {
+    if (!verifierAvantEnregistrement()) return;
+    setEnregistrement(true);
+    try {
+      const encaissementCree = await enregistrerEncaissement();
+      genererPdfTicket(construireTicket(encaissementCree));
       navigate(urlRetourPlan);
     } catch (e) {
       setError(e.response?.data?.detail || "Erreur lors de l'enregistrement du paiement");
@@ -119,129 +159,65 @@ export default function Paiement() {
   };
 
   if (loading) {
-    return (
-      <div>
-        <div className="content">Chargement...</div>
-      </div>
-    );
+    return <div><div className="content">Chargement...</div></div>;
   }
 
   return (
     <div>
       <div className="content">
-
         {error && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 12, fontWeight: 500 }}>{error}</div>}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-          <button className="btn" onClick={() => navigate(urlRetourCaddy)}>
-            ← Retour au caddy
-          </button>
-          <span style={{
-            fontSize: 13, fontWeight: 700, color: '#111',
-            background: '#f0f0ee', borderRadius: 6, padding: '6px 12px',
-          }}>
+          <button className="btn" onClick={() => navigate(urlRetourCaddy)}>← Retour au caddy</button>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#111', background: '#f0f0ee', borderRadius: 6, padding: '6px 12px' }}>
             {table ? table.nom : 'Table'}
           </span>
         </div>
 
         <div style={{ maxWidth: 480, margin: '0 auto' }}>
-
-          {/* Bloc paiement */}
-          <div style={{
-            background: 'white',
-            border: '1px solid #e5e5e0',
-            borderRadius: 10,
-            padding: 20,
-            marginBottom: 20,
-          }}>
-            <div style={{
-              background: '#15803d',
-              color: 'white',
-              borderRadius: 8,
-              padding: '16px 20px',
-              marginBottom: 20,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'baseline',
-            }}>
+          <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 10, padding: 20, marginBottom: 20 }}>
+            <div style={{ background: '#15803d', color: 'white', borderRadius: 8, padding: '16px 20px', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <span style={{ fontSize: 16, fontWeight: 600 }}>À payer</span>
               <span style={{ fontSize: 28, fontWeight: 700 }}>{total.toFixed(2)} €</span>
             </div>
 
             <div style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>Payer avec</div>
-
             <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
-              <button className="btn" style={{ flex: 1, padding: '12px 0' }} onClick={cliquerCarte}>
-                💳 Carte
-              </button>
-              <button className="btn" style={{ flex: 1, padding: '12px 0' }} onClick={cliquerCash}>
-                💶 Cash
-              </button>
+              <button className="btn" style={{ flex: 1, padding: '12px 0' }} onClick={cliquerCarte}>💳 Carte</button>
+              <button className="btn" style={{ flex: 1, padding: '12px 0' }} onClick={cliquerCash}>💶 Cash</button>
             </div>
 
             <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>Carte</div>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={montantCarte}
-                  onChange={(e) => setMontantCarte(e.target.value)}
-                  style={inputStyle}
-                  placeholder="0.00"
-                />
+                <input type="number" step="0.01" value={montantCarte} onChange={(e) => setMontantCarte(e.target.value)} style={inputStyle} placeholder="0.00" />
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>Cash</div>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={montantCash}
-                  onChange={(e) => setMontantCash(e.target.value)}
-                  style={inputStyle}
-                  placeholder="0.00"
-                />
+                <input type="number" step="0.01" value={montantCash} onChange={(e) => setMontantCash(e.target.value)} style={inputStyle} placeholder="0.00" />
               </div>
             </div>
 
             {ecart !== 0 && (totalSaisi > 0) && (
-              <div style={{
-                fontSize: 13,
-                color: ecart > 0 ? '#16a34a' : '#dc2626',
-                marginBottom: 16,
-                fontWeight: 500,
-              }}>
-                {ecart > 0
-                  ? 'Excédent de ' + ecart.toFixed(2) + ' € — à rendre si cash'
-                  : 'Manque ' + Math.abs(ecart).toFixed(2) + ' €'}
+              <div style={{ fontSize: 13, color: ecart > 0 ? '#16a34a' : '#dc2626', marginBottom: 16, fontWeight: 500 }}>
+                {ecart > 0 ? 'Excédent de ' + ecart.toFixed(2) + ' € — à rendre si cash' : 'Manque ' + Math.abs(ecart).toFixed(2) + ' €'}
               </div>
             )}
 
-            <button
-              className="btn"
-              style={{
-                width: '100%',
-                padding: '14px 0',
-                background: '#111',
-                color: 'white',
-                fontWeight: 600,
-                fontSize: 15,
-                opacity: enregistrement ? 0.6 : 1,
-              }}
-              onClick={validerPaiement}
-              disabled={enregistrement}
-            >
-              {enregistrement ? 'Enregistrement...' : 'Valider le paiement'}
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button className="btn" style={{ padding: '14px 0', background: '#111', color: 'white', fontWeight: 600, fontSize: 15, opacity: enregistrement ? 0.6 : 1 }} onClick={validerEtImprimer} disabled={enregistrement}>
+                {enregistrement ? 'Enregistrement...' : '🖨️ Valider + Imprimer le ticket'}
+              </button>
+              <button className="btn" style={{ padding: '12px 0', fontWeight: 500, fontSize: 14, opacity: enregistrement ? 0.6 : 1 }} onClick={validerSansTicket} disabled={enregistrement}>
+                Valider sans ticket
+              </button>
+              <button className="btn" style={{ padding: '12px 0', fontWeight: 500, fontSize: 14, opacity: enregistrement ? 0.6 : 1 }} onClick={validerEtPdf} disabled={enregistrement}>
+                📄 Valider + PDF
+              </button>
+            </div>
           </div>
 
-          {/* Tableau récapitulatif des articles, en confirmation du montant ci-dessus */}
-          <div style={{
-            background: 'white',
-            border: '1px solid #e5e5e0',
-            borderRadius: 10,
-            overflow: 'hidden',
-          }}>
+          <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 10, overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
@@ -266,28 +242,72 @@ export default function Paiement() {
                   </tr>
                 ))}
                 {lignes.length === 0 && (
-                  <tr>
-                    <td colSpan={4} style={{ padding: 20, textAlign: 'center', color: '#888' }}>
-                      Aucun article commandé pour cette table
-                    </td>
-                  </tr>
+                  <tr><td colSpan={4} style={{ padding: 20, textAlign: 'center', color: '#888' }}>Aucun article commandé pour cette table</td></tr>
                 )}
               </tbody>
             </table>
           </div>
-
         </div>
       </div>
+
+      <TicketImprimable data={ticketData} />
     </div>
   );
 }
 
+function genererPdfTicket(data) {
+  const doc = new jsPDF({ unit: 'mm', format: [80, 200] });
+  let y = 8;
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(10);
+  doc.text(data.nom, 40, y, { align: 'center' }); y += 5;
+  doc.text(data.adresse, 40, y, { align: 'center' }); y += 4;
+  doc.text(data.codePostalVille, 40, y, { align: 'center' }); y += 4;
+  data.telephones.forEach(tel => { doc.text('Tel : ' + tel, 40, y, { align: 'center' }); y += 4; });
+  doc.text(data.tva, 40, y, { align: 'center' }); y += 6;
+  doc.text(new Date(data.date).toLocaleDateString('fr-BE'), 40, y, { align: 'center' }); y += 6;
+  if (data.table) {
+    doc.text(data.table + (data.reservation ? ' - ' + data.reservation : ''), 4, y);
+    y += 6;
+  }
+  data.lignes.forEach(l => {
+    doc.text(String(l.quantite), 4, y);
+    doc.text(l.nom.slice(0, 22), 12, y);
+    doc.text(l.total.toFixed(2), 76, y, { align: 'right' });
+    y += 5;
+  });
+  y += 2;
+  doc.text('Total des achats :', 4, y);
+  doc.text(data.montantTotal.toFixed(2), 76, y, { align: 'right' });
+  y += 6;
+  doc.text('à payer :', 4, y);
+  doc.text(data.montantTotal.toFixed(2), 76, y, { align: 'right' });
+  y += 8;
+  if (data.montantCarte > 0) {
+    doc.text('Bancontact :', 4, y);
+    doc.text(data.montantCarte.toFixed(2), 76, y, { align: 'right' });
+    y += 5;
+  }
+  if (data.montantCash > 0) {
+    doc.text('Cash :', 4, y);
+    doc.text(data.montantCash.toFixed(2), 76, y, { align: 'right' });
+    y += 5;
+  }
+  y += 4;
+  doc.text('Ref ticket : ' + data.numeroTicket, 4, y); y += 8;
+  doc.text('MERCI POUR VOTRE VISITE', 40, y, { align: 'center' }); y += 4;
+  doc.text('ET A BIENTÔT.', 40, y, { align: 'center' }); y += 8;
+  [6, 12, 21].forEach(taux => {
+    if (data.tvaParTaux[taux] > 0) {
+      doc.text('TVA ' + taux + '%', 4, y);
+      doc.text(data.tvaParTaux[taux].toFixed(2), 76, y, { align: 'right' });
+      y += 5;
+    }
+  });
+  doc.save('ticket-' + data.numeroTicket + '.pdf');
+}
+
 const inputStyle = {
-  width: '100%',
-  padding: '10px 12px',
-  borderRadius: 8,
-  border: '1px solid #ddd',
-  fontSize: 16,
-  textAlign: 'right',
-  boxSizing: 'border-box',
+  width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd',
+  fontSize: 16, textAlign: 'right', boxSizing: 'border-box',
 };
