@@ -304,7 +304,8 @@ function genererPdfTicket(data) {
       y += 5;
     }
   });
-  doc.save('ticket-' + data.numeroTicket + '.pdf');
+  const blobUrl = doc.output('bloburl');
+  window.open(blobUrl, '_blank');
 }
 
 const inputStyle = {
