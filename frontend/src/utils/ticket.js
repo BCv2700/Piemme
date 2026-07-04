@@ -1,3 +1,5 @@
+import jsPDF from 'jspdf';
+
 // Coordonnées du restaurant — à modifier ici si elles changent un jour
 export const COORDONNEES_RESTAURANT = {
   nom: "L'Olive",
@@ -36,9 +38,80 @@ export function genererDonneesTicket({
       quantite: Number(l.quantite),
       total: Number(l.prix_vente) * Number(l.quantite),
     })),
-    montantTotal,
-    montantCash,
-    montantCarte,
+    montantTotal: Number(montantTotal),
+    montantCash: Number(montantCash),
+    montantCarte: Number(montantCarte),
     tvaParTaux: calculerTvaParTaux(lignes),
   };
+}
+
+// Construit les données de ticket directement à partir d'un encaissement tel
+// que renvoyé par l'API (GET /encaissements/ ou POST /encaissements/), sans
+// avoir besoin de recharger table/articles séparément. Utile pour réimprimer
+// un ticket depuis la liste des encaissements.
+export function genererDonneesTicketDepuisEncaissement(enc) {
+  return genererDonneesTicket({
+    encaissementId: enc.id,
+    dateEncaissement: enc.date_encaissement,
+    tableNom: enc.table_nom,
+    nomReservation: enc.nom_reservation_archive,
+    lignes: enc.lignes || [],
+    montantCash: enc.montant_cash,
+    montantCarte: enc.montant_carte,
+    montantTotal: enc.montant_total,
+  });
+}
+
+// Génère le PDF du ticket et l'ouvre dans un nouvel onglet du navigateur.
+export function genererPdfTicket(data) {
+  const doc = new jsPDF({ unit: 'mm', format: [80, 200] });
+  let y = 8;
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(10);
+  doc.text(data.nom, 40, y, { align: 'center' }); y += 5;
+  doc.text(data.adresse, 40, y, { align: 'center' }); y += 4;
+  doc.text(data.codePostalVille, 40, y, { align: 'center' }); y += 4;
+  data.telephones.forEach(tel => { doc.text('Tel : ' + tel, 40, y, { align: 'center' }); y += 4; });
+  doc.text(data.tva, 40, y, { align: 'center' }); y += 6;
+  doc.text(new Date(data.date).toLocaleDateString('fr-BE'), 40, y, { align: 'center' }); y += 6;
+  if (data.table) {
+    doc.text(data.table + (data.reservation ? ' - ' + data.reservation : ''), 4, y);
+    y += 6;
+  }
+  data.lignes.forEach(l => {
+    doc.text(String(l.quantite), 4, y);
+    doc.text(l.nom.slice(0, 22), 12, y);
+    doc.text(l.total.toFixed(2), 76, y, { align: 'right' });
+    y += 5;
+  });
+  y += 2;
+  doc.text('Total des achats :', 4, y);
+  doc.text(data.montantTotal.toFixed(2), 76, y, { align: 'right' });
+  y += 6;
+  doc.text('à payer :', 4, y);
+  doc.text(data.montantTotal.toFixed(2), 76, y, { align: 'right' });
+  y += 8;
+  if (data.montantCarte > 0) {
+    doc.text('Bancontact :', 4, y);
+    doc.text(data.montantCarte.toFixed(2), 76, y, { align: 'right' });
+    y += 5;
+  }
+  if (data.montantCash > 0) {
+    doc.text('Cash :', 4, y);
+    doc.text(data.montantCash.toFixed(2), 76, y, { align: 'right' });
+    y += 5;
+  }
+  y += 4;
+  doc.text('Ref ticket : ' + data.numeroTicket, 4, y); y += 8;
+  doc.text('MERCI POUR VOTRE VISITE', 40, y, { align: 'center' }); y += 4;
+  doc.text('ET A BIENTÔT.', 40, y, { align: 'center' }); y += 8;
+  [6, 12, 21].forEach(taux => {
+    if (data.tvaParTaux[taux] > 0) {
+      doc.text('TVA ' + taux + '%', 4, y);
+      doc.text(data.tvaParTaux[taux].toFixed(2), 76, y, { align: 'right' });
+      y += 5;
+    }
+  });
+  const blobUrl = doc.output('bloburl');
+  window.open(blobUrl, '_blank');
 }

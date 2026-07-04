@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../api/api';
 import DetailEncaissementModal from '../components/DetailEncaissementModal';
+import TicketImprimable from '../components/TicketImprimable';
+import { genererDonneesTicketDepuisEncaissement, genererPdfTicket } from '../utils/ticket';
 
 function todayKey() {
   const d = new Date();
@@ -31,6 +33,7 @@ export default function Encaissements() {
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
   const [detailOuvert, setDetailOuvert] = useState(null); // id de l'encaissement affiché dans la modale, ou null
+  const [ticketAImprimer, setTicketAImprimer] = useState(null); // données du ticket en cours de réimpression papier
 
   const load = () => {
     setLoading(true);
@@ -128,6 +131,22 @@ export default function Encaissements() {
     }
   };
 
+  // Réimpression papier d'un ticket déjà enregistré : on construit les
+  // données du ticket depuis l'encaissement existant (pas de recréation en
+  // base), on les pousse dans TicketImprimable, puis on déclenche l'impression.
+  const reimprimerTicket = (enc) => {
+    if (enc.depenses) return; // pas de ticket client pour une dépense
+    const data = genererDonneesTicketDepuisEncaissement(enc);
+    setTicketAImprimer(data);
+    setTimeout(() => window.print(), 200);
+  };
+
+  const telechargerPdfTicket = (enc) => {
+    if (enc.depenses) return;
+    const data = genererDonneesTicketDepuisEncaissement(enc);
+    genererPdfTicket(data);
+  };
+
   const encaissementsTries = [...encaissements].sort((a, b) => new Date(a.date_encaissement) - new Date(b.date_encaissement));
 
   // Styles de cellules avec quadrillage
@@ -210,6 +229,7 @@ export default function Encaissements() {
                 <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
                   <th style={thCell()}></th>
                   <th style={thCell()}></th>
+                  <th style={thCell({ textAlign: 'center' })}>Ticket</th>
                   <th style={thCell()}>Réf</th>
                   <th style={thCell()}>Heure</th>
                   <th style={thCell()}>Ticket</th>
@@ -239,6 +259,24 @@ export default function Encaissements() {
                         style={{ width: 22, height: 22, padding: 0, fontSize: 11, color: '#dc2626', borderColor: '#fca5a5' }}
                         onClick={() => deleteEncaissement(enc.id)}
                       >✕</button>
+                    </td>
+                    <td style={tdCell({ textAlign: 'center', whiteSpace: 'nowrap' })}>
+                      {!enc.depenses && (
+                        <>
+                          <button
+                            className="btn"
+                            style={{ width: 22, height: 22, padding: 0, fontSize: 11, marginRight: 4 }}
+                            title="Réimprimer le ticket"
+                            onClick={() => reimprimerTicket(enc)}
+                          >🖨️</button>
+                          <button
+                            className="btn"
+                            style={{ width: 22, height: 22, padding: 0, fontSize: 11 }}
+                            title="Ticket en PDF"
+                            onClick={() => telechargerPdfTicket(enc)}
+                          >📄</button>
+                        </>
+                      )}
                     </td>
                     <td style={tdCell({ color: '#aaa' })}>{enc.id}</td>
                     <td style={tdCell({ whiteSpace: 'nowrap', color: '#666' })}>
@@ -310,6 +348,8 @@ export default function Encaissements() {
           onChanged={load}
         />
       )}
+
+      <TicketImprimable data={ticketAImprimer} />
     </div>
   );
 }
