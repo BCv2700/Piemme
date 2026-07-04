@@ -15,9 +15,7 @@ export default function TicketImprimable({ data }) {
       <div className="ticket-date">{dateAffichee}</div>
 
       {data.table && (
-        <div className="ticket-table">
-          {data.table}{data.reservation ? ' - ' + data.reservation : ''}
-        </div>
+        <div className="ticket-table">{data.table}</div>
       )}
 
       <table className="ticket-lignes">

@@ -24,7 +24,7 @@ export function calculerTvaParTaux(lignes) {
 }
 
 export function genererDonneesTicket({
-  encaissementId, dateEncaissement, tableNom, nomReservation,
+  encaissementId, dateEncaissement, tableNom,
   lignes, montantCash, montantCarte, montantTotal,
 }) {
   return {
@@ -32,7 +32,6 @@ export function genererDonneesTicket({
     numeroTicket: encaissementId,
     date: dateEncaissement,
     table: tableNom,
-    reservation: nomReservation,
     lignes: lignes.map(l => ({
       nom: l.article_nom,
       quantite: Number(l.quantite),
@@ -54,7 +53,6 @@ export function genererDonneesTicketDepuisEncaissement(enc) {
     encaissementId: enc.id,
     dateEncaissement: enc.date_encaissement,
     tableNom: enc.table_nom,
-    nomReservation: enc.nom_reservation_archive,
     lignes: enc.lignes || [],
     montantCash: enc.montant_cash,
     montantCarte: enc.montant_carte,
@@ -75,7 +73,7 @@ export function genererPdfTicket(data) {
   doc.text(data.tva, 40, y, { align: 'center' }); y += 6;
   doc.text(new Date(data.date).toLocaleDateString('fr-BE'), 40, y, { align: 'center' }); y += 6;
   if (data.table) {
-    doc.text(data.table + (data.reservation ? ' - ' + data.reservation : ''), 4, y);
+    doc.text(data.table, 4, y);
     y += 6;
   }
   data.lignes.forEach(l => {

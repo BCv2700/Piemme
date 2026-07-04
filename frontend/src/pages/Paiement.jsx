@@ -4,6 +4,17 @@ import api from '../api/api';
 import TicketImprimable from '../components/TicketImprimable';
 import { genererDonneesTicket, genererPdfTicket } from '../utils/ticket';
 
+// Normalise un nom de table pour le comparer sans tenir compte de la casse ni
+// des accents : "DÉPENSES", "Dépenses", "depenses" donnent tous "depenses".
+// Même logique que dans Caddy.jsx, pour détecter automatiquement la table
+// Dépenses et marquer l'encaissement correspondant en depenses = true.
+const normaliser = (s) =>
+  (s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+
 export default function Paiement() {
   const { tableId } = useParams();
   const navigate = useNavigate();
@@ -63,6 +74,9 @@ export default function Paiement() {
   const totalSaisi = carte + cash;
   const ecart = Math.round((totalSaisi - total) * 100) / 100;
 
+  // Table "Dépenses" détectée automatiquement (comme dans Caddy.jsx)
+  const estEncaissementDepense = table != null && normaliser(table.nom) === 'depenses';
+
   const cliquerCarte = () => { setMontantCarte(total.toFixed(2)); setMontantCash(''); };
   const cliquerCash = () => { setMontantCash(total.toFixed(2)); setMontantCarte(''); };
 
@@ -89,6 +103,11 @@ export default function Paiement() {
       emporte: lignes.some(l => l.emporte),
       nom_reservation_archive: nomReservation,
       date_encaissement: dateEncodage + 'T12:00:00',
+      // Marque automatiquement l'encaissement comme dépense si la table est
+      // "Dépenses" : évite d'avoir à cocher la case manuellement ensuite dans
+      // l'écran Encaissements, et garantit que le Récap Mensuel (Total Carte,
+      // vue Analysé et PDF) exclut bien ce montant dès l'encodage.
+      depenses: estEncaissementDepense,
       lignes: lignes.map(l => ({
         article_id: l.article_id,
         article_nom: nomArticle(l.article_id),
@@ -104,7 +123,6 @@ export default function Paiement() {
     encaissementId: encaissementCree.id,
     dateEncaissement: dateEncodage + 'T12:00:00',
     tableNom: table.nom,
-    nomReservation,
     lignes: lignes.map(l => ({
       article_nom: nomArticle(l.article_id),
       quantite: l.quantite,

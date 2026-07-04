@@ -187,6 +187,10 @@ export default function Caddy() {
   };
 
   // ───── AJOUT D'UNE DÉPENSE (avec saisie du montant) ──────────────────────
+  // Important : la quantité d'une ligne de dépense est TOUJOURS -1 (et non 1).
+  // Le montant saisi reste positif (prix_unitaire > 0), mais prix_unitaire × quantite
+  // donne donc un total de ligne négatif, cohérent avec le fait qu'une dépense
+  // est une sortie de caisse (montant_total négatif au niveau de l'encaissement).
   const ouvrirSaisieDepense = (article) => {
     setSaisieDepense({ article, montant: '' });
   };
@@ -203,7 +207,7 @@ export default function Caddy() {
       const res = await api.post('/commandes/', {
         table_id: Number(tableId),
         article_id: saisieDepense.article.id,
-        quantite: 1,
+        quantite: -1,
         prix_unitaire: montant,
         tva: saisieDepense.article.tva,
         emporte: false,
@@ -650,8 +654,19 @@ export default function Caddy() {
                         <span style={{ fontSize: 12, color: '#888' }}>€</span>
                       </div>
                     ) : (
-                      <div style={{ fontSize: 12, color: '#888' }}>
-                        {Number(ligne.prix_unitaire).toFixed(2)} € × {Number(ligne.quantite)}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          defaultValue={Number(ligne.prix_unitaire).toFixed(2)}
+                          onBlur={(e) => modifierMontantLigne(ligne, e.target.value)}
+                          style={{
+                            width: 64, padding: '4px 6px', borderRadius: 6,
+                            border: '1px solid #ddd', fontSize: 12,
+                          }}
+                        />
+                        <span style={{ fontSize: 12, color: '#888' }}>€ × {Number(ligne.quantite)}</span>
                       </div>
                     )}
                   </div>
