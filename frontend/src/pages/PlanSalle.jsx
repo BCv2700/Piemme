@@ -70,6 +70,7 @@ export default function PlanSalle() {
   const [msg, setMsg] = useState(null);
   const [editing, setEditing] = useState(null);
   const [editingHeureArrivee, setEditingHeureArrivee] = useState(null); // { tableId, valeur }
+  const [afficherStatutTables, setAfficherStatutTables] = useState(false);
   const roomRef = useRef(null);
   const dragRef = useRef(null);
   const clickTimerRef = useRef(null);
@@ -357,6 +358,25 @@ export default function PlanSalle() {
     .filter(t => t.reservation)
     .sort((a, b) => a.reservation.heure.localeCompare(b.reservation.heure));
 
+  // Dimensions de chaque table (mêmes règles que dans le rendu ci-dessous),
+  // centralisées ici pour calculer la taille du cadre du plan de salle.
+  const getTableDims = (table) => {
+    const width = table.forme === 'rond' ? 64 : (table.capacite >= 6 ? 100 : 80);
+    const hasReservation = !!table.reservation;
+    const height = table.forme === 'rond' ? 64 : (hasReservation ? 70 : (table.heureArrivee ? 58 : 44));
+    return { width, height };
+  };
+
+  // Taille du cadre du plan de salle, ajustée automatiquement à la position
+  // réelle des tables (ni coupé, ni trop de vide), plutôt qu'une valeur fixe.
+  const roomDims = tables.reduce((acc, t) => {
+    const { width, height } = getTableDims(t);
+    return {
+      width: Math.max(acc.width, t.pos_x + width + 30),
+      height: Math.max(acc.height, t.pos_y + height + 30),
+    };
+  }, { width: 500, height: 240 });
+
   return (
     <div>
       <div className="content">
@@ -397,6 +417,9 @@ export default function PlanSalle() {
               Réinitialiser ce jour
             </button>
           )}
+          <button className="btn" onClick={() => setAfficherStatutTables(true)}>
+            📋 Statut des tables
+          </button>
           {isReferenceDay && (
             <span style={{
               fontSize: 12, fontWeight: 600, color: '#b45309',
@@ -417,7 +440,7 @@ export default function PlanSalle() {
           <span style={{ marginLeft: 'auto' }}>
             {isToday
               ? 'Glissez une table pour la déplacer · Cliquez pour ouvrir le caddy · Double-cliquez pour la réservation'
-              : 'Double-cliquez pour réserver ce jour · Choisissez le statut ci-dessous'}
+              : "Double-cliquez pour réserver ce jour · Bouton \"Statut des tables\" pour changer le statut"}
           </span>
         </div>
 
@@ -426,9 +449,9 @@ export default function PlanSalle() {
             ref={roomRef}
             style={{
               position: 'relative',
-              flex: 1,
-              minWidth: 0,
-              height: 320,
+              flexShrink: 0,
+              width: roomDims.width,
+              height: roomDims.height,
               background: 'white',
               border: '1px solid #e5e5e0',
               borderRadius: 10,
@@ -518,8 +541,8 @@ export default function PlanSalle() {
           </div>
 
           <div style={{
-            width: 220, flexShrink: 0, background: 'white', border: '1px solid #e5e5e0',
-            borderRadius: 10, padding: 14, height: 320, overflowY: 'auto',
+            flex: 1, minWidth: 200, background: 'white', border: '1px solid #e5e5e0',
+            borderRadius: 10, padding: 14, height: roomDims.height, overflowY: 'auto',
           }}>
             <div style={{ fontSize: 12, color: '#888', fontWeight: 600, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>
               Réservations {isToday ? "(aujourd'hui)" : '— ' + selectedDate}
@@ -539,62 +562,71 @@ export default function PlanSalle() {
             ))}
           </div>
         </div>
+      </div>
 
-        <div
-          style={{
-            background: 'white',
-            border: '1px solid #e5e5e0',
-            borderRadius: 10,
-            padding: 16,
-          }}
-        >
-          <div style={{ fontSize: 12, color: '#888', fontWeight: 600, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>
-            Statut des tables {isToday ? "(aujourd'hui)" : '— ' + selectedDate}
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {[...tables].sort((a, b) => a.nom.localeCompare(b.nom, undefined, { numeric: true })).map(table => {
-              const disabled = !!table.reservation || isReferenceDay;
-              return (
-                <div
-                  key={table.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '6px 8px',
-                    border: '1px solid #eee',
-                    borderRadius: 8,
-                  }}
-                >
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>{table.nom}</span>
-                  <select
-                    value={table.statutEffectif}
-                    onChange={(e) => changerStatut(table.id, e.target.value)}
-                    disabled={disabled}
-                    title={disabled ? (table.reservation ? 'Réservée automatiquement ce jour' : 'Non modifiable sur le jour de référence') : STATUT_LABEL[table.statutEffectif]}
-                    style={{
-                      fontSize: 12,
-                      padding: '4px 4px',
-                      borderRadius: 6,
-                      border: '1px solid #ddd',
-                      color: STATUT_COLOR[table.statutEffectif] || '#555',
-                      fontWeight: 700,
-                      background: disabled ? '#f5f5f0' : 'white',
-                      width: 44,
-                      textAlign: 'center',
-                      cursor: disabled ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {Object.entries(STATUT_LABEL_COURT).map(([key, lettre]) => (
-                      <option key={key} value={key} title={STATUT_LABEL[key]}>{lettre}</option>
-                    ))}
-                  </select>
-                </div>
-              );
-            })}
+      {afficherStatutTables && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
+          padding: 20,
+        }}>
+          <div style={{ background: 'white', borderRadius: 10, width: 700, maxWidth: '95vw', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '14px 20px', borderBottom: '1px solid #e5e5e0', flexShrink: 0,
+            }}>
+              <div style={{ fontWeight: 600, fontSize: 16 }}>
+                Statut des tables {isToday ? "(aujourd'hui)" : '— ' + selectedDate}
+              </div>
+              <button className="btn" onClick={() => setAfficherStatutTables(false)}>Fermer</button>
+            </div>
+            <div style={{ padding: 20, overflowY: 'auto' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {[...tables].sort((a, b) => a.nom.localeCompare(b.nom, undefined, { numeric: true })).map(table => {
+                  const disabled = !!table.reservation || isReferenceDay;
+                  return (
+                    <div
+                      key={table.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '6px 8px',
+                        border: '1px solid #eee',
+                        borderRadius: 8,
+                      }}
+                    >
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>{table.nom}</span>
+                      <select
+                        value={table.statutEffectif}
+                        onChange={(e) => changerStatut(table.id, e.target.value)}
+                        disabled={disabled}
+                        title={disabled ? (table.reservation ? 'Réservée automatiquement ce jour' : 'Non modifiable sur le jour de référence') : STATUT_LABEL[table.statutEffectif]}
+                        style={{
+                          fontSize: 12,
+                          padding: '4px 4px',
+                          borderRadius: 6,
+                          border: '1px solid #ddd',
+                          color: STATUT_COLOR[table.statutEffectif] || '#555',
+                          fontWeight: 700,
+                          background: disabled ? '#f5f5f0' : 'white',
+                          width: 44,
+                          textAlign: 'center',
+                          cursor: disabled ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {Object.entries(STATUT_LABEL_COURT).map(([key, lettre]) => (
+                          <option key={key} value={key} title={STATUT_LABEL[key]}>{lettre}</option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {editing && (
         <div style={{
