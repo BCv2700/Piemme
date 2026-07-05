@@ -90,6 +90,14 @@ export default function Articles() {
   const ouvrirEdition = (article) => { setNouvelleCategorie(false); setEdition({ ...article }); };
   const fermerFormulaire = () => { setNouvelleCategorie(false); setEdition(null); };
 
+  // Duplique l'article en cours d'édition : bascule le formulaire en mode
+  // création (id retiré) avec les mêmes valeurs, nom suffixé "(copie)" pour
+  // éviter toute confusion si on enregistre sans y toucher.
+  const dupliquerArticle = () => {
+    setNouvelleCategorie(false);
+    setEdition(prev => ({ ...prev, id: undefined, nom: prev.nom + ' (copie)' }));
+  };
+
   const majChamp = (champ, valeur) => setEdition(prev => ({ ...prev, [champ]: valeur }));
 
   const enregistrer = async () => {
@@ -540,16 +548,18 @@ export default function Articles() {
             display: 'flex', flexDirection: 'column', overflow: 'hidden',
           }}>
             <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              display: 'flex', alignItems: 'center', gap: 16,
               padding: '14px 22px', borderBottom: '1px solid #e5e5e0', flexShrink: 0,
             }}>
-              <div style={{ fontWeight: 600, fontSize: 16 }}>
-                {edition.id ? 'Modifier l\u2019article' : 'Nouvel article'}
-              </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn" onClick={enregistrer}>
                   {edition.id ? 'Enregistrer' : 'Créer'}
                 </button>
+                {edition.id && (
+                  <button className="btn" onClick={dupliquerArticle}>
+                    Dupliquer
+                  </button>
+                )}
                 {edition.id && (
                   <button
                     className="btn"
@@ -560,6 +570,9 @@ export default function Articles() {
                   </button>
                 )}
                 <button className="btn" onClick={fermerFormulaire}>Annuler</button>
+              </div>
+              <div style={{ fontWeight: 600, fontSize: 16 }}>
+                {edition.id ? 'Modifier l\u2019article' : 'Nouvel article'}
               </div>
             </div>
 
