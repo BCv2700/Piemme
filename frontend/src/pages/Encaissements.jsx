@@ -29,6 +29,7 @@ export default function Encaissements() {
 
   const [dateUnique, setDateUnique] = useState(dateInitiale);
   const [encaissements, setEncaissements] = useState([]);
+  const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
@@ -37,8 +38,14 @@ export default function Encaissements() {
 
   const load = () => {
     setLoading(true);
-    api.get('/encaissements/', { params: { date_debut: dateUnique, date_fin: dateUnique } })
-      .then(r => setEncaissements(r.data))
+    Promise.all([
+      api.get('/encaissements/', { params: { date_debut: dateUnique, date_fin: dateUnique } }),
+      api.get('/clients/'),
+    ])
+      .then(([encRes, clientsRes]) => {
+        setEncaissements(encRes.data);
+        setClients(clientsRes.data);
+      })
       .catch(() => setError('Impossible de charger les encaissements'))
       .finally(() => setLoading(false));
   };
@@ -120,6 +127,19 @@ export default function Encaissements() {
     }
   };
 
+  // Changement de client directement depuis le tableau, enregistré aussitôt
+  // (comme les cases à cocher Emporté/Dépenses), pas besoin d'onBlur.
+  const changerClient = async (enc, nouveauClientIdStr) => {
+    const nouveauClientId = nouveauClientIdStr === '' ? null : Number(nouveauClientIdStr);
+    majLocal(enc.id, 'client_id', nouveauClientId);
+    try {
+      await api.patch('/encaissements/' + enc.id, { client_id: nouveauClientId });
+    } catch (e) {
+      showMsg('error', errMsg(e, 'Erreur lors du changement de client'));
+      load();
+    }
+  };
+
   const deleteEncaissement = async (encId) => {
     if (!window.confirm('Supprimer cet encaissement et toutes ses lignes ? Action irréversible.')) return;
     try {
@@ -149,9 +169,10 @@ export default function Encaissements() {
 
   const encaissementsTries = [...encaissements].sort((a, b) => new Date(a.date_encaissement) - new Date(b.date_encaissement));
 
-  // Styles de cellules avec quadrillage
-  const thCell = (extra = {}) => ({ padding: '6px 10px', border: BORDURE, ...extra });
-  const tdCell = (extra = {}) => ({ padding: '4px 10px', border: BORDURE, ...extra });
+  // Styles de cellules avec quadrillage, resserrés pour laisser de la place à
+  // la nouvelle colonne Client sans faire déborder le tableau.
+  const thCell = (extra = {}) => ({ padding: '5px 6px', border: BORDURE, ...extra });
+  const tdCell = (extra = {}) => ({ padding: '3px 6px', border: BORDURE, ...extra });
 
   return (
     <div>
@@ -223,7 +244,7 @@ export default function Encaissements() {
         ) : encaissementsTries.length === 0 ? (
           <div style={{ color: '#888', textAlign: 'center', padding: '40px 0' }}>Aucun encaissement ce jour</div>
         ) : (
-          <div style={{ background: 'white', border: BORDURE, borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ background: 'white', border: BORDURE, borderRadius: 10, overflow: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
@@ -234,8 +255,9 @@ export default function Encaissements() {
                   <th style={thCell()}>Heure</th>
                   <th style={thCell()}>Ticket</th>
                   <th style={thCell()}>Réservation</th>
-                  <th style={thCell({ textAlign: 'center' })}>Emporté</th>
-                  <th style={thCell({ textAlign: 'center' })}>Dépenses</th>
+                  <th style={thCell()}>Client</th>
+                  <th style={thCell({ textAlign: 'center' })}>Emp.</th>
+                  <th style={thCell({ textAlign: 'center' })}>Dép.</th>
                   <th style={thCell({ textAlign: 'center' })}>Cash</th>
                   <th style={thCell({ textAlign: 'center' })}>Carte</th>
                   <th style={thCell({ textAlign: 'center' })}>Total</th>
@@ -248,7 +270,7 @@ export default function Encaissements() {
                     <td style={tdCell()}>
                       <button
                         className="btn"
-                        style={{ width: 22, height: 22, padding: 0, fontSize: 11 }}
+                        style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
                         title="Voir / corriger le détail"
                         onClick={() => setDetailOuvert(enc.id)}
                       >⋯</button>
@@ -256,7 +278,7 @@ export default function Encaissements() {
                     <td style={tdCell()}>
                       <button
                         className="btn"
-                        style={{ width: 22, height: 22, padding: 0, fontSize: 11, color: '#dc2626', borderColor: '#fca5a5' }}
+                        style={{ width: 20, height: 20, padding: 0, fontSize: 11, color: '#dc2626', borderColor: '#fca5a5' }}
                         onClick={() => deleteEncaissement(enc.id)}
                       >✕</button>
                     </td>
@@ -265,24 +287,24 @@ export default function Encaissements() {
                         <>
                           <button
                             className="btn"
-                            style={{ width: 22, height: 22, padding: 0, fontSize: 11, marginRight: 4 }}
+                            style={{ width: 20, height: 20, padding: 0, fontSize: 11, marginRight: 3 }}
                             title="Réimprimer le ticket"
                             onClick={() => reimprimerTicket(enc)}
                           >🖨️</button>
                           <button
                             className="btn"
-                            style={{ width: 22, height: 22, padding: 0, fontSize: 11 }}
+                            style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
                             title="Ticket en PDF"
                             onClick={() => telechargerPdfTicket(enc)}
                           >📄</button>
                         </>
                       )}
                     </td>
-                    <td style={tdCell({ color: '#aaa' })}>{enc.id}</td>
-                    <td style={tdCell({ whiteSpace: 'nowrap', color: '#666' })}>
+                    <td style={tdCell({ color: '#aaa', width: 44 })}>{enc.id}</td>
+                    <td style={tdCell({ whiteSpace: 'nowrap', color: '#666', width: 54 })}>
                       {new Date(enc.date_encaissement).toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' })}
                     </td>
-                    <td style={tdCell({ padding: '2px 6px' })}>
+                    <td style={tdCell({ padding: '2px 4px', width: 64 })}>
                       {enc.depenses ? (
                         <span style={{ fontSize: 12, color: '#b91c1c', fontWeight: 600, paddingLeft: 4 }}>
                           {enc.lignes && enc.lignes[0] ? enc.lignes[0].article_nom : '—'}
@@ -296,14 +318,32 @@ export default function Encaissements() {
                         />
                       )}
                     </td>
-                    <td style={tdCell({ color: '#666' })}>{enc.nom_reservation_archive || '—'}</td>
-                    <td style={tdCell({ textAlign: 'center' })}>
-                      <input type="checkbox" checked={!!enc.emporte} onChange={() => toggleBool(enc, 'emporte')} style={{ width: 15, height: 15, cursor: 'pointer' }} />
+                    <td style={tdCell({ color: '#666', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}>
+                      {enc.nom_reservation_archive || '—'}
+                    </td>
+                    <td style={tdCell({ padding: '2px 4px' })}>
+                      <select
+                        value={enc.client_id ?? ''}
+                        onChange={(e) => changerClient(enc, e.target.value)}
+                        style={{
+                          width: '100%', fontSize: 11, padding: '3px 4px', borderRadius: 5,
+                          border: '1px solid #ddd', background: 'white', color: enc.client_id ? '#333' : '#aaa',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <option value="">—</option>
+                        {clients.map(c => (
+                          <option key={c.id} value={c.id}>{c.nom}</option>
+                        ))}
+                      </select>
                     </td>
                     <td style={tdCell({ textAlign: 'center' })}>
-                      <input type="checkbox" checked={!!enc.depenses} onChange={() => toggleBool(enc, 'depenses')} style={{ width: 15, height: 15, cursor: 'pointer' }} />
+                      <input type="checkbox" checked={!!enc.emporte} onChange={() => toggleBool(enc, 'emporte')} style={{ width: 14, height: 14, cursor: 'pointer' }} />
                     </td>
-                    <td style={tdCell({ padding: '2px 6px' })}>
+                    <td style={tdCell({ textAlign: 'center' })}>
+                      <input type="checkbox" checked={!!enc.depenses} onChange={() => toggleBool(enc, 'depenses')} style={{ width: 14, height: 14, cursor: 'pointer' }} />
+                    </td>
+                    <td style={tdCell({ padding: '2px 4px', width: 72 })}>
                       <input
                         type="number" step="0.01"
                         className="cell-input" style={{ ...inputStyle, width: '100%', textAlign: 'right' }}
@@ -312,7 +352,7 @@ export default function Encaissements() {
                         onBlur={() => saveEncaissement(enc)}
                       />
                     </td>
-                    <td style={tdCell({ padding: '2px 6px' })}>
+                    <td style={tdCell({ padding: '2px 4px', width: 72 })}>
                       <input
                         type="number" step="0.01"
                         className="cell-input" style={{ ...inputStyle, width: '100%', textAlign: 'right' }}
@@ -321,7 +361,7 @@ export default function Encaissements() {
                         onBlur={() => saveEncaissement(enc)}
                       />
                     </td>
-                    <td style={tdCell({ padding: '2px 6px' })}>
+                    <td style={tdCell({ padding: '2px 4px', width: 76 })}>
                       <input
                         type="number" step="0.01"
                         className="cell-input" style={{ ...inputStyle, width: '100%', textAlign: 'right', fontWeight: 700 }}
@@ -356,7 +396,7 @@ export default function Encaissements() {
 
 const inputStyle = {
   width: '100%',
-  padding: '2px 6px',
+  padding: '2px 4px',
   borderRadius: 5,
   border: '1px solid transparent',
   background: 'transparent',
