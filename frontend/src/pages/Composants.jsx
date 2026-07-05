@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import api from '../api/api';
 import SelecteurArticle from '../components/SelecteurArticle';
 
@@ -138,6 +140,72 @@ export default function Composants() {
   const thCell = (extra = {}) => ({ padding: '6px 14px', border: BORDURE, whiteSpace: 'nowrap', ...extra });
   const tdCell = (extra = {}) => ({ padding: '4px 14px', border: BORDURE, whiteSpace: 'nowrap', ...extra });
 
+  // ───── Export PDF, groupé par plat, en respectant les filtres actifs ────
+  const genererPdf = () => {
+    if (composantsAffiches.length === 0) {
+      afficherMsg('error', 'Aucun composant à imprimer avec les filtres actuels');
+      return;
+    }
+    // Regroupe les composants affichés (déjà filtrés) par plat
+    const parArticle = {};
+    composantsAffiches.forEach(c => {
+      if (!parArticle[c.article_id]) parArticle[c.article_id] = [];
+      parArticle[c.article_id].push(c);
+    });
+    const articlesTries = Object.keys(parArticle)
+      .map(id => articlesParId[id])
+      .filter(Boolean)
+      .sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    doc.setFontSize(16);
+    doc.setFont(undefined, 'bold');
+    doc.text('Composants par plat', 14, 15);
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'normal');
+    const sousTitre = [
+      filtreCategorie ? LIBELLES_CODE_VENTE[filtreCategorie] : null,
+      filtreArticleId ? articlesParId[filtreArticleId]?.nom : null,
+      recherche ? 'Recherche : "' + recherche + '"' : null,
+    ].filter(Boolean).join('  ·  ') || 'Tous les plats';
+    doc.text(sousTitre, 14, 21);
+
+    const body = [];
+    articlesTries.forEach(article => {
+      const lignes = parArticle[article.id];
+      const totalPlat = lignes.reduce((s, l) => s + Number(l.prix), 0);
+      body.push([{
+        content: article.nom + '  (' + (LIBELLES_CODE_VENTE[article.code_vente] || '—') + ')',
+        colSpan: 2,
+        styles: { fontStyle: 'bold', fillColor: [240, 240, 236] },
+      }]);
+      lignes.forEach(l => {
+        body.push([l.description, Number(l.prix).toFixed(2)]);
+      });
+      body.push([
+        { content: 'Total ' + article.nom, styles: { fontStyle: 'bold', fillColor: [250, 250, 248] } },
+        { content: totalPlat.toFixed(2), styles: { fontStyle: 'bold', fillColor: [250, 250, 248] } },
+      ]);
+    });
+
+    autoTable(doc, {
+      startY: 27,
+      head: [['Description', 'Prix']],
+      body,
+      styles: { fontSize: 8, cellPadding: 1.5, lineColor: [229, 229, 224], lineWidth: 0.1 },
+      headStyles: { fillColor: [250, 250, 248], textColor: [40, 40, 40], fontStyle: 'bold' },
+      columnStyles: {
+        0: { halign: 'left', cellWidth: 140 },
+        1: { halign: 'right' },
+      },
+      margin: { left: 14, right: 14 },
+    });
+
+    doc.setProperties({ title: 'composants-par-plat.pdf' });
+    const blobUrl = doc.output('bloburl');
+    window.open(blobUrl, '_blank');
+  };
+
   return (
     <div>
       <div className="content">
@@ -160,6 +228,7 @@ export default function Composants() {
             {composants.length} composant{composants.length !== 1 ? 's' : ''}
           </span>
           <button className="btn" onClick={ouvrirCreation}>+ Nouveau composant</button>
+          <button className="btn" onClick={genererPdf}>📄 PDF</button>
           <input
             type="text"
             placeholder="Rechercher par description ou par plat..."

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 function toDateKey(date) {
@@ -6,6 +6,57 @@ function toDateKey(date) {
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+// Menu déroulant générique : affiche un bouton, et une liste de liens au clic.
+// Se ferme automatiquement au clic en dehors (écouteur sur document).
+function MenuDeroulant({ label, actif, children }) {
+  const [ouvert, setOuvert] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const fermerSiExterieur = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOuvert(false);
+    };
+    document.addEventListener('mousedown', fermerSiExterieur);
+    return () => document.removeEventListener('mousedown', fermerSiExterieur);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOuvert(v => !v)}
+        style={{
+          padding: '8px 14px',
+          borderRadius: 8,
+          border: 'none',
+          background: actif ? '#111' : 'transparent',
+          color: actif ? 'white' : '#333',
+          fontSize: 14,
+          fontWeight: 500,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+        }}
+      >
+        {label} <span style={{ fontSize: 10 }}>▾</span>
+      </button>
+      {ouvert && (
+        <div
+          onClick={() => setOuvert(false)}
+          style={{
+            position: 'absolute', top: '100%', left: 0, marginTop: 4,
+            background: 'white', border: '1px solid #e5e5e0', borderRadius: 8,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.08)', minWidth: 170, zIndex: 50,
+            display: 'flex', flexDirection: 'column', padding: 6,
+          }}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function NavBar() {
@@ -37,6 +88,17 @@ export default function NavBar() {
     background: location.pathname === path ? '#111' : 'transparent',
   });
 
+  const itemMenuStyle = (path) => ({
+    padding: '8px 12px',
+    borderRadius: 6,
+    textDecoration: 'none',
+    fontSize: 13,
+    fontWeight: 500,
+    color: location.pathname === path ? '#111' : '#333',
+    background: location.pathname === path ? '#f0f0ee' : 'transparent',
+    whiteSpace: 'nowrap',
+  });
+
   const urlPlanSalle = dernierDatePlanSalle ? '/?date=' + dernierDatePlanSalle : '/';
   const suffixeDate = dernierDatePlanSalle ? '?date=' + dernierDatePlanSalle : '';
 
@@ -45,6 +107,9 @@ export default function NavBar() {
     localStorage.removeItem('lolive_username');
     navigate('/login');
   };
+
+  const cheminsGestion = ['/articles', '/achats', '/clients', '/composants'];
+  const cheminsRapports = ['/cout-matiere', '/reservations', '/historique'];
 
   return (
     <div style={{
@@ -56,15 +121,21 @@ export default function NavBar() {
       background: 'white',
     }}>
       <Link to={urlPlanSalle} style={linkStyle('/')}>Plan de salle</Link>
-      <Link to="/articles" style={linkStyle('/articles')}>Articles</Link>
-      <Link to="/achats" style={linkStyle('/achats')}>Achats</Link>
-      <Link to="/clients" style={linkStyle('/clients')}>Clients</Link>
-      <Link to="/cout-matiere" style={linkStyle('/cout-matiere')}>Coût matière</Link>
-      <Link to="/composants" style={linkStyle('/composants')}>Composants</Link>
-      <Link to="/reservations" style={linkStyle('/reservations')}>Réservations</Link>
-      <Link to={'/historique' + suffixeDate} style={linkStyle('/historique')}>Historique</Link>
       <Link to={'/encaissements' + suffixeDate} style={linkStyle('/encaissements')}>Encaissements</Link>
       <Link to={'/recap' + suffixeDate} style={linkStyle('/recap')}>Récap</Link>
+
+      <MenuDeroulant label="Gestion" actif={cheminsGestion.includes(location.pathname)}>
+        <Link to="/articles" style={itemMenuStyle('/articles')}>Articles</Link>
+        <Link to="/achats" style={itemMenuStyle('/achats')}>Achats</Link>
+        <Link to="/composants" style={itemMenuStyle('/composants')}>Composants</Link>
+        <Link to="/clients" style={itemMenuStyle('/clients')}>Clients</Link>
+      </MenuDeroulant>
+
+      <MenuDeroulant label="Rapports" actif={cheminsRapports.includes(location.pathname)}>
+        <Link to="/cout-matiere" style={itemMenuStyle('/cout-matiere')}>Coût matière</Link>
+        <Link to="/reservations" style={itemMenuStyle('/reservations')}>Réservations</Link>
+        <Link to={'/historique' + suffixeDate} style={itemMenuStyle('/historique')}>Historique</Link>
+      </MenuDeroulant>
 
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
         {username && <span style={{ fontSize: 13, color: '#888' }}>{username}</span>}
