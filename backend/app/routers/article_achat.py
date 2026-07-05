@@ -1,10 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import date as date_type
-import smtplib
 import os
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import requests
 
 from app.database import get_db
 from app.models.article_achat import ArticleAchat
@@ -71,9 +69,9 @@ def decocher_tout(db: Session = Depends(get_db), utilisateur: Utilisateur = Depe
 def envoyer_commande(db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     """
     Envoie par email la liste des articles cochés "à commander" (a_commander=True),
-    groupée par fournisseur. Compte d'envoi Gmail configuré via variables
-    d'environnement Railway : GMAIL_ADDRESS, GMAIL_APP_PASSWORD,
-    EMAIL_DESTINATAIRE_ACHATS.
+    groupée par fournisseur. Envoi via l'API Resend (HTTPS, ne dépend pas du SMTP,
+    qui est bloqué par Railway sur les plans Free/Hobby). Variables d'environnement
+    nécessaires : RESEND_API_KEY, EMAIL_DESTINATAIRE_ACHATS.
     Ne modifie JAMAIS le statut a_commander ni la date de dernière commande :
     c'est l'utilisateur qui décoche manuellement une fois la commande passée.
     """
@@ -86,10 +84,9 @@ def envoyer_commande(db: Session = Depends(get_db), utilisateur: Utilisateur = D
     if not articles:
         raise HTTPException(status_code=400, detail="Aucun article coché à commander")
 
-    gmail_address = os.getenv("GMAIL_ADDRESS")
-    gmail_password = os.getenv("GMAIL_APP_PASSWORD")
+    resend_api_key = os.getenv("RESEND_API_KEY")
     destinataire = os.getenv("EMAIL_DESTINATAIRE_ACHATS")
-    if not gmail_address or not gmail_password or not destinataire:
+    if not resend_api_key or not destinataire:
         raise HTTPException(
             status_code=500,
             detail="Configuration email manquante côté serveur (variables d'environnement Railway)",
@@ -114,18 +111,27 @@ def envoyer_commande(db: Session = Depends(get_db), utilisateur: Utilisateur = D
         lignes.append("")
     lignes.append(f"TOTAL : {total_general:.2f} €")
     corps = "\n".join(lignes)
+    corps_html = "<pre style=\"font-family: monospace; font-size: 14px;\">" + corps.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;") + "</pre>"
 
-    msg = MIMEMultipart()
-    msg["From"] = gmail_address
-    msg["To"] = destinataire
-    msg["Subject"] = "Liste d'achats - " + date_type.today().strftime("%d/%m/%Y")
-    msg.attach(MIMEText(corps, "plain"))
+    payload = {
+        "from": "Achats L'Olive <onboarding@resend.dev>",
+        "to": [destinataire],
+        "subject": "Liste d'achats - " + date_type.today().strftime("%d/%m/%Y"),
+        "text": corps,
+        "html": corps_html,
+    }
 
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(gmail_address, gmail_password)
-            server.sendmail(gmail_address, destinataire, msg.as_string())
+        reponse = requests.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": "Bearer " + resend_api_key, "Content-Type": "application/json"},
+            json=payload,
+            timeout=15,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail="Erreur lors de l'envoi de l'email : " + str(e))
+
+    if reponse.status_code >= 400:
+        raise HTTPException(status_code=500, detail="Erreur Resend (" + str(reponse.status_code) + ") : " + reponse.text)
 
     return {"message": "Email envoyé avec " + str(len(articles)) + " article(s)"}
