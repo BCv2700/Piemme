@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import api from '../api/api';
 
 const BORDURE = '1px solid #e5e5e0';
@@ -120,6 +122,58 @@ export default function CoutMatiere() {
   const pourcentage = totalCa > 0 ? (totalCout / totalCa) * 100 : 0;
   const fmt = (n) => Number(n).toFixed(2);
 
+  // ───── Export PDF ─────────────────────────────────────────────────────
+  const genererPdf = () => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const dateAffichee = new Date(dateUnique + 'T00:00:00').toLocaleDateString('fr-BE', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+    });
+
+    doc.setFontSize(16);
+    doc.setFont(undefined, 'bold');
+    doc.text('Coût matière', 14, 15);
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'normal');
+    doc.text(dateAffichee, 14, 22);
+
+    doc.setFontSize(9);
+    const ligneInfo = '% Coût matière : ' + pourcentage.toFixed(2) + '%'
+      + '    Coût matière : ' + fmt(totalCout)
+      + '    CA : ' + fmt(totalCa)
+      + '    Carte : ' + fmt(totalCarte)
+      + '    Cash : ' + fmt(totalCash);
+    doc.text(ligneInfo, 14, 29);
+
+    const body = [];
+    categories.forEach(cat => {
+      body.push([{ content: cat.libelle, colSpan: 4, styles: { fontStyle: 'bold', fillColor: [240, 240, 236] } }]);
+      cat.lignes.forEach(l => {
+        body.push([l.description, String(l.qteVendue), fmt(l.prixUnitaire), fmt(l.total)]);
+      });
+    });
+    body.push([{ content: 'Total coût matière', colSpan: 3, styles: { fontStyle: 'bold', fillColor: [250, 250, 248] } }, { content: fmt(totalCout), styles: { fontStyle: 'bold', fillColor: [250, 250, 248] } }]);
+
+    autoTable(doc, {
+      startY: 34,
+      head: [['Composant', 'Qté vendue', 'Prix', 'Total']],
+      body,
+      styles: { fontSize: 8, cellPadding: 1.5, lineColor: [229, 229, 224], lineWidth: 0.1 },
+      headStyles: { fillColor: [250, 250, 248], textColor: [40, 40, 40], fontStyle: 'bold' },
+      columnStyles: {
+        0: { halign: 'left', cellWidth: 100 },
+        1: { halign: 'right' },
+        2: { halign: 'right' },
+        3: { halign: 'right' },
+      },
+      margin: { left: 14, right: 14 },
+    });
+
+    const nomFichier = 'cout-matiere-' + dateUnique + '.pdf';
+    doc.setProperties({ title: nomFichier });
+    const blobUrl = doc.output('bloburl');
+    window.open(blobUrl, '_blank');
+  };
+
   const thCell = (extra = {}) => ({ padding: '6px 10px', border: BORDURE, ...extra });
   const tdCell = (extra = {}) => ({ padding: '4px 10px', border: BORDURE, ...extra });
 
@@ -139,6 +193,15 @@ export default function CoutMatiere() {
           />
           <button className="btn" onClick={() => setDateUnique(d => addDays(d, 1))}>+</button>
           <button className="btn" onClick={() => setDateUnique(todayKey())} style={{ color: '#888' }}>Aujourd'hui</button>
+          <button
+            onClick={genererPdf}
+            style={{
+              padding: '6px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8,
+              border: '1px solid #ddd', background: 'white', color: '#333', cursor: 'pointer',
+            }}
+          >
+            📄 PDF
+          </button>
         </div>
 
         {loading ? (
@@ -171,7 +234,7 @@ export default function CoutMatiere() {
             {categories.length === 0 ? (
               <div style={{ color: '#888', textAlign: 'center', padding: '40px 0' }}>Aucune vente ce jour</div>
             ) : (
-              <div style={{ background: 'white', border: BORDURE, borderRadius: 10, overflow: 'hidden' }}>
+              <div style={{ background: 'white', border: BORDURE, borderRadius: 10, overflow: 'hidden', maxWidth: 700 }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
