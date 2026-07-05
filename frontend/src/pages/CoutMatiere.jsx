@@ -91,8 +91,8 @@ export default function CoutMatiere() {
         const compos = article ? (composantsParArticle[article.id] || []) : [];
 
         const lignesCout = compos.length > 0
-          ? compos.map(c => ({ description: c.description, prixUnitaire: Number(c.prix) }))
-          : [{ description: article ? article.nom : ligne.article_nom, prixUnitaire: article ? Number(article.prix_achat || 0) : 0 }];
+          ? compos.map(c => ({ description: c.description, prixUnitaire: Number(c.prix), type: 'composant', id: c.id }))
+          : [{ description: article ? article.nom : ligne.article_nom, prixUnitaire: article ? Number(article.prix_achat || 0) : 0, type: 'article', id: article ? article.id : null }];
 
         lignesCout.forEach(lc => {
           const total = qte * lc.prixUnitaire;
@@ -108,12 +108,15 @@ export default function CoutMatiere() {
           if (existante) {
             existante.qteVendue += qte;
             existante.total += total;
+            if (lc.id != null && !existante.ids.includes(lc.id)) existante.ids.push(lc.id);
           } else {
             parCategorie[cle].set(cleLigne, {
               description: lc.description,
               qteVendue: qte,
               prixUnitaire: lc.prixUnitaire,
               total,
+              type: lc.type,
+              ids: lc.id != null ? [lc.id] : [],
             });
           }
         });
@@ -132,6 +135,29 @@ export default function CoutMatiere() {
 
   const pourcentage = totalCa > 0 ? (totalCout / totalCa) * 100 : 0;
   const fmt = (n) => Number(n).toFixed(2);
+
+  // Corrige le prix d'une ligne directement depuis le rapport. Comme une
+  // ligne peut regrouper plusieurs composants identiques (même description +
+  // même prix, potentiellement sur des plats différents), on met à jour TOUS
+  // les composants sous-jacents avec la nouvelle valeur — cohérent puisqu'ils
+  // partageaient déjà le même prix avant regroupement. Pour un article sans
+  // recette (coût = Prix d'achat), on met à jour l'article directement.
+  const corrigerPrix = async (ligne, valeurStr) => {
+    const nouveauPrix = Number(String(valeurStr).replace(',', '.'));
+    if (!Number.isFinite(nouveauPrix) || nouveauPrix < 0) return;
+    if (nouveauPrix === ligne.prixUnitaire) return;
+    setError('');
+    try {
+      if (ligne.type === 'composant') {
+        await Promise.all(ligne.ids.map(id => api.patch('/articles-composants/' + id, { prix: nouveauPrix })));
+      } else if (ligne.type === 'article' && ligne.ids[0] != null) {
+        await api.patch('/articles/' + ligne.ids[0], { prix_achat: nouveauPrix });
+      }
+      load();
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Erreur lors de la mise à jour du prix');
+    }
+  };
 
   // ───── Export PDF ─────────────────────────────────────────────────────
   const genererPdf = () => {
@@ -265,7 +291,21 @@ export default function CoutMatiere() {
                           <tr key={cat.cle + '-' + i}>
                             <td style={tdCell({ paddingLeft: 24 })}>{l.description}</td>
                             <td style={tdCell({ textAlign: 'right' })}>{l.qteVendue}</td>
-                            <td style={tdCell({ textAlign: 'right' })}>{fmt(l.prixUnitaire)}</td>
+                            <td style={tdCell({ padding: '2px 6px' })}>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                defaultValue={fmt(l.prixUnitaire)}
+                                onBlur={(e) => corrigerPrix(l, e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+                                title="Corriger ce prix (mis à jour partout où il est utilisé)"
+                                style={{
+                                  width: 80, padding: '4px 6px', borderRadius: 5,
+                                  border: '1px solid #ddd', fontSize: 13, textAlign: 'right',
+                                }}
+                              />
+                            </td>
                             <td style={tdCell({ textAlign: 'right', fontWeight: 600 })}>{fmt(l.total)}</td>
                           </tr>
                         ))}
