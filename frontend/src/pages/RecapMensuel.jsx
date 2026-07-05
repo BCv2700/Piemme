@@ -50,7 +50,7 @@ function calculerTotalKmMois(recapMois, annee, mois) {
 }
 
 export default function RecapMensuel() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [vue, setVue] = useState('tous'); // 'tous' = version 1 ; 'analyse' = version 2
   const [afficherTotaux, setAfficherTotaux] = useState(false);
@@ -297,6 +297,19 @@ export default function RecapMensuel() {
   };
 
   const fmt = (n) => Number(n).toFixed(2);
+
+  // Navigation mois précédent / suivant, en gardant le jour 1 par convention
+  // (le récap ne dépend que de l'année/mois, jamais du jour exact dans l'URL).
+  const moisPrecedent = () => {
+    let a = annee, m = mois - 1;
+    if (m < 1) { m = 12; a -= 1; }
+    setSearchParams({ date: dateKey(a, m, 1) });
+  };
+  const moisSuivant = () => {
+    let a = annee, m = mois + 1;
+    if (m > 12) { m = 1; a += 1; }
+    setSearchParams({ date: dateKey(a, m, 1) });
+  };
 
   // Clic sur un jour -> ouvre l'écran Encaissements positionné sur cette date
   const ouvrirJour = (jour) => {
@@ -569,9 +582,11 @@ export default function RecapMensuel() {
         {error && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+          <button className="btn" onClick={moisPrecedent} title="Mois précédent">−</button>
           <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, textTransform: 'capitalize' }}>
             {MOIS_NOMS[mois - 1]} {annee}
           </h2>
+          <button className="btn" onClick={moisSuivant} title="Mois suivant">+</button>
           <div style={{ display: 'flex', gap: 0, border: '1px solid #ddd', borderRadius: 8, overflow: 'hidden' }}>
             <button
               onClick={() => setVue('tous')}
@@ -625,6 +640,13 @@ export default function RecapMensuel() {
             >
               📆 Vue annuelle (km)
             </button>
+            <button
+              className="btn"
+              onClick={() => setAfficherTotaux(v => !v)}
+              style={{ fontSize: 12, color: '#666' }}
+            >
+              {afficherTotaux ? '▲ Masquer les totaux' : '▼ Afficher les totaux'}
+            </button>
           </div>
           <span style={{ fontSize: 13, color: '#888' }}>
             {vue === 'analyse' ? 'Ventes analysées uniquement' : 'Tous les encaissements'}
@@ -635,15 +657,6 @@ export default function RecapMensuel() {
           <div style={{ color: '#888' }}>Chargement...</div>
         ) : (
           <>
-            {/* Bandeau de totaux du mois, replié par défaut pour gagner de la place */}
-            <button
-              className="btn"
-              onClick={() => setAfficherTotaux(v => !v)}
-              style={{ marginBottom: 12, fontSize: 12, color: '#666' }}
-            >
-              {afficherTotaux ? '▲ Masquer les totaux' : '▼ Afficher les totaux'}
-            </button>
-
             {afficherTotaux && (
               <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
                 {vue === 'tous' ? (
