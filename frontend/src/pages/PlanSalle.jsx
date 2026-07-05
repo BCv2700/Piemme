@@ -428,7 +428,7 @@ export default function PlanSalle() {
               position: 'relative',
               flex: 1,
               minWidth: 0,
-              height: 560,
+              height: 320,
               background: 'white',
               border: '1px solid #e5e5e0',
               borderRadius: 10,
@@ -519,7 +519,7 @@ export default function PlanSalle() {
 
           <div style={{
             width: 220, flexShrink: 0, background: 'white', border: '1px solid #e5e5e0',
-            borderRadius: 10, padding: 14, height: 560, overflowY: 'auto',
+            borderRadius: 10, padding: 14, height: 320, overflowY: 'auto',
           }}>
             <div style={{ fontSize: 12, color: '#888', fontWeight: 600, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>
               Réservations {isToday ? "(aujourd'hui)" : '— ' + selectedDate}
