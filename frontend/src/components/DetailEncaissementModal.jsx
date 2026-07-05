@@ -271,7 +271,16 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
               style={{ minWidth: 180 }}
             />
           )}
-          <button className="btn" onClick={onClose} style={{ width: 28, height: 28, padding: 0, marginLeft: 'auto' }}>✕</button>
+          {enc && (
+            <button
+              className="btn"
+              style={{ color: '#dc2626', borderColor: '#fca5a5', fontSize: 12, whiteSpace: 'nowrap', marginLeft: 'auto' }}
+              onClick={deleteEncaissement}
+            >
+              Supprimer tout l'encaissement
+            </button>
+          )}
+          <button className="btn" onClick={onClose} style={{ width: 28, height: 28, padding: 0 }}>✕</button>
         </div>
 
         {msg && (
@@ -289,21 +298,6 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
           <div style={{ color: '#888' }}>Chargement...</div>
         ) : !enc ? null : (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 8 }}>
-              <div></div>
-              <div></div>
-              <div>
-                <button
-                  className="btn"
-                  style={{ color: '#dc2626', borderColor: '#fca5a5', fontSize: 12, whiteSpace: 'nowrap' }}
-                  onClick={deleteEncaissement}
-                >
-                  Supprimer tout l'encaissement
-                </button>
-              </div>
-              <div></div>
-            </div>
-
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
               <div>
                 <label style={labelStyle}>Date</label>
@@ -391,12 +385,12 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
             <div style={{ border: BORDURE, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, tableLayout: 'fixed' }}>
                 <colgroup>
-                  <col style={{ width: '38%' }} />
-                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '34%' }} />
+                  <col style={{ width: '6%' }} />
                   <col style={{ width: '15%' }} />
-                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '11%' }} />
                   <col style={{ width: '15%' }} />
-                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '11%' }} />
                   <col style={{ width: '8%' }} />
                 </colgroup>
                 <thead>
@@ -404,7 +398,7 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
                     <th style={{ padding: '6px 10px', border: BORDURE }}>Article</th>
                     <th style={{ padding: '6px 10px', border: BORDURE, textAlign: 'center' }}>Qté</th>
                     <th style={{ padding: '6px 10px', border: BORDURE, textAlign: 'center' }}>Px vente</th>
-                    <th style={{ padding: '6px 10px', border: BORDURE, textAlign: 'center' }}>TVA %</th>
+                    <th style={{ padding: '6px 10px', border: BORDURE, textAlign: 'center', whiteSpace: 'nowrap' }}>TVA %</th>
                     <th style={{ padding: '6px 10px', border: BORDURE, textAlign: 'right' }}>Prix payé</th>
                     <th
                       style={{ padding: '6px 10px', border: BORDURE, textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
