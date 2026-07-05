@@ -218,7 +218,7 @@ export default function Articles() {
 
   // Styles de cellules avec quadrillage
   const thCell = (extra = {}) => ({ padding: '6px 14px', border: BORDURE, whiteSpace: 'nowrap', ...extra });
-  const tdCell = (extra = {}) => ({ padding: '4px 14px', border: BORDURE, ...extra });
+  const tdCell = (extra = {}) => ({ padding: '4px 14px', border: BORDURE, whiteSpace: 'nowrap', ...extra });
 
   return (
     <div>
@@ -315,7 +315,7 @@ export default function Articles() {
         {loading ? (
           <div style={{ color: '#888' }}>Chargement...</div>
         ) : (
-          <div style={{ background: 'white', border: BORDURE, borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ background: 'white', border: BORDURE, borderRadius: 10, overflow: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
