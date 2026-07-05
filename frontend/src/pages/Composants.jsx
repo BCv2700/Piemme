@@ -86,10 +86,26 @@ export default function Composants() {
     majComposant(composant.id, { description: valeur });
   };
 
-  const changerPrix = (composant, valeur) => {
+  // Corrige le prix d'un composant ET le propage à tous les composants ayant
+  // EXACTEMENT la même description (insensible à la casse/espaces), sur
+  // n'importe quel autre plat — comportement demandé pour que "Serviette"
+  // reste au même prix partout où il apparaît.
+  const changerPrix = async (composant, valeur) => {
     const n = Number(String(valeur).replace(',', '.'));
     if (!Number.isFinite(n) || n < 0) return;
-    majComposant(composant.id, { prix: n });
+    setError('');
+    const cleDescription = composant.description.trim().toLowerCase();
+    const memeDescription = composants.filter(c => c.description.trim().toLowerCase() === cleDescription);
+    try {
+      await Promise.all(memeDescription.map(c => api.patch('/articles-composants/' + c.id, { prix: n })));
+      const idsMaj = memeDescription.map(c => c.id);
+      setComposants(prev => prev.map(c => idsMaj.includes(c.id) ? { ...c, prix: n } : c));
+      if (memeDescription.length > 1) {
+        afficherMsg('success', 'Prix mis à jour sur ' + memeDescription.length + ' composants « ' + composant.description + ' »');
+      }
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Erreur lors de la mise à jour');
+    }
   };
 
   const changerArticle = (composant, nouvelArticleId) => {
@@ -269,9 +285,6 @@ export default function Composants() {
               Réinitialiser les filtres
             </button>
           )}
-          <span style={{ marginLeft: 'auto', fontSize: 13, color: '#888' }}>
-            Total affiché : <strong style={{ color: '#111' }}>{totalAffiche.toFixed(2)} €</strong>
-          </span>
         </div>
 
         {loading ? (
