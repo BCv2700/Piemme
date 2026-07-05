@@ -81,9 +81,20 @@ export default function Composants() {
     }
   };
 
+  // Corrige la description d'un composant. Si la nouvelle description
+  // correspond exactement à un composant déjà existant ailleurs ET que le
+  // prix actuel de cette ligne est encore à 0 (jamais renseigné), reprend
+  // aussi son prix — même logique que pour la création.
   const changerDescription = (composant, valeur) => {
     if (!valeur.trim()) return;
-    majComposant(composant.id, { description: valeur });
+    const correspondance = composants.find(
+      c => c.id !== composant.id && c.description.trim().toLowerCase() === valeur.trim().toLowerCase()
+    );
+    const champs = { description: valeur };
+    if (correspondance && Number(composant.prix) === 0) {
+      champs.prix = Number(correspondance.prix);
+    }
+    majComposant(composant.id, champs);
   };
 
   // Corrige le prix d'un composant ET le propage à tous les composants ayant
@@ -308,6 +319,10 @@ export default function Composants() {
           )}
         </div>
 
+        <datalist id="descriptions-existantes">
+          {descriptionsExistantes.map(d => <option key={d} value={d} />)}
+        </datalist>
+
         {loading ? (
           <div style={{ color: '#888' }}>Chargement...</div>
         ) : (
@@ -341,6 +356,7 @@ export default function Composants() {
                       <td style={tdCell({ whiteSpace: 'normal', minWidth: 220, padding: '2px 6px' })}>
                         <input
                           type="text"
+                          list="descriptions-existantes"
                           className="cell-input"
                           defaultValue={c.description}
                           onBlur={(e) => changerDescription(c, e.target.value)}
@@ -427,9 +443,6 @@ export default function Composants() {
               placeholder="Ex: 5 scampis"
               style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, marginBottom: 14, boxSizing: 'border-box' }}
             />
-            <datalist id="descriptions-existantes">
-              {descriptionsExistantes.map(d => <option key={d} value={d} />)}
-            </datalist>
 
             <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Prix</label>
             <input
