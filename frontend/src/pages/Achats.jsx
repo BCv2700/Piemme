@@ -14,7 +14,7 @@ const ARTICLE_ACHAT_VIDE = {
 
 export default function Achats() {
   const [articles, setArticles] = useState([]);
-  const [recherche, setRecherche] = useState('');
+  const [filtreLettre, setFiltreLettre] = useState(null); // null = toutes les lettres, sinon 'A'..'Z'
   const [filtreCochesUniquement, setFiltreCochesUniquement] = useState(false);
   const [creation, setCreation] = useState(null); // null = fermé, sinon = ARTICLE_ACHAT_VIDE en cours de saisie
   const [error, setError] = useState('');
@@ -41,9 +41,10 @@ export default function Achats() {
   const magasinsExistants = [...new Set(articles.map(a => a.magasin).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b, 'fr'));
 
+  const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+
   const articlesAffiches = articles.filter(a =>
-    (a.nom.toLowerCase().includes(recherche.toLowerCase()) ||
-      (a.magasin || '').toLowerCase().includes(recherche.toLowerCase())) &&
+    (!filtreLettre || a.nom.toUpperCase().startsWith(filtreLettre)) &&
     (!filtreCochesUniquement || a.a_commander)
   );
 
@@ -269,7 +270,7 @@ export default function Achats() {
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, color: '#888', fontWeight: 600, whiteSpace: 'nowrap' }}>
             {articles.length} article{articles.length !== 1 ? 's' : ''}
           </span>
@@ -283,16 +284,34 @@ export default function Achats() {
             />
             Cochés uniquement
           </label>
-          <input
-            type="text"
-            placeholder="Rechercher par nom ou fournisseur..."
-            value={recherche}
-            onChange={(e) => setRecherche(e.target.value)}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 16, flexWrap: 'wrap' }}>
+          <button
+            className="btn"
+            onClick={() => setFiltreLettre(null)}
             style={{
-              flex: 1, minWidth: 200, padding: '10px 14px', borderRadius: 8,
-              border: '1px solid #ddd', fontSize: 14,
+              fontWeight: 600, padding: '6px 12px',
+              background: filtreLettre === null ? '#111' : 'white',
+              color: filtreLettre === null ? 'white' : '#333',
             }}
-          />
+          >
+            Tout
+          </button>
+          {ALPHABET.map(lettre => (
+            <button
+              key={lettre}
+              className="btn"
+              onClick={() => setFiltreLettre(lettre)}
+              style={{
+                padding: '6px 10px', minWidth: 32,
+                background: filtreLettre === lettre ? '#111' : 'white',
+                color: filtreLettre === lettre ? 'white' : '#333',
+              }}
+            >
+              {lettre}
+            </button>
+          ))}
         </div>
 
         <datalist id="magasins-datalist">
