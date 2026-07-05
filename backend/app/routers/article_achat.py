@@ -51,6 +51,22 @@ def delete_article_achat(article_id: int, db: Session = Depends(get_db), utilisa
     return {"message": "Article supprimé"}
 
 
+@router.post("/decocher-tout")
+def decocher_tout(db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
+    """
+    Décoche a_commander pour tous les articles en une seule requête SQL (UPDATE
+    en masse), au lieu d'une requête par article. Beaucoup plus rapide côté
+    interface, et évite de multiplier les connexions à la base pour rien.
+    """
+    nb = (
+        db.query(ArticleAchat)
+        .filter(ArticleAchat.a_commander == True)  # noqa: E712
+        .update({ArticleAchat.a_commander: False})
+    )
+    db.commit()
+    return {"message": str(nb) + " article(s) décoché(s)", "nb": nb}
+
+
 @router.post("/envoyer-commande")
 def envoyer_commande(db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
     """
