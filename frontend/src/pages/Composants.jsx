@@ -81,20 +81,12 @@ export default function Composants() {
     }
   };
 
-  // Corrige la description d'un composant. Si la nouvelle description
-  // correspond exactement à un composant déjà existant ailleurs ET que le
-  // prix actuel de cette ligne est encore à 0 (jamais renseigné), reprend
-  // aussi son prix — même logique que pour la création.
+  // Corrige la description d'un composant. Ne touche JAMAIS au prix
+  // automatiquement (voir suggestionPrix pour l'affichage d'une suggestion
+  // que l'utilisateur applique lui-même s'il le souhaite).
   const changerDescription = (composant, valeur) => {
     if (!valeur.trim()) return;
-    const correspondance = composants.find(
-      c => c.id !== composant.id && c.description.trim().toLowerCase() === valeur.trim().toLowerCase()
-    );
-    const champs = { description: valeur };
-    if (correspondance && Number(composant.prix) === 0) {
-      champs.prix = Number(correspondance.prix);
-    }
-    majComposant(composant.id, champs);
+    majComposant(composant.id, { description: valeur });
   };
 
   // Corrige le prix d'un composant ET le propage à tous les composants ayant
@@ -171,18 +163,24 @@ export default function Composants() {
     composants.map(c => [c.description.trim().toLowerCase(), c.description.trim()])
   ).values()].sort((a, b) => a.localeCompare(b, 'fr'));
 
-  // Quand la description saisie correspond exactement (insensible à la casse)
-  // à un composant déjà existant, propose son prix automatiquement — sauf si
-  // l'utilisateur a déjà rempli un prix lui-même.
-  const changerDescriptionCreation = (valeur) => {
-    const correspondance = composants.find(
-      c => c.description.trim().toLowerCase() === valeur.trim().toLowerCase()
-    );
-    setCreation(prev => ({
-      ...prev,
-      description: valeur,
-      prix: (correspondance && (prev.prix === '' || prev.prix == null)) ? Number(correspondance.prix) : prev.prix,
-    }));
+  // Cherche un prix "habituel" pour une description donnée : le prix le plus
+  // fréquent parmi les composants existants portant EXACTEMENT ce texte
+  // (insensible casse/espaces). Ne renvoie qu'une SUGGESTION à afficher —
+  // jamais appliqué automatiquement, pour ne jamais écraser silencieusement
+  // un prix par une valeur devinée (ex: 0 si la plupart des lignes existantes
+  // ne sont pas encore renseignées).
+  const suggestionPrix = (description, idExclu = null) => {
+    const cle = description.trim().toLowerCase();
+    if (!cle) return null;
+    const correspondances = composants.filter(c => c.id !== idExclu && c.description.trim().toLowerCase() === cle);
+    if (correspondances.length === 0) return null;
+    const comptage = {};
+    correspondances.forEach(c => {
+      const p = Number(c.prix);
+      comptage[p] = (comptage[p] || 0) + 1;
+    });
+    const [prixPlusFrequent] = Object.entries(comptage).sort((a, b) => b[1] - a[1])[0];
+    return { prix: Number(prixPlusFrequent), nbOccurrences: correspondances.length };
   };
 
   const thCell = (extra = {}) => ({ padding: '6px 14px', border: BORDURE, whiteSpace: 'nowrap', ...extra });
@@ -439,10 +437,26 @@ export default function Composants() {
               list="descriptions-existantes"
               autoFocus
               value={creation.description}
-              onChange={(e) => changerDescriptionCreation(e.target.value)}
+              onChange={(e) => setCreation({ ...creation, description: e.target.value })}
               placeholder="Ex: 5 scampis"
-              style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, marginBottom: 14, boxSizing: 'border-box' }}
+              style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, marginBottom: 6, boxSizing: 'border-box' }}
             />
+            {(() => {
+              const suggestion = suggestionPrix(creation.description);
+              if (!suggestion) return null;
+              return (
+                <div
+                  onClick={() => setCreation(prev => ({ ...prev, prix: suggestion.prix }))}
+                  style={{
+                    fontSize: 12, color: '#2563eb', cursor: 'pointer', marginBottom: 14,
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}
+                >
+                  💡 Prix habituel pour ce composant : <strong>{suggestion.prix.toFixed(2)} €</strong>
+                  {suggestion.nbOccurrences > 1 ? ' (utilisé ' + suggestion.nbOccurrences + ' fois)' : ''} — cliquer pour l'utiliser
+                </div>
+              );
+            })()}
 
             <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Prix</label>
             <input
