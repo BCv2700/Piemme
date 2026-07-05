@@ -6,6 +6,7 @@ import Caddy from './pages/Caddy';
 import Paiement from './pages/Paiement';
 import Articles from './pages/Articles';
 import Achats from './pages/Achats';
+import Clients from './pages/Clients';
 import Reservations from './pages/Reservations';
 import HistoriqueVentes from './pages/HistoriqueVentes';
 import Encaissements from './pages/Encaissements';
@@ -41,6 +42,7 @@ function App() {
         <Route path="/paiement/:tableId" element={<RouteProtegee><MiseEnPage><Paiement /></MiseEnPage></RouteProtegee>} />
         <Route path="/articles" element={<RouteProtegee><MiseEnPage><Articles /></MiseEnPage></RouteProtegee>} />
         <Route path="/achats" element={<RouteProtegee><MiseEnPage><Achats /></MiseEnPage></RouteProtegee>} />
+        <Route path="/clients" element={<RouteProtegee><MiseEnPage><Clients /></MiseEnPage></RouteProtegee>} />
         <Route path="/reservations" element={<RouteProtegee><MiseEnPage><Reservations /></MiseEnPage></RouteProtegee>} />
         <Route path="/historique" element={<RouteProtegee><MiseEnPage><HistoriqueVentes /></MiseEnPage></RouteProtegee>} />
         <Route path="/encaissements" element={<RouteProtegee><MiseEnPage><Encaissements /></MiseEnPage></RouteProtegee>} />
