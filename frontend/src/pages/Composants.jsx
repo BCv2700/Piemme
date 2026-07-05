@@ -153,6 +153,27 @@ export default function Composants() {
     }
   };
 
+  // Descriptions déjà utilisées ailleurs (tous plats confondus), pour
+  // suggestion à la création — évite de retaper "Semoule" différemment
+  // à chaque fois et permet de reprendre le même prix déjà en place.
+  const descriptionsExistantes = [...new Map(
+    composants.map(c => [c.description.trim().toLowerCase(), c.description.trim()])
+  ).values()].sort((a, b) => a.localeCompare(b, 'fr'));
+
+  // Quand la description saisie correspond exactement (insensible à la casse)
+  // à un composant déjà existant, propose son prix automatiquement — sauf si
+  // l'utilisateur a déjà rempli un prix lui-même.
+  const changerDescriptionCreation = (valeur) => {
+    const correspondance = composants.find(
+      c => c.description.trim().toLowerCase() === valeur.trim().toLowerCase()
+    );
+    setCreation(prev => ({
+      ...prev,
+      description: valeur,
+      prix: (correspondance && (prev.prix === '' || prev.prix == null)) ? Number(correspondance.prix) : prev.prix,
+    }));
+  };
+
   const thCell = (extra = {}) => ({ padding: '6px 14px', border: BORDURE, whiteSpace: 'nowrap', ...extra });
   const tdCell = (extra = {}) => ({ padding: '4px 14px', border: BORDURE, whiteSpace: 'nowrap', ...extra });
 
@@ -399,12 +420,16 @@ export default function Composants() {
             <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Description</label>
             <input
               type="text"
+              list="descriptions-existantes"
               autoFocus
               value={creation.description}
-              onChange={(e) => setCreation({ ...creation, description: e.target.value })}
+              onChange={(e) => changerDescriptionCreation(e.target.value)}
               placeholder="Ex: 5 scampis"
               style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, marginBottom: 14, boxSizing: 'border-box' }}
             />
+            <datalist id="descriptions-existantes">
+              {descriptionsExistantes.map(d => <option key={d} value={d} />)}
+            </datalist>
 
             <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Prix</label>
             <input
