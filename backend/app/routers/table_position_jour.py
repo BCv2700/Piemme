@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 from app.database import get_db
 from app.models.table_position_jour import TablePositionJour
@@ -10,6 +10,7 @@ from app.schemas.table_position_jour import (
     TablePositionJourOut,
     TablePositionJourUpsert,
     TablePositionJourStatutUpsert,
+    TablePositionJourHeureArriveeUpsert,
 )
 from app.deps import get_current_user
 from app.models.utilisateur import Utilisateur
@@ -80,7 +81,7 @@ def upsert_position_jour(payload: TablePositionJourUpsert, db: Session = Depends
     stmt = stmt.on_conflict_do_update(
         constraint='uq_table_position_jour_table_date',
         set_={'pos_x': payload.pos_x, 'pos_y': payload.pos_y},
-    ).returning(TablePositionJour.id, TablePositionJour.statut)
+    ).returning(TablePositionJour.id, TablePositionJour.statut, TablePositionJour.heure_arrivee)
 
     result = db.execute(stmt)
     db.commit()
@@ -93,6 +94,7 @@ def upsert_position_jour(payload: TablePositionJourUpsert, db: Session = Depends
         pos_x=payload.pos_x,
         pos_y=payload.pos_y,
         statut=row.statut,
+        heure_arrivee=row.heure_arrivee,
     )
 
 
@@ -102,10 +104,25 @@ def upsert_statut_jour(payload: TablePositionJourStatutUpsert, db: Session = Dep
     Enregistre le statut manuel (libre/occupee/reservee/indisponible) d'une table
     pour un jour donné, sans toucher à sa position éventuelle ce jour-là.
     Upsert atomique sur la contrainte unique (table_id, date).
+
+    Heure d'arrivée : dès que le statut passe à "occupee", l'heure d'arrivée est
+    enregistrée automatiquement avec l'heure serveur actuelle, MAIS seulement si
+    aucune heure d'arrivée n'existe déjà pour ce jour (pour ne pas l'écraser si on
+    bascule le statut plusieurs fois, ou si elle a déjà été modifiée manuellement).
+    Passer à un autre statut ne touche jamais à l'heure d'arrivée déjà enregistrée.
     """
     table = db.query(Table).filter(Table.id == payload.table_id).first()
     if not table:
         raise HTTPException(status_code=404, detail="Table introuvable")
+
+    existing = db.query(TablePositionJour).filter(
+        TablePositionJour.table_id == payload.table_id,
+        TablePositionJour.date == payload.date,
+    ).first()
+
+    heure_arrivee_val = existing.heure_arrivee if existing else None
+    if payload.statut == 'occupee' and heure_arrivee_val is None:
+        heure_arrivee_val = datetime.now().time()
 
     stmt = pg_insert(TablePositionJour).values(
         table_id=payload.table_id,
@@ -113,10 +130,11 @@ def upsert_statut_jour(payload: TablePositionJourStatutUpsert, db: Session = Dep
         pos_x=None,
         pos_y=None,
         statut=payload.statut,
+        heure_arrivee=heure_arrivee_val,
     )
     stmt = stmt.on_conflict_do_update(
         constraint='uq_table_position_jour_table_date',
-        set_={'statut': payload.statut},
+        set_={'statut': payload.statut, 'heure_arrivee': heure_arrivee_val},
     ).returning(TablePositionJour.id, TablePositionJour.pos_x, TablePositionJour.pos_y)
 
     result = db.execute(stmt)
@@ -130,6 +148,46 @@ def upsert_statut_jour(payload: TablePositionJourStatutUpsert, db: Session = Dep
         pos_x=row.pos_x,
         pos_y=row.pos_y,
         statut=payload.statut,
+        heure_arrivee=heure_arrivee_val,
+    )
+
+
+@router.put("/heure-arrivee", response_model=TablePositionJourOut)
+def upsert_heure_arrivee(payload: TablePositionJourHeureArriveeUpsert, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):
+    """
+    Modifie manuellement l'heure d'arrivée d'une table pour un jour donné,
+    sans toucher à son statut ni à sa position éventuelle.
+    Upsert atomique sur la contrainte unique (table_id, date).
+    """
+    table = db.query(Table).filter(Table.id == payload.table_id).first()
+    if not table:
+        raise HTTPException(status_code=404, detail="Table introuvable")
+
+    stmt = pg_insert(TablePositionJour).values(
+        table_id=payload.table_id,
+        date=payload.date,
+        pos_x=None,
+        pos_y=None,
+        statut=None,
+        heure_arrivee=payload.heure_arrivee,
+    )
+    stmt = stmt.on_conflict_do_update(
+        constraint='uq_table_position_jour_table_date',
+        set_={'heure_arrivee': payload.heure_arrivee},
+    ).returning(TablePositionJour.id, TablePositionJour.pos_x, TablePositionJour.pos_y, TablePositionJour.statut)
+
+    result = db.execute(stmt)
+    db.commit()
+    row = result.one()
+
+    return TablePositionJourOut(
+        id=row.id,
+        table_id=payload.table_id,
+        date=payload.date,
+        pos_x=row.pos_x,
+        pos_y=row.pos_y,
+        statut=row.statut,
+        heure_arrivee=payload.heure_arrivee,
     )
 
 
