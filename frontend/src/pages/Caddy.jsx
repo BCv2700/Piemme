@@ -49,6 +49,7 @@ export default function Caddy() {
   const [table, setTable] = useState(null);
   const [articles, setArticles] = useState([]);
   const [lignes, setLignes] = useState([]);
+  const [heureArrivee, setHeureArrivee] = useState(null); // heure d'arrivée de la table, pour le ticket cuisine
   const [codeVente, setCodeVente] = useState(null); // niveau 1 : code_vente (Boissons Alcools, Nourriture...)
   const [categorie, setCategorie] = useState(null); // niveau 2 : type_article (2. APERITIF, VIN ROUGE...)
   const [emporte, setEmporte] = useState(false);
@@ -67,15 +68,29 @@ export default function Caddy() {
       setLoading(false);
       return;
     }
+    // Jour concerné : celui d'où on vient (retourDate, si on ouvre le caddy
+    // depuis un autre jour du plan de salle) sinon aujourd'hui — c'est ce
+    // jour-là qui porte l'heure d'arrivée éventuelle de la table.
+    const todayKey = (() => {
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    })();
+    const dateAUtiliser = retourDate || todayKey;
     try {
-      const [tableRes, articlesRes, lignesRes] = await Promise.all([
+      const [tableRes, articlesRes, lignesRes, positionsRes] = await Promise.all([
         api.get('/tables/' + tableId),
         api.get('/articles/', { params: { actif: true } }),
         api.get('/commandes/', { params: { table_id: tableId } }),
+        api.get('/table-positions-jour/', { params: { date_jour: dateAUtiliser } }),
       ]);
       setTable(tableRes.data);
       setArticles(articlesRes.data);
       setLignes(lignesRes.data);
+      const positionJour = positionsRes.data.find(p => p.table_id === Number(tableId));
+      setHeureArrivee(positionJour && positionJour.heure_arrivee ? positionJour.heure_arrivee.slice(0, 5) : null);
     } catch (e) {
       setError(errMsg(e, 'Impossible de charger le caddy'));
     } finally {
@@ -290,6 +305,7 @@ export default function Caddy() {
     return {
       table: table ? table.nom : '',
       reservation: table ? (table.nom_reservation || '') : '',
+      heureArrivee: heureArrivee,
       items,
     };
   };
@@ -323,6 +339,7 @@ export default function Caddy() {
             hr { border: none; border-top: 1px dashed #000; margin: 8px 0; }
             .item { font-size: 14px; margin-bottom: 6px; }
             .qte { font-weight: bold; }
+            .heure-arrivee { font-size: 12px; text-align: center; margin-bottom: 8px; color: #333; }
           </style>
         </head>
         <body>
@@ -330,6 +347,7 @@ export default function Caddy() {
           <h1>🍳 CUISINE</h1>
           <div class="table">${escapeHtml(contenu.table)}</div>
           ${contenu.reservation ? '<div class="reservation">' + escapeHtml(contenu.reservation) + '</div>' : ''}
+          ${contenu.heureArrivee ? '<div class="heure-arrivee">Arrivée : ' + escapeHtml(contenu.heureArrivee) + '</div>' : ''}
           <hr />
           ${ligneItems || '<div class="item">(aucun article)</div>'}
         </body>
@@ -388,8 +406,8 @@ export default function Caddy() {
     setError('');
     const contenu = construireContenuTicket(lignesCuisineTotales);
     // Format proche d'un ticket : 72mm de large, hauteur étendue selon le nombre de lignes
-    // + l'espace blanc réservé en haut du ticket.
-    const hauteurMm = 40 + ESPACE_HAUT_TICKET_CUISINE_MM + contenu.items.length * 8;
+    // + l'espace blanc réservé en haut du ticket + une ligne en plus si heure d'arrivée.
+    const hauteurMm = 40 + ESPACE_HAUT_TICKET_CUISINE_MM + (contenu.heureArrivee ? 6 : 0) + contenu.items.length * 8;
     const doc = new jsPDF({ unit: 'mm', format: [72, hauteurMm] });
     let y = 10 + ESPACE_HAUT_TICKET_CUISINE_MM;
     doc.setFontSize(13);
@@ -403,6 +421,12 @@ export default function Caddy() {
       doc.setFontSize(10);
       doc.setFont(undefined, 'normal');
       doc.text(contenu.reservation, 36, y, { align: 'center' });
+      y += 6;
+    }
+    if (contenu.heureArrivee) {
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text('Arrivée : ' + contenu.heureArrivee, 36, y, { align: 'center' });
       y += 6;
     }
     doc.setLineDashPattern([1, 1], 0);
