@@ -86,19 +86,16 @@ export default function Achats() {
     majArticle(article.id, { a_commander: !article.a_commander });
   };
 
-  // Décoche tous les articles actuellement cochés "à commander". Envoi
-  // SÉQUENTIEL (une requête à la fois) pour ne pas saturer les connexions
-  // Postgres de Railway comme ça a été le cas avec "tout cocher".
+  // Décoche tous les articles "à commander" en une seule requête (UPDATE en
+  // masse côté serveur), au lieu d'une requête par article.
   const toutDecocher = async () => {
     if (articlesCoches.length === 0) return;
     setError('');
-    for (const a of articlesCoches) {
-      try {
-        const res = await api.patch('/articles-achat/' + a.id, { a_commander: false });
-        setArticles(prev => prev.map(x => x.id === a.id ? res.data : x));
-      } catch (e) {
-        setError(e.response?.data?.detail || 'Erreur lors de la mise à jour');
-      }
+    try {
+      await api.post('/articles-achat/decocher-tout');
+      setArticles(prev => prev.map(a => a.a_commander ? { ...a, a_commander: false } : a));
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Erreur lors de la mise à jour');
     }
   };
 
