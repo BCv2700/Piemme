@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import api from '../api/api';
@@ -21,12 +21,22 @@ const LIBELLES_CODE_VENTE = {
 function ChampDescriptionAvecSuggestions({ valeurInitiale, suggestions, onValider, style }) {
   const [texte, setTexte] = useState(valeurInitiale);
   const [ouvert, setOuvert] = useState(false);
+  const [position, setPosition] = useState(null); // { top, left, width }, calculée par rapport à l'écran
+  const inputRef = useRef(null);
 
   useEffect(() => { setTexte(valeurInitiale); }, [valeurInitiale]);
 
   const suggestionsFiltrees = texte.trim()
     ? suggestions.filter(s => s.description.toLowerCase().includes(texte.trim().toLowerCase())).slice(0, 8)
     : [];
+
+  const ouvrirSuggestions = () => {
+    if (inputRef.current) {
+      const rect = inputRef.current.getBoundingClientRect();
+      setPosition({ top: rect.bottom + 2, left: rect.left, width: rect.width });
+    }
+    setOuvert(true);
+  };
 
   const choisir = (s) => {
     setTexte(s.description);
@@ -37,20 +47,21 @@ function ChampDescriptionAvecSuggestions({ valeurInitiale, suggestions, onValide
   return (
     <div style={{ position: 'relative' }}>
       <input
+        ref={inputRef}
         type="text"
         value={texte}
-        onChange={(e) => { setTexte(e.target.value); setOuvert(true); }}
-        onFocus={() => setOuvert(true)}
+        onChange={(e) => { setTexte(e.target.value); ouvrirSuggestions(); }}
+        onFocus={ouvrirSuggestions}
         onBlur={() => { setTimeout(() => setOuvert(false), 150); onValider(texte, null); }}
         onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
         style={style}
       />
-      {ouvert && suggestionsFiltrees.length > 0 && (
+      {ouvert && suggestionsFiltrees.length > 0 && position && (
         <div style={{
-          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30,
+          position: 'fixed', top: position.top, left: position.left, width: position.width,
+          zIndex: 1000,
           background: 'white', border: '1px solid #ddd', borderRadius: 6,
           boxShadow: '0 4px 10px rgba(0,0,0,0.1)', maxHeight: 220, overflowY: 'auto',
-          marginTop: 2,
         }}>
           {suggestionsFiltrees.map((s, i) => (
             <div
