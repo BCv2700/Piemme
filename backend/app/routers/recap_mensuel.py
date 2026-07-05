@@ -10,6 +10,23 @@ from app.schemas.recap_mensuel import (
 router = APIRouter(prefix="/recap-mensuel", tags=["Récap mensuel"])
 
 
+@router.get("/annee/{annee}", response_model=list[RecapMensuelOut])
+def get_recap_annee(annee: int, db: Session = Depends(get_db)):
+    """
+    Renvoie tous les récaps mensuels existants pour une année donnée (1 à 12
+    entrées selon ce qui a déjà été consulté/modifié). Les mois sans entrée en
+    base ne sont PAS créés ici : le frontend applique alors les valeurs par
+    défaut (km_defaut = 53.4, aucune exception), comme pour le récap mensuel
+    classique.
+    """
+    return (
+        db.query(RecapMensuel)
+        .filter(RecapMensuel.annee == annee)
+        .order_by(RecapMensuel.mois)
+        .all()
+    )
+
+
 @router.get("/{annee}/{mois}", response_model=RecapMensuelOut)
 def get_recap(annee: int, mois: int, db: Session = Depends(get_db)):
     """
