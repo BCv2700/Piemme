@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../api/api';
+import SelecteurClient from './SelecteurClient';
 
 const inputStyle = {
   width: '100%',
@@ -107,8 +108,7 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
 
   // Changement de client, enregistré immédiatement (pas besoin d'onBlur, comme
   // les cases à cocher Emporté/Dépenses).
-  const changerClient = async (nouveauClientIdStr) => {
-    const nouveauClientId = nouveauClientIdStr === '' ? null : Number(nouveauClientIdStr);
+  const changerClient = async (nouveauClientId) => {
     majLocal('client_id', nouveauClientId);
     try {
       await api.patch('/encaissements/' + enc.id, { client_id: nouveauClientId });
@@ -264,20 +264,12 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
             Encaissement #{encaissementId}
           </div>
           {enc && (
-            <select
-              value={enc.client_id ?? ''}
-              onChange={(e) => changerClient(e.target.value)}
-              style={{
-                fontSize: 13, padding: '6px 10px', borderRadius: 6, border: '1px solid #ddd',
-                background: 'white', color: enc.client_id ? '#333' : '#aaa', cursor: 'pointer',
-                minWidth: 180,
-              }}
-            >
-              <option value="">— Aucun client —</option>
-              {clients.map(c => (
-                <option key={c.id} value={c.id}>{c.nom}</option>
-              ))}
-            </select>
+            <SelecteurClient
+              clients={clients}
+              clientId={enc.client_id ?? null}
+              onChange={changerClient}
+              style={{ minWidth: 180 }}
+            />
           )}
           <button className="btn" onClick={onClose} style={{ width: 28, height: 28, padding: 0, marginLeft: 'auto' }}>✕</button>
         </div>

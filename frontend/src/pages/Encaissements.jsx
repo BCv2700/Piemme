@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import api from '../api/api';
 import DetailEncaissementModal from '../components/DetailEncaissementModal';
 import TicketImprimable from '../components/TicketImprimable';
+import SelecteurClient from '../components/SelecteurClient';
 import { genererDonneesTicketDepuisEncaissement, genererPdfTicket } from '../utils/ticket';
 
 function todayKey() {
@@ -129,8 +130,7 @@ export default function Encaissements() {
 
   // Changement de client directement depuis le tableau, enregistré aussitôt
   // (comme les cases à cocher Emporté/Dépenses), pas besoin d'onBlur.
-  const changerClient = async (enc, nouveauClientIdStr) => {
-    const nouveauClientId = nouveauClientIdStr === '' ? null : Number(nouveauClientIdStr);
+  const changerClient = async (enc, nouveauClientId) => {
     majLocal(enc.id, 'client_id', nouveauClientId);
     try {
       await api.patch('/encaissements/' + enc.id, { client_id: nouveauClientId });
@@ -322,20 +322,13 @@ export default function Encaissements() {
                       {enc.nom_reservation_archive || '—'}
                     </td>
                     <td style={tdCell({ padding: '2px 4px' })}>
-                      <select
-                        value={enc.client_id ?? ''}
-                        onChange={(e) => changerClient(enc, e.target.value)}
-                        style={{
-                          width: '100%', fontSize: 11, padding: '3px 4px', borderRadius: 5,
-                          border: '1px solid #ddd', background: 'white', color: enc.client_id ? '#333' : '#aaa',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <option value="">—</option>
-                        {clients.map(c => (
-                          <option key={c.id} value={c.id}>{c.nom}</option>
-                        ))}
-                      </select>
+                      <SelecteurClient
+                        clients={clients}
+                        clientId={enc.client_id ?? null}
+                        onChange={(id) => changerClient(enc, id)}
+                        compact
+                        style={{ width: '100%' }}
+                      />
                     </td>
                     <td style={tdCell({ textAlign: 'center' })}>
                       <input type="checkbox" checked={!!enc.emporte} onChange={() => toggleBool(enc, 'emporte')} style={{ width: 14, height: 14, cursor: 'pointer' }} />

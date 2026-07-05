@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/api';
 import TicketImprimable from '../components/TicketImprimable';
+import SelecteurClient from '../components/SelecteurClient';
 import { genererDonneesTicket, genererPdfTicket } from '../utils/ticket';
 
 // Normalise un nom de table pour le comparer sans tenir compte de la casse ni
@@ -28,7 +29,7 @@ export default function Paiement() {
   const [articles, setArticles] = useState([]);
   const [nomReservation, setNomReservation] = useState(null);
   const [clients, setClients] = useState([]);
-  const [clientId, setClientId] = useState('');
+  const [clientId, setClientId] = useState(null);
   const [montantCarte, setMontantCarte] = useState('');
   const [montantCash, setMontantCash] = useState('');
   const [error, setError] = useState('');
@@ -100,7 +101,7 @@ export default function Paiement() {
   const enregistrerEncaissement = async () => {
     const res = await api.post('/encaissements/', {
       table_nom: table.nom,
-      client_id: clientId ? Number(clientId) : null,
+      client_id: clientId,
       montant_carte: carte,
       montant_cash: cash,
       montant_total: total,
@@ -204,16 +205,9 @@ export default function Paiement() {
             </div>
 
             <div style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>Client (optionnel)</div>
-            <select
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              style={{ ...inputStyle, textAlign: 'left', marginBottom: 16 }}
-            >
-              <option value="">— Aucun client —</option>
-              {clients.map(c => (
-                <option key={c.id} value={c.id}>{c.nom}</option>
-              ))}
-            </select>
+            <div style={{ marginBottom: 16 }}>
+              <SelecteurClient clients={clients} clientId={clientId} onChange={setClientId} style={{ width: '100%', boxSizing: 'border-box' }} />
+            </div>
 
             <div style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>Payer avec</div>
             <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
