@@ -140,6 +140,19 @@ export default function Encaissements() {
     }
   };
 
+  const changerNbPersonnes = async (enc, valeur) => {
+    const n = Number(valeur);
+    if (!Number.isFinite(n) || n < 1) return;
+    if (n === Number(enc.nb_personnes)) return;
+    majLocal(enc.id, 'nb_personnes', n);
+    try {
+      await api.patch('/encaissements/' + enc.id, { nb_personnes: n });
+    } catch (e) {
+      showMsg('error', errMsg(e, 'Erreur lors de la mise à jour du nombre de personnes'));
+      load();
+    }
+  };
+
   const deleteEncaissement = async (encId) => {
     if (!window.confirm('Supprimer cet encaissement et toutes ses lignes ? Action irréversible.')) return;
     try {
@@ -256,6 +269,7 @@ export default function Encaissements() {
                   <th style={thCell()}>Ticket</th>
                   <th style={thCell()}>Réservation</th>
                   <th style={thCell()}>Client</th>
+                  <th style={thCell({ textAlign: 'right' })}>Nb pers.</th>
                   <th style={thCell({ textAlign: 'center' })}>Emp.</th>
                   <th style={thCell({ textAlign: 'center' })}>Dép.</th>
                   <th style={thCell({ textAlign: 'center' })}>Cash</th>
@@ -328,6 +342,15 @@ export default function Encaissements() {
                         onChange={(id) => changerClient(enc, id)}
                         compact
                         style={{ width: '100%' }}
+                      />
+                    </td>
+                    <td style={tdCell({ padding: '2px 4px' })}>
+                      <input
+                        type="number" min="1"
+                        className="cell-input" style={{ ...inputStyle, width: 50, textAlign: 'right' }}
+                        defaultValue={enc.nb_personnes ?? 1}
+                        onBlur={(e) => changerNbPersonnes(enc, e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
                       />
                     </td>
                     <td style={tdCell({ textAlign: 'center' })}>

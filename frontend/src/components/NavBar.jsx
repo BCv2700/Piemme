@@ -108,7 +108,7 @@ export default function NavBar() {
     navigate('/login');
   };
 
-  const cheminsGestion = ['/articles', '/achats', '/clients', '/composants'];
+  const cheminsGestion = ['/articles', '/achats', '/clients', '/composants', '/encaissements-mois'];
   const cheminsRapports = ['/cout-matiere', '/reservations', '/historique'];
 
   return (
@@ -129,6 +129,7 @@ export default function NavBar() {
         <Link to="/achats" style={itemMenuStyle('/achats')}>Achats</Link>
         <Link to="/composants" style={itemMenuStyle('/composants')}>Composants</Link>
         <Link to="/clients" style={itemMenuStyle('/clients')}>Clients</Link>
+        <Link to="/encaissements-mois" style={itemMenuStyle('/encaissements-mois')}>Encaissements (mois)</Link>
       </MenuDeroulant>
 
       <MenuDeroulant label="Rapports" actif={cheminsRapports.includes(location.pathname)}>

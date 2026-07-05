@@ -9,6 +9,7 @@ import Achats from './pages/Achats';
 import Clients from './pages/Clients';
 import CoutMatiere from './pages/CoutMatiere';
 import Composants from './pages/Composants';
+import EncaissementsMois from './pages/EncaissementsMois';
 import Reservations from './pages/Reservations';
 import HistoriqueVentes from './pages/HistoriqueVentes';
 import Encaissements from './pages/Encaissements';
@@ -47,6 +48,7 @@ function App() {
         <Route path="/clients" element={<RouteProtegee><MiseEnPage><Clients /></MiseEnPage></RouteProtegee>} />
         <Route path="/cout-matiere" element={<RouteProtegee><MiseEnPage><CoutMatiere /></MiseEnPage></RouteProtegee>} />
         <Route path="/composants" element={<RouteProtegee><MiseEnPage><Composants /></MiseEnPage></RouteProtegee>} />
+        <Route path="/encaissements-mois" element={<RouteProtegee><MiseEnPage><EncaissementsMois /></MiseEnPage></RouteProtegee>} />
         <Route path="/reservations" element={<RouteProtegee><MiseEnPage><Reservations /></MiseEnPage></RouteProtegee>} />
         <Route path="/historique" element={<RouteProtegee><MiseEnPage><HistoriqueVentes /></MiseEnPage></RouteProtegee>} />
         <Route path="/encaissements" element={<RouteProtegee><MiseEnPage><Encaissements /></MiseEnPage></RouteProtegee>} />
