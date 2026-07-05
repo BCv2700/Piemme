@@ -44,6 +44,7 @@ export default function Articles() {
   const [filtreType, setFiltreType] = useState('');
   const [filtreCodeVente, setFiltreCodeVente] = useState('');
   const [filtreASuivre, setFiltreASuivre] = useState(false);
+  const [filtreBoisson, setFiltreBoisson] = useState(false);
   const [edition, setEdition] = useState(null); // null = pas de formulaire ouvert, sinon = objet article (ou ARTICLE_VIDE pour créer)
   const [nouvelleCategorie, setNouvelleCategorie] = useState(false); // true = saisie libre d'une nouvelle catégorie de dépense
   const [error, setError] = useState('');
@@ -81,7 +82,8 @@ export default function Articles() {
       (a.type_article || '').toLowerCase().includes(recherche.toLowerCase())) &&
     (filtreType === '' || a.type_article === filtreType) &&
     (filtreCodeVente === '' || String(a.code_vente) === filtreCodeVente) &&
-    (!filtreASuivre || a.stock_a_suivre)
+    (!filtreASuivre || a.stock_a_suivre) &&
+    (!filtreBoisson || a.est_boisson)
   );
 
   const ouvrirCreation = () => { setNouvelleCategorie(false); setEdition({ ...ARTICLE_VIDE }); };
@@ -220,6 +222,69 @@ export default function Articles() {
   const thCell = (extra = {}) => ({ padding: '6px 14px', border: BORDURE, whiteSpace: 'nowrap', ...extra });
   const tdCell = (extra = {}) => ({ padding: '4px 14px', border: BORDURE, whiteSpace: 'nowrap', ...extra });
 
+  const escapeHtml = (s) =>
+    String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  // Imprime, sur un ticket thermique 80mm, la liste des articles actuellement
+  // affichés (recherche + filtres en cours), avec nom, stock et stock min —
+  // pour faciliter un inventaire physique (ex: boissons uniquement).
+  const imprimerInventaire = () => {
+    if (articlesAffiches.length === 0) {
+      setMsg({ type: 'error', text: 'Aucun article à imprimer avec les filtres actuels' });
+      setTimeout(() => setMsg(null), 3000);
+      return;
+    }
+    const lignesHtml = [...articlesAffiches]
+      .sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { numeric: true }))
+      .map(a => (
+        '<tr>'
+        + '<td class="nom">' + escapeHtml(a.nom) + '</td>'
+        + '<td class="chiffre">' + a.stock + '</td>'
+        + '<td class="chiffre">' + a.stock_min + '</td>'
+        + '</tr>'
+      )).join('');
+
+    const fenetre = window.open('', '_blank', 'width=400,height=600');
+    if (!fenetre) {
+      setMsg({ type: 'error', text: "Impossible d'ouvrir la fenêtre d'impression (pop-up bloqué ?)" });
+      setTimeout(() => setMsg(null), 3000);
+      return;
+    }
+    fenetre.document.write(`
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Inventaire</title>
+          <style>
+            @page { size: 72mm auto; margin: 2mm; }
+            body { font-family: 'Courier New', monospace; width: 68mm; margin: 0; padding: 4px; }
+            h1 { font-size: 15px; text-align: center; margin: 0 0 4px; }
+            .date { font-size: 11px; text-align: center; margin-bottom: 8px; color: #333; }
+            hr { border: none; border-top: 1px dashed #000; margin: 6px 0; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+            th { text-align: left; font-size: 10px; border-bottom: 1px solid #000; padding: 2px 0; }
+            .chiffre { text-align: right; white-space: nowrap; }
+            th.chiffre { text-align: right; }
+            td.nom { padding: 2px 4px 2px 0; }
+            td.chiffre { padding: 2px 0; }
+          </style>
+        </head>
+        <body>
+          <h1>📋 INVENTAIRE</h1>
+          <div class="date">${new Date().toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+          <hr />
+          <table>
+            <thead><tr><th>Article</th><th class="chiffre">Stock</th><th class="chiffre">Min</th></tr></thead>
+            <tbody>${lignesHtml}</tbody>
+          </table>
+        </body>
+      </html>
+    `);
+    fenetre.document.close();
+    fenetre.focus();
+    setTimeout(() => { fenetre.print(); }, 250);
+  };
+
   return (
     <div>
       <div className="content">
@@ -283,6 +348,22 @@ export default function Articles() {
             />
             À suivre uniquement
           </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer', padding: '0 4px' }}>
+            <input
+              type="checkbox"
+              checked={filtreBoisson}
+              onChange={(e) => setFiltreBoisson(e.target.checked)}
+              style={{ width: 16, height: 16 }}
+            />
+            Boissons uniquement
+          </label>
+          <button
+            className="btn"
+            onClick={imprimerInventaire}
+            title="Imprime la liste actuellement affichée (nom, stock, stock min) sur un ticket, pour l'inventaire"
+          >
+            🖨️ Imprimer inventaire
+          </button>
         </div>
 
         {selection.length > 0 && (
@@ -455,12 +536,12 @@ export default function Articles() {
           padding: 20,
         }}>
           <div style={{
-            background: 'white', borderRadius: 10, width: 480, maxHeight: '90vh',
+            background: 'white', borderRadius: 10, width: 720, maxWidth: '95vw', maxHeight: '92vh',
             display: 'flex', flexDirection: 'column', overflow: 'hidden',
           }}>
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '16px 24px', borderBottom: '1px solid #e5e5e0', flexShrink: 0,
+              padding: '14px 22px', borderBottom: '1px solid #e5e5e0', flexShrink: 0,
             }}>
               <div style={{ fontWeight: 600, fontSize: 16 }}>
                 {edition.id ? 'Modifier l\u2019article' : 'Nouvel article'}
@@ -482,14 +563,17 @@ export default function Articles() {
               </div>
             </div>
 
-            <div style={{ padding: 24, overflowY: 'auto' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ padding: 20, overflowY: 'auto' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
-              <div style={{ display: 'flex', gap: 12 }}>
-                <Champ label="Nom" style={{ flex: 1 }}>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <Champ label="Nom" style={{ flex: 3 }}>
                   <input style={inputStyle} value={edition.nom} onChange={e => majChamp('nom', e.target.value)} />
                 </Champ>
-                <Champ label="Ordre d'affichage" style={{ width: 110 }}>
+                <Champ label="Type d'article" style={{ flex: 2 }}>
+                  <input style={inputStyle} value={edition.type_article || ''} onChange={e => majChamp('type_article', e.target.value)} placeholder="2. APERITIF..." />
+                </Champ>
+                <Champ label="Ordre" style={{ width: 80 }}>
                   <input
                     type="number"
                     style={inputStyle}
@@ -501,24 +585,7 @@ export default function Articles() {
                 </Champ>
               </div>
 
-              <label style={{
-                display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600,
-                padding: '8px 10px', borderRadius: 6, background: '#fef3c7', border: '1px solid #fcd34d',
-                cursor: 'pointer',
-              }}>
-                <input
-                  type="checkbox"
-                  checked={edition.imprimer_cuisine || false}
-                  onChange={e => majChamp('imprimer_cuisine', e.target.checked)}
-                  style={{ width: 16, height: 16 }}
-                />
-                🍳 Imprimer en cuisine (apparaît sur le ticket cuisine du Caddy)
-              </label>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <Champ label="Type d'article" style={{ flex: 1 }}>
-                  <input style={inputStyle} value={edition.type_article || ''} onChange={e => majChamp('type_article', e.target.value)} placeholder="2. APERITIF, VIN ROUGE, 4A. PÂTES..." />
-                </Champ>
+              <div style={{ display: 'flex', gap: 10 }}>
                 <Champ label="Code de vente" style={{ flex: 1 }}>
                   <select
                     style={inputStyle}
@@ -531,75 +598,89 @@ export default function Articles() {
                     ))}
                   </select>
                 </Champ>
+                {String(edition.code_vente) === String(CODE_VENTE_DEPENSE) ? (
+                  <Champ label="Catégorie de dépense" style={{ flex: 2 }}>
+                    {nouvelleCategorie ? (
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <input
+                          style={inputStyle}
+                          autoFocus
+                          value={edition.categorie || ''}
+                          onChange={e => majChamp('categorie', e.target.value)}
+                          placeholder="Ex: Charges fixes, Magasins, Divers..."
+                        />
+                        <button
+                          className="btn"
+                          type="button"
+                          onClick={() => { setNouvelleCategorie(false); majChamp('categorie', ''); }}
+                        >
+                          Liste
+                        </button>
+                      </div>
+                    ) : (
+                      <select
+                        style={inputStyle}
+                        value={edition.categorie || ''}
+                        onChange={e => {
+                          if (e.target.value === '__NOUVELLE__') {
+                            setNouvelleCategorie(true);
+                            majChamp('categorie', '');
+                          } else {
+                            majChamp('categorie', e.target.value);
+                          }
+                        }}
+                      >
+                        <option value="">— Non classé —</option>
+                        {categoriesDepense.map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                        <option value="__NOUVELLE__">+ Nouvelle catégorie…</option>
+                      </select>
+                    )}
+                  </Champ>
+                ) : (
+                  <Champ label="Fournisseur" style={{ flex: 1 }}>
+                    <input style={inputStyle} value={edition.fournisseur || ''} onChange={e => majChamp('fournisseur', e.target.value)} />
+                  </Champ>
+                )}
+                <Champ label="EAN" style={{ flex: 1 }}>
+                  <input style={inputStyle} value={edition.ean || ''} onChange={e => majChamp('ean', e.target.value)} />
+                </Champ>
+                <Champ label="Localisation" style={{ flex: 1 }}>
+                  <input style={inputStyle} value={edition.localisation || ''} onChange={e => majChamp('localisation', e.target.value)} />
+                </Champ>
               </div>
 
-              {/* Catégorie : uniquement pour les dépenses (code de vente 9001).
-                  Regroupe les dépenses dans le caddy (Magasins, Charges fixes, Divers...). */}
+              {/* Si code de vente = Dépenses, le fournisseur n'a pas de champ dédié ci-dessus
+                  (remplacé par la catégorie) : on le montre sur sa propre ligne dans ce cas. */}
               {String(edition.code_vente) === String(CODE_VENTE_DEPENSE) && (
-                <Champ label="Catégorie de dépense">
-                  {nouvelleCategorie ? (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <input
-                        style={inputStyle}
-                        autoFocus
-                        value={edition.categorie || ''}
-                        onChange={e => majChamp('categorie', e.target.value)}
-                        placeholder="Ex: Charges fixes, Magasins, Divers..."
-                      />
-                      <button
-                        className="btn"
-                        type="button"
-                        onClick={() => { setNouvelleCategorie(false); majChamp('categorie', ''); }}
-                      >
-                        Choisir dans la liste
-                      </button>
-                    </div>
-                  ) : (
-                    <select
-                      style={inputStyle}
-                      value={edition.categorie || ''}
-                      onChange={e => {
-                        if (e.target.value === '__NOUVELLE__') {
-                          setNouvelleCategorie(true);
-                          majChamp('categorie', '');
-                        } else {
-                          majChamp('categorie', e.target.value);
-                        }
-                      }}
-                    >
-                      <option value="">— Non classé —</option>
-                      {categoriesDepense.map(c => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                      <option value="__NOUVELLE__">+ Nouvelle catégorie…</option>
-                    </select>
-                  )}
-                </Champ>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <Champ label="Fournisseur" style={{ flex: 1 }}>
+                    <input style={inputStyle} value={edition.fournisseur || ''} onChange={e => majChamp('fournisseur', e.target.value)} />
+                  </Champ>
+                  <div style={{ flex: 3 }} />
+                </div>
               )}
 
-              <div style={{ display: 'flex', gap: 12 }}>
-                <Champ label="Prix de vente (sur place)" style={{ flex: 1 }}>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <Champ label="Prix vente (sur place)" style={{ flex: 1 }}>
                   <input type="number" step="0.01" style={inputStyle} value={edition.prix_vente} onChange={e => majChamp('prix_vente', e.target.value)} />
                 </Champ>
-                <Champ label="Prix de vente (à emporter)" style={{ flex: 1 }}>
-                  <input type="number" step="0.01" style={inputStyle} value={edition.prix_vente_away ?? ''} onChange={e => majChamp('prix_vente_away', e.target.value)} placeholder="laisser vide si identique" />
+                <Champ label="Prix vente (à emporter)" style={{ flex: 1 }}>
+                  <input type="number" step="0.01" style={inputStyle} value={edition.prix_vente_away ?? ''} onChange={e => majChamp('prix_vente_away', e.target.value)} placeholder="idem" />
                 </Champ>
-              </div>
-
-              <div style={{ display: 'flex', gap: 12 }}>
                 <Champ label="TVA sur place (%)" style={{ flex: 1 }}>
                   <input type="number" step="0.01" style={inputStyle} value={edition.tva} onChange={e => majChamp('tva', e.target.value)} />
                 </Champ>
                 <Champ label="TVA à emporter (%)" style={{ flex: 1 }}>
-                  <input type="number" step="0.01" style={inputStyle} value={edition.tva_away ?? ''} onChange={e => majChamp('tva_away', e.target.value)} placeholder="laisser vide si identique" />
+                  <input type="number" step="0.01" style={inputStyle} value={edition.tva_away ?? ''} onChange={e => majChamp('tva_away', e.target.value)} placeholder="idem" />
+                </Champ>
+                <Champ label="Prix d'achat" style={{ flex: 1 }}>
+                  <input type="number" step="0.01" style={inputStyle} value={edition.prix_achat} onChange={e => majChamp('prix_achat', e.target.value)} />
                 </Champ>
               </div>
 
-              <Champ label="Prix d'achat">
-                <input type="number" step="0.01" style={inputStyle} value={edition.prix_achat} onChange={e => majChamp('prix_achat', e.target.value)} />
-              </Champ>
-
-              <div style={{ display: 'flex', gap: 12 }}>
+              <div style={{ display: 'flex', gap: 10 }}>
                 <Champ label="Stock" style={{ flex: 1 }}>
                   <input type="number" style={inputStyle} value={edition.stock} onChange={e => majChamp('stock', e.target.value)} />
                 </Champ>
@@ -609,50 +690,68 @@ export default function Articles() {
                 <Champ label="Stock max" style={{ flex: 1 }}>
                   <input type="number" style={inputStyle} value={edition.stock_max} onChange={e => majChamp('stock_max', e.target.value)} />
                 </Champ>
+                <div style={{ flex: 2 }} />
               </div>
 
-              <div style={{ display: 'flex', gap: 12 }}>
-                <Champ label="Fournisseur" style={{ flex: 1 }}>
-                  <input style={inputStyle} value={edition.fournisseur || ''} onChange={e => majChamp('fournisseur', e.target.value)} />
-                </Champ>
-                <Champ label="EAN" style={{ flex: 1 }}>
-                  <input style={inputStyle} value={edition.ean || ''} onChange={e => majChamp('ean', e.target.value)} />
-                </Champ>
-              </div>
-
-              <Champ label="Localisation">
-                <input style={inputStyle} value={edition.localisation || ''} onChange={e => majChamp('localisation', e.target.value)} />
-              </Champ>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+              {/* Cases à cocher regroupées sur une seule ligne compacte plutôt qu'empilées */}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 6, fontSize: 13,
+                  padding: '6px 12px', borderRadius: 20, border: '1px solid #ddd', cursor: 'pointer',
+                  background: edition.actif ? '#dcfce7' : 'white',
+                  borderColor: edition.actif ? '#86efac' : '#ddd',
+                }}>
                   <input
                     type="checkbox"
                     checked={edition.actif}
                     onChange={e => majChamp('actif', e.target.checked)}
-                    style={{ width: 16, height: 16 }}
+                    style={{ width: 14, height: 14 }}
                   />
-                  Article actif (visible dans le caddy)
+                  Actif
                 </label>
 
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 6, fontSize: 13,
+                  padding: '6px 12px', borderRadius: 20, border: '1px solid #ddd', cursor: 'pointer',
+                  background: edition.stock_a_suivre ? '#dcfce7' : 'white',
+                  borderColor: edition.stock_a_suivre ? '#86efac' : '#ddd',
+                }}>
                   <input
                     type="checkbox"
                     checked={edition.stock_a_suivre || false}
                     onChange={e => majChamp('stock_a_suivre', e.target.checked)}
-                    style={{ width: 16, height: 16 }}
+                    style={{ width: 14, height: 14 }}
                   />
-                  À suivre (article important à surveiller)
+                  À suivre
                 </label>
 
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 6, fontSize: 13,
+                  padding: '6px 12px', borderRadius: 20, border: '1px solid #ddd', cursor: 'pointer',
+                  background: edition.est_boisson ? '#dcfce7' : 'white',
+                  borderColor: edition.est_boisson ? '#86efac' : '#ddd',
+                }}>
                   <input
                     type="checkbox"
                     checked={edition.est_boisson || false}
                     onChange={e => majChamp('est_boisson', e.target.checked)}
-                    style={{ width: 16, height: 16 }}
+                    style={{ width: 14, height: 14 }}
                   />
                   Boisson
+                </label>
+
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600,
+                  padding: '6px 12px', borderRadius: 20, border: '1px solid #fcd34d', cursor: 'pointer',
+                  background: edition.imprimer_cuisine ? '#fef3c7' : 'white',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={edition.imprimer_cuisine || false}
+                    onChange={e => majChamp('imprimer_cuisine', e.target.checked)}
+                    style={{ width: 14, height: 14 }}
+                  />
+                  🍳 Imprimer en cuisine
                 </label>
               </div>
             </div>
@@ -675,7 +774,7 @@ function Champ({ label, children, style }) {
 
 const inputStyle = {
   width: '100%',
-  padding: '8px 10px',
+  padding: '7px 10px',
   borderRadius: 6,
   border: '1px solid #ddd',
   fontSize: 14,
