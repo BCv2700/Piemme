@@ -60,6 +60,7 @@ export default function NavBar() {
       <Link to="/achats" style={linkStyle('/achats')}>Achats</Link>
       <Link to="/clients" style={linkStyle('/clients')}>Clients</Link>
       <Link to="/cout-matiere" style={linkStyle('/cout-matiere')}>Coût matière</Link>
+      <Link to="/composants" style={linkStyle('/composants')}>Composants</Link>
       <Link to="/reservations" style={linkStyle('/reservations')}>Réservations</Link>
       <Link to={'/historique' + suffixeDate} style={linkStyle('/historique')}>Historique</Link>
       <Link to={'/encaissements' + suffixeDate} style={linkStyle('/encaissements')}>Encaissements</Link>
