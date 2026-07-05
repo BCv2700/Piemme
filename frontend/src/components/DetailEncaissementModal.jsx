@@ -295,7 +295,7 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
               <div>
                 <button
                   className="btn"
-                  style={{ color: '#dc2626', borderColor: '#fca5a5', fontSize: 12 }}
+                  style={{ color: '#dc2626', borderColor: '#fca5a5', fontSize: 12, whiteSpace: 'nowrap' }}
                   onClick={deleteEncaissement}
                 >
                   Supprimer tout l'encaissement
