@@ -74,7 +74,7 @@ export default function CoutMatiere() {
   // composant défini, en utilisant Prix d'achat de l'article), regroupés par
   // catégorie (code de vente du plat vendu).
   const { categories, totalCout, totalCa, totalCarte, totalCash } = useMemo(() => {
-    const parCategorie = {}; // code_vente -> [{description, qteVendue, prixUnitaire, total}]
+    const parCategorie = {}; // code_vente -> Map("description|prixUnitaire" -> {description, qteVendue, prixUnitaire, total})
     let coutCumule = 0;
     let caCumule = 0;
     let carteCumule = 0;
@@ -98,13 +98,24 @@ export default function CoutMatiere() {
           const total = qte * lc.prixUnitaire;
           coutCumule += total;
           const cle = codeVente || 'autre';
-          if (!parCategorie[cle]) parCategorie[cle] = [];
-          parCategorie[cle].push({
-            description: lc.description,
-            qteVendue: qte,
-            prixUnitaire: lc.prixUnitaire,
-            total,
-          });
+          if (!parCategorie[cle]) parCategorie[cle] = new Map();
+          // Regroupe les lignes identiques (même description + même prix) au
+          // sein d'une catégorie, plutôt que de répéter une ligne par vente :
+          // ex. "Tapas" vendu sur 2 commandes séparées => une seule ligne
+          // "Qté vendue: 2" au lieu de deux lignes "Qté vendue: 1".
+          const cleLigne = lc.description + '|' + lc.prixUnitaire;
+          const existante = parCategorie[cle].get(cleLigne);
+          if (existante) {
+            existante.qteVendue += qte;
+            existante.total += total;
+          } else {
+            parCategorie[cle].set(cleLigne, {
+              description: lc.description,
+              qteVendue: qte,
+              prixUnitaire: lc.prixUnitaire,
+              total,
+            });
+          }
         });
       });
     });
@@ -113,7 +124,7 @@ export default function CoutMatiere() {
     const categoriesTriees = ordreClefs.map(cle => ({
       cle,
       libelle: LIBELLES_CODE_VENTE[cle] || 'Non classé',
-      lignes: parCategorie[cle],
+      lignes: Array.from(parCategorie[cle].values()),
     }));
 
     return { categories: categoriesTriees, totalCout: coutCumule, totalCa: caCumule, totalCarte: carteCumule, totalCash: cashCumule };
