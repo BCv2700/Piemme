@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import api from '../api/api';
@@ -13,6 +13,65 @@ const LIBELLES_CODE_VENTE = {
   7004: 'Boissons Vins',
   7005: 'Divers',
 };
+
+// Champ description avec suggestions personnalisées affichant "Description —
+// Prix" (un <datalist> natif ne peut pas afficher le prix à côté du texte).
+// Gère son propre texte en interne (non contrôlé par le parent) : le parent
+// n'est notifié qu'au blur ou à la sélection d'une suggestion, via onValider.
+function ChampDescriptionAvecSuggestions({ valeurInitiale, suggestions, onValider, style }) {
+  const [texte, setTexte] = useState(valeurInitiale);
+  const [ouvert, setOuvert] = useState(false);
+
+  useEffect(() => { setTexte(valeurInitiale); }, [valeurInitiale]);
+
+  const suggestionsFiltrees = texte.trim()
+    ? suggestions.filter(s => s.description.toLowerCase().includes(texte.trim().toLowerCase())).slice(0, 8)
+    : [];
+
+  const choisir = (s) => {
+    setTexte(s.description);
+    setOuvert(false);
+    onValider(s.description, s.prix);
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        type="text"
+        value={texte}
+        onChange={(e) => { setTexte(e.target.value); setOuvert(true); }}
+        onFocus={() => setOuvert(true)}
+        onBlur={() => { setTimeout(() => setOuvert(false), 150); onValider(texte, null); }}
+        onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+        style={style}
+      />
+      {ouvert && suggestionsFiltrees.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30,
+          background: 'white', border: '1px solid #ddd', borderRadius: 6,
+          boxShadow: '0 4px 10px rgba(0,0,0,0.1)', maxHeight: 220, overflowY: 'auto',
+          marginTop: 2,
+        }}>
+          {suggestionsFiltrees.map((s, i) => (
+            <div
+              key={i}
+              onMouseDown={() => choisir(s)}
+              style={{
+                padding: '7px 10px', cursor: 'pointer', display: 'flex',
+                justifyContent: 'space-between', gap: 10, fontSize: 13,
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f0'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+            >
+              <span>{s.description}</span>
+              <span style={{ color: '#888', flexShrink: 0 }}>{s.prix.toFixed(2)} €</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Composants() {
   const [composants, setComposants] = useState([]);
@@ -48,6 +107,26 @@ export default function Composants() {
 
   const articlesParId = Object.fromEntries(articles.map(a => [a.id, a]));
 
+  // Liste unique des descriptions déjà utilisées (tous plats confondus), avec
+  // le prix le plus fréquent associé — sert de base aux suggestions affichées
+  // à la création et à l'édition (description + prix visibles ensemble).
+  const suggestionsUniques = useMemo(() => {
+    const map = new Map();
+    composants.forEach(c => {
+      const cle = c.description.trim().toLowerCase();
+      if (!map.has(cle)) map.set(cle, { description: c.description.trim(), comptage: {} });
+      const entree = map.get(cle);
+      const p = Number(c.prix);
+      entree.comptage[p] = (entree.comptage[p] || 0) + 1;
+    });
+    return Array.from(map.values())
+      .map(e => {
+        const [prixFrequent] = Object.entries(e.comptage).sort((a, b) => b[1] - a[1])[0];
+        return { description: e.description, prix: Number(prixFrequent) };
+      })
+      .sort((a, b) => a.description.localeCompare(b.description, 'fr'));
+  }, [composants]);
+
   const composantsAffiches = composants.filter(c => {
     const article = articlesParId[c.article_id];
     const nomArticle = article ? article.nom : '';
@@ -68,8 +147,6 @@ export default function Composants() {
     return a.description.localeCompare(b.description, 'fr');
   });
 
-  const totalAffiche = composantsAffiches.reduce((s, c) => s + Number(c.prix), 0);
-
   // ───── Édition inline ─────────────────────────────────────────────────
   const majComposant = async (id, champs) => {
     setError('');
@@ -82,11 +159,15 @@ export default function Composants() {
   };
 
   // Corrige la description d'un composant. Ne touche JAMAIS au prix
-  // automatiquement (voir suggestionPrix pour l'affichage d'une suggestion
-  // que l'utilisateur applique lui-même s'il le souhaite).
-  const changerDescription = (composant, valeur) => {
+  // automatiquement — sauf si l'utilisateur a explicitement cliqué une
+  // suggestion (auquel cas prixChoisi est fourni et non null).
+  const changerDescription = (composant, valeur, prixChoisi) => {
     if (!valeur.trim()) return;
-    majComposant(composant.id, { description: valeur });
+    if (prixChoisi != null) {
+      majComposant(composant.id, { description: valeur, prix: prixChoisi });
+    } else if (valeur !== composant.description) {
+      majComposant(composant.id, { description: valeur });
+    }
   };
 
   // Corrige le prix d'un composant ET le propage à tous les composants ayant
@@ -156,33 +237,6 @@ export default function Composants() {
     }
   };
 
-  // Descriptions déjà utilisées ailleurs (tous plats confondus), pour
-  // suggestion à la création — évite de retaper "Semoule" différemment
-  // à chaque fois et permet de reprendre le même prix déjà en place.
-  const descriptionsExistantes = [...new Map(
-    composants.map(c => [c.description.trim().toLowerCase(), c.description.trim()])
-  ).values()].sort((a, b) => a.localeCompare(b, 'fr'));
-
-  // Cherche un prix "habituel" pour une description donnée : le prix le plus
-  // fréquent parmi les composants existants portant EXACTEMENT ce texte
-  // (insensible casse/espaces). Ne renvoie qu'une SUGGESTION à afficher —
-  // jamais appliqué automatiquement, pour ne jamais écraser silencieusement
-  // un prix par une valeur devinée (ex: 0 si la plupart des lignes existantes
-  // ne sont pas encore renseignées).
-  const suggestionPrix = (description, idExclu = null) => {
-    const cle = description.trim().toLowerCase();
-    if (!cle) return null;
-    const correspondances = composants.filter(c => c.id !== idExclu && c.description.trim().toLowerCase() === cle);
-    if (correspondances.length === 0) return null;
-    const comptage = {};
-    correspondances.forEach(c => {
-      const p = Number(c.prix);
-      comptage[p] = (comptage[p] || 0) + 1;
-    });
-    const [prixPlusFrequent] = Object.entries(comptage).sort((a, b) => b[1] - a[1])[0];
-    return { prix: Number(prixPlusFrequent), nbOccurrences: correspondances.length };
-  };
-
   const thCell = (extra = {}) => ({ padding: '6px 14px', border: BORDURE, whiteSpace: 'nowrap', ...extra });
   const tdCell = (extra = {}) => ({ padding: '4px 14px', border: BORDURE, whiteSpace: 'nowrap', ...extra });
 
@@ -192,7 +246,6 @@ export default function Composants() {
       afficherMsg('error', 'Aucun composant à imprimer avec les filtres actuels');
       return;
     }
-    // Regroupe les composants affichés (déjà filtrés) par plat
     const parArticle = {};
     composantsAffiches.forEach(c => {
       if (!parArticle[c.article_id]) parArticle[c.article_id] = [];
@@ -250,6 +303,12 @@ export default function Composants() {
     doc.setProperties({ title: 'composants-par-plat.pdf' });
     const blobUrl = doc.output('bloburl');
     window.open(blobUrl, '_blank');
+  };
+
+  const cellInputStyle = {
+    width: '100%', padding: '4px 8px', borderRadius: 5,
+    border: '1px solid transparent', background: 'transparent',
+    fontSize: 13, boxSizing: 'border-box',
   };
 
   return (
@@ -317,10 +376,6 @@ export default function Composants() {
           )}
         </div>
 
-        <datalist id="descriptions-existantes">
-          {descriptionsExistantes.map(d => <option key={d} value={d} />)}
-        </datalist>
-
         {loading ? (
           <div style={{ color: '#888' }}>Chargement...</div>
         ) : (
@@ -351,19 +406,12 @@ export default function Composants() {
                           🗑
                         </button>
                       </td>
-                      <td style={tdCell({ whiteSpace: 'normal', minWidth: 220, padding: '2px 6px' })}>
-                        <input
-                          type="text"
-                          list="descriptions-existantes"
-                          className="cell-input"
-                          defaultValue={c.description}
-                          onBlur={(e) => changerDescription(c, e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
-                          style={{
-                            width: '100%', padding: '4px 8px', borderRadius: 5,
-                            border: '1px solid transparent', background: 'transparent',
-                            fontSize: 13, boxSizing: 'border-box',
-                          }}
+                      <td style={tdCell({ whiteSpace: 'normal', minWidth: 220, padding: '2px 6px', position: 'relative' })}>
+                        <ChampDescriptionAvecSuggestions
+                          valeurInitiale={c.description}
+                          suggestions={suggestionsUniques}
+                          onValider={(valeur, prixChoisi) => changerDescription(c, valeur, prixChoisi)}
+                          style={cellInputStyle}
                         />
                       </td>
                       <td style={tdCell({ textAlign: 'right', padding: '2px 6px' })}>
@@ -432,31 +480,18 @@ export default function Composants() {
             </div>
 
             <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Description</label>
-            <input
-              type="text"
-              list="descriptions-existantes"
-              autoFocus
-              value={creation.description}
-              onChange={(e) => setCreation({ ...creation, description: e.target.value })}
-              placeholder="Ex: 5 scampis"
-              style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, marginBottom: 6, boxSizing: 'border-box' }}
-            />
-            {(() => {
-              const suggestion = suggestionPrix(creation.description);
-              if (!suggestion) return null;
-              return (
-                <div
-                  onClick={() => setCreation(prev => ({ ...prev, prix: suggestion.prix }))}
-                  style={{
-                    fontSize: 12, color: '#2563eb', cursor: 'pointer', marginBottom: 14,
-                    display: 'flex', alignItems: 'center', gap: 6,
-                  }}
-                >
-                  💡 Prix habituel pour ce composant : <strong>{suggestion.prix.toFixed(2)} €</strong>
-                  {suggestion.nbOccurrences > 1 ? ' (utilisé ' + suggestion.nbOccurrences + ' fois)' : ''} — cliquer pour l'utiliser
-                </div>
-              );
-            })()}
+            <div style={{ marginBottom: 14 }}>
+              <ChampDescriptionAvecSuggestions
+                valeurInitiale={creation.description}
+                suggestions={suggestionsUniques}
+                onValider={(valeur, prixChoisi) => setCreation(prev => ({
+                  ...prev,
+                  description: valeur,
+                  prix: prixChoisi != null ? prixChoisi : prev.prix,
+                }))}
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, boxSizing: 'border-box' }}
+              />
+            </div>
 
             <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Prix</label>
             <input
