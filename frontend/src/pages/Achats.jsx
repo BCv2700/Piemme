@@ -247,32 +247,6 @@ export default function Achats() {
 
         {error && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13, color: '#888', fontWeight: 600, whiteSpace: 'nowrap' }}>
-            {articles.length} article{articles.length !== 1 ? 's' : ''}
-          </span>
-          <button className="btn" onClick={ouvrirCreation}>+ Nouvel article</button>
-          <input
-            type="text"
-            placeholder="Rechercher par nom ou fournisseur..."
-            value={recherche}
-            onChange={(e) => setRecherche(e.target.value)}
-            style={{
-              flex: 1, minWidth: 200, padding: '10px 14px', borderRadius: 8,
-              border: '1px solid #ddd', fontSize: 14,
-            }}
-          />
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer', padding: '0 4px' }}>
-            <input
-              type="checkbox"
-              checked={filtreCochesUniquement}
-              onChange={(e) => setFiltreCochesUniquement(e.target.checked)}
-              style={{ width: 16, height: 16 }}
-            />
-            Cochés uniquement
-          </label>
-        </div>
-
         <div style={{
           display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12,
           padding: '10px 16px', borderRadius: 8, background: '#fef3c7', border: '1px solid #fcd34d',
@@ -293,6 +267,32 @@ export default function Achats() {
           <span style={{ marginLeft: 'auto', fontSize: 13, color: '#888' }}>
             Total général (liste affichée) : {totalGeneral.toFixed(2)} €
           </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, color: '#888', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {articles.length} article{articles.length !== 1 ? 's' : ''}
+          </span>
+          <button className="btn" onClick={ouvrirCreation}>+ Nouvel article</button>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer', padding: '0 4px' }}>
+            <input
+              type="checkbox"
+              checked={filtreCochesUniquement}
+              onChange={(e) => setFiltreCochesUniquement(e.target.checked)}
+              style={{ width: 16, height: 16 }}
+            />
+            Cochés uniquement
+          </label>
+          <input
+            type="text"
+            placeholder="Rechercher par nom ou fournisseur..."
+            value={recherche}
+            onChange={(e) => setRecherche(e.target.value)}
+            style={{
+              flex: 1, minWidth: 200, padding: '10px 14px', borderRadius: 8,
+              border: '1px solid #ddd', fontSize: 14,
+            }}
+          />
         </div>
 
         <datalist id="magasins-datalist">
