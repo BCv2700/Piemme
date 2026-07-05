@@ -16,6 +16,15 @@ const STATUT_LABEL = {
   indisponible: 'Indisponible',
 };
 
+// Version 1 lettre, utilisée uniquement dans la liste compacte "Statut des
+// tables" pour réduire la largeur de chaque case et limiter le scroll vertical.
+const STATUT_LABEL_COURT = {
+  libre: 'L',
+  occupee: 'O',
+  reservee: 'R',
+  indisponible: 'I',
+};
+
 function toDateKey(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -342,6 +351,12 @@ export default function PlanSalle() {
   const nbReservees = tables.filter(t => t.statutEffectif === 'reservee').length;
   const nbIndisponibles = tables.filter(t => t.statutEffectif === 'indisponible').length;
 
+  // Liste des tables réservées ce jour, triée par heure croissante, pour le
+  // panneau à droite du plan de salle.
+  const reservationsListe = tables
+    .filter(t => t.reservation)
+    .sort((a, b) => a.reservation.heure.localeCompare(b.reservation.heure));
+
   return (
     <div>
       <div className="content">
@@ -406,20 +421,21 @@ export default function PlanSalle() {
           </span>
         </div>
 
-        <div
-          ref={roomRef}
-          style={{
-            position: 'relative',
-            width: '100%',
-            height: 560,
-            background: 'white',
-            border: '1px solid #e5e5e0',
-            borderRadius: 10,
-            overflow: 'hidden',
-            marginBottom: 16,
-          }}
-        >
-          {tables.map(table => {
+        <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+          <div
+            ref={roomRef}
+            style={{
+              position: 'relative',
+              flex: 1,
+              minWidth: 0,
+              height: 560,
+              background: 'white',
+              border: '1px solid #e5e5e0',
+              borderRadius: 10,
+              overflow: 'hidden',
+            }}
+          >
+            {tables.map(table => {
             const resa = table.reservation;
             const heure = resa ? resa.heure.slice(0, 5) : null;
             const nomResa = resa ? resa.nom_client : null;
@@ -499,6 +515,29 @@ export default function PlanSalle() {
               </div>
             );
           })}
+          </div>
+
+          <div style={{
+            width: 220, flexShrink: 0, background: 'white', border: '1px solid #e5e5e0',
+            borderRadius: 10, padding: 14, height: 560, overflowY: 'auto',
+          }}>
+            <div style={{ fontSize: 12, color: '#888', fontWeight: 600, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+              Réservations {isToday ? "(aujourd'hui)" : '— ' + selectedDate}
+            </div>
+            {reservationsListe.length === 0 && (
+              <div style={{ color: '#aaa', fontSize: 13 }}>Aucune réservation</div>
+            )}
+            {reservationsListe.map(t => (
+              <div key={t.id} style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>
+                  {t.nom} <span style={{ fontWeight: 400, color: '#666' }}>— {t.reservation.nom_client}</span>
+                </div>
+                <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
+                  {t.reservation.heure.slice(0, 5)} · {t.reservation.nb_personnes} pers.
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div
@@ -512,7 +551,7 @@ export default function PlanSalle() {
           <div style={{ fontSize: 12, color: '#888', fontWeight: 600, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>
             Statut des tables {isToday ? "(aujourd'hui)" : '— ' + selectedDate}
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {[...tables].sort((a, b) => a.nom.localeCompare(b.nom, undefined, { numeric: true })).map(table => {
               const disabled = !!table.reservation || isReferenceDay;
               return (
@@ -521,11 +560,10 @@ export default function PlanSalle() {
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 8,
-                    padding: '8px 10px',
+                    gap: 6,
+                    padding: '6px 8px',
                     border: '1px solid #eee',
                     borderRadius: 8,
-                    minWidth: 150,
                   }}
                 >
                   <span style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>{table.nom}</span>
@@ -533,21 +571,22 @@ export default function PlanSalle() {
                     value={table.statutEffectif}
                     onChange={(e) => changerStatut(table.id, e.target.value)}
                     disabled={disabled}
-                    title={disabled ? (table.reservation ? 'Réservée automatiquement ce jour' : 'Non modifiable sur le jour de référence') : ''}
+                    title={disabled ? (table.reservation ? 'Réservée automatiquement ce jour' : 'Non modifiable sur le jour de référence') : STATUT_LABEL[table.statutEffectif]}
                     style={{
                       fontSize: 12,
-                      padding: '4px 6px',
+                      padding: '4px 4px',
                       borderRadius: 6,
                       border: '1px solid #ddd',
                       color: STATUT_COLOR[table.statutEffectif] || '#555',
-                      fontWeight: 600,
+                      fontWeight: 700,
                       background: disabled ? '#f5f5f0' : 'white',
-                      flex: 1,
+                      width: 44,
+                      textAlign: 'center',
                       cursor: disabled ? 'not-allowed' : 'pointer',
                     }}
                   >
-                    {Object.entries(STATUT_LABEL).map(([key, label]) => (
-                      <option key={key} value={key}>{label}</option>
+                    {Object.entries(STATUT_LABEL_COURT).map(([key, lettre]) => (
+                      <option key={key} value={key} title={STATUT_LABEL[key]}>{lettre}</option>
                     ))}
                   </select>
                 </div>
