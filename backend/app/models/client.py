@@ -5,7 +5,8 @@ class Client(Base):
     __tablename__ = 'clients'
     id                 = Column(Integer, primary_key=True, index=True)
     nom                = Column(String(100), nullable=False)
-    telephone          = Column(String(30))
+    telephone_mobile   = Column(String(30))
+    telephone_fixe     = Column(String(30))
     email              = Column(String(100))
     adresse            = Column(String(150))
     cp                 = Column(String(10))

@@ -25,6 +25,7 @@ router = APIRouter(prefix="/encaissements", tags=["Encaissements"])
 def list_encaissements(
     date_debut: Optional[date] = None,
     date_fin: Optional[date] = None,
+    client_id: Optional[int] = None,
     db: Session = Depends(get_db),
     utilisateur: Utilisateur = Depends(get_current_user),
 ):
@@ -37,6 +38,8 @@ def list_encaissements(
         # vente faite après 00:00 le jour même.
         borne_fin = datetime.combine(date_fin, datetime.max.time())
         query = query.filter(Encaissement.date_encaissement <= borne_fin)
+    if client_id is not None:
+        query = query.filter(Encaissement.client_id == client_id)
     return query.order_by(Encaissement.date_encaissement.desc()).all()
 
 

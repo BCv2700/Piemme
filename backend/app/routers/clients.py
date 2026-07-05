@@ -18,8 +18,11 @@ def list_clients(
 ):
     query = db.query(Client)
     if search:
+        terme = f"%{search}%"
         query = query.filter(
-            (Client.nom.ilike(f"%{search}%")) | (Client.telephone.ilike(f"%{search}%"))
+            (Client.nom.ilike(terme))
+            | (Client.telephone_mobile.ilike(terme))
+            | (Client.telephone_fixe.ilike(terme))
         )
     if actif is not None:
         query = query.filter(Client.actif == actif)

@@ -4,7 +4,8 @@ from datetime import date
 
 class ClientBase(BaseModel):
     nom: str
-    telephone: Optional[str] = None
+    telephone_mobile: Optional[str] = None
+    telephone_fixe: Optional[str] = None
     email: Optional[str] = None
     adresse: Optional[str] = None
     cp: Optional[str] = None
@@ -20,7 +21,8 @@ class ClientCreate(ClientBase):
 
 class ClientUpdate(BaseModel):
     nom: Optional[str] = None
-    telephone: Optional[str] = None
+    telephone_mobile: Optional[str] = None
+    telephone_fixe: Optional[str] = None
     email: Optional[str] = None
     adresse: Optional[str] = None
     cp: Optional[str] = None
