@@ -22,6 +22,7 @@ const ARTICLE_VIDE = {
   stock_a_suivre: false,
   est_boisson: false,
   imprimer_cuisine: false,
+  ordre: '',
   ean: '',
   fournisseur: '',
   localisation: '',
@@ -103,6 +104,7 @@ export default function Articles() {
       stock: Number(edition.stock),
       stock_min: Number(edition.stock_min),
       stock_max: Number(edition.stock_max),
+      ordre: edition.ordre === '' || edition.ordre === null || edition.ordre === undefined ? null : Number(edition.ordre),
     };
 
     try {
@@ -149,6 +151,20 @@ export default function Articles() {
       setArticles(prev => prev.map(a => a.id === article.id ? { ...a, categorie: res.data.categorie } : a));
     } catch (e) {
       setError(e.response?.data?.detail || 'Erreur lors du changement de catégorie');
+    }
+  };
+
+  // Changement de l'ordre d'affichage directement depuis le tableau, enregistré
+  // à la perte de focus. Champ vide = pas d'ordre défini (null).
+  const changerOrdreLigne = async (article, nouvelOrdreStr) => {
+    setError('');
+    const valeur = nouvelOrdreStr === '' ? null : Number(nouvelOrdreStr);
+    if (valeur !== null && !Number.isInteger(valeur)) return;
+    try {
+      const res = await api.patch('/articles/' + article.id, { ordre: valeur });
+      setArticles(prev => prev.map(a => a.id === article.id ? { ...a, ordre: res.data.ordre } : a));
+    } catch (e) {
+      setError(e.response?.data?.detail || "Erreur lors du changement de l'ordre");
     }
   };
 
@@ -314,6 +330,7 @@ export default function Articles() {
                   </th>
                   <th style={thCell()}></th>
                   <th style={thCell()}>ID</th>
+                  <th style={thCell()} title="Ordre d'affichage des boutons dans le Caddy">Ordre</th>
                   <th style={thCell()}>Nom</th>
                   <th style={thCell()}>Type</th>
                   <th style={thCell()}>Code vente</th>
@@ -360,6 +377,19 @@ export default function Articles() {
                         </button>
                       </td>
                       <td style={tdCell({ color: '#aaa' })}>{article.id}</td>
+                      <td style={tdCell()} onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="number"
+                          defaultValue={article.ordre ?? ''}
+                          placeholder="—"
+                          onBlur={(e) => changerOrdreLigne(article, e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+                          style={{
+                            width: 52, padding: '3px 6px', borderRadius: 6,
+                            border: '1px solid #ddd', fontSize: 12, textAlign: 'right',
+                          }}
+                        />
+                      </td>
                       <td style={tdCell({ fontWeight: 500 })}>{article.nom}</td>
                       <td style={tdCell({ color: '#666' })}>{article.type_article || '—'}</td>
                       <td style={tdCell({ color: '#666' })}>{LIBELLES_CODE_VENTE[article.code_vente] || article.code_vente || '—'}</td>
@@ -407,7 +437,7 @@ export default function Articles() {
                 })}
                 {articlesAffiches.length === 0 && (
                   <tr>
-                    <td colSpan={14} style={{ padding: 20, textAlign: 'center', color: '#888', border: BORDURE }}>
+                    <td colSpan={15} style={{ padding: 20, textAlign: 'center', color: '#888', border: BORDURE }}>
                       Aucun article ne correspond à la recherche
                     </td>
                   </tr>
@@ -455,9 +485,21 @@ export default function Articles() {
             <div style={{ padding: 24, overflowY: 'auto' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-              <Champ label="Nom">
-                <input style={inputStyle} value={edition.nom} onChange={e => majChamp('nom', e.target.value)} />
-              </Champ>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <Champ label="Nom" style={{ flex: 1 }}>
+                  <input style={inputStyle} value={edition.nom} onChange={e => majChamp('nom', e.target.value)} />
+                </Champ>
+                <Champ label="Ordre d'affichage" style={{ width: 110 }}>
+                  <input
+                    type="number"
+                    style={inputStyle}
+                    value={edition.ordre ?? ''}
+                    onChange={e => majChamp('ordre', e.target.value)}
+                    placeholder="—"
+                    title="Ordre des boutons dans le Caddy. Vide = après les articles avec ordre, triés par nom."
+                  />
+                </Champ>
+              </div>
 
               <label style={{
                 display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600,
