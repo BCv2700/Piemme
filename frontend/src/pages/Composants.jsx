@@ -118,24 +118,25 @@ export default function Composants() {
 
   const articlesParId = Object.fromEntries(articles.map(a => [a.id, a]));
 
-  // Liste unique des descriptions déjà utilisées (tous plats confondus), avec
-  // le prix le plus fréquent associé — sert de base aux suggestions affichées
-  // à la création et à l'édition (description + prix visibles ensemble).
+  // Liste des couples (description, prix) déjà utilisés ailleurs (tous plats
+  // confondus). Contrairement à une simple déduplication par description, on
+  // garde CHAQUE prix distinct rencontré pour un même texte : comme la
+  // plupart des lignes sont encore à 0,00€ (jamais corrigées), un calcul de
+  // "prix le plus fréquent" ressortirait presque toujours 0 — pas utile.
+  // Les prix non nuls sont affichés en premier pour un même texte.
   const suggestionsUniques = useMemo(() => {
-    const map = new Map();
+    const map = new Map(); // "description|prix" -> { description, prix }
     composants.forEach(c => {
-      const cle = c.description.trim().toLowerCase();
-      if (!map.has(cle)) map.set(cle, { description: c.description.trim(), comptage: {} });
-      const entree = map.get(cle);
-      const p = Number(c.prix);
-      entree.comptage[p] = (entree.comptage[p] || 0) + 1;
+      const descTrim = c.description.trim();
+      const prix = Number(c.prix);
+      const cle = descTrim.toLowerCase() + '|' + prix;
+      if (!map.has(cle)) map.set(cle, { description: descTrim, prix });
     });
-    return Array.from(map.values())
-      .map(e => {
-        const [prixFrequent] = Object.entries(e.comptage).sort((a, b) => b[1] - a[1])[0];
-        return { description: e.description, prix: Number(prixFrequent) };
-      })
-      .sort((a, b) => a.description.localeCompare(b.description, 'fr'));
+    return Array.from(map.values()).sort((a, b) => {
+      const cmp = a.description.localeCompare(b.description, 'fr');
+      if (cmp !== 0) return cmp;
+      return b.prix - a.prix; // prix non nul avant 0
+    });
   }, [composants]);
 
   const composantsAffiches = composants.filter(c => {
