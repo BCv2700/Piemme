@@ -11,6 +11,11 @@ import api from '../api/api';
 // ───────────────────────────────────────────────────────────────────────────
 const CODE_VENTE_DEPENSE = 9001;
 
+// Hauteur de l'espace blanc à laisser en haut du ticket cuisine (impression
+// réelle ET PDF), pour pouvoir accrocher le ticket sur un rail sans cacher
+// les inscriptions.
+const ESPACE_HAUT_TICKET_CUISINE_MM = 30; // 3 cm
+
 // Normalise un nom de table pour le comparer sans tenir compte de la casse ni
 // des accents : "DÉPENSES", "Dépenses", "depenses" donnent tous "depenses".
 const normaliser = (s) =>
@@ -291,6 +296,9 @@ export default function Caddy() {
 
   // Ouvre une fenêtre d'impression avec une mise en page adaptée à un ticket
   // thermique (largeur ~72mm), via l'impression standard du navigateur.
+  // Un espace blanc de ESPACE_HAUT_TICKET_CUISINE_MM est réservé en haut du
+  // ticket (avant l'en-tête "CUISINE") pour pouvoir l'accrocher sur un rail
+  // sans cacher les inscriptions.
   const imprimerTicket = (contenu) => {
     const fenetre = window.open('', '_blank', 'width=400,height=600');
     if (!fenetre) {
@@ -308,6 +316,7 @@ export default function Caddy() {
           <style>
             @page { size: 72mm auto; margin: 2mm; }
             body { font-family: 'Courier New', monospace; width: 68mm; margin: 0; padding: 4px; }
+            .espace-haut { height: ${ESPACE_HAUT_TICKET_CUISINE_MM}mm; }
             h1 { font-size: 16px; text-align: center; margin: 0 0 8px; }
             .table { font-size: 15px; font-weight: bold; text-align: center; margin-bottom: 4px; }
             .reservation { font-size: 13px; text-align: center; margin-bottom: 10px; }
@@ -317,6 +326,7 @@ export default function Caddy() {
           </style>
         </head>
         <body>
+          <div class="espace-haut"></div>
           <h1>🍳 CUISINE</h1>
           <div class="table">${escapeHtml(contenu.table)}</div>
           ${contenu.reservation ? '<div class="reservation">' + escapeHtml(contenu.reservation) + '</div>' : ''}
@@ -367,7 +377,9 @@ export default function Caddy() {
   };
 
   // Bouton "Voir en PDF" : même contenu que le ticket complet, pour test ou secours.
-  // Ne modifie jamais le statut imprimé.
+  // Ne modifie jamais le statut imprimé. Même espace blanc de
+  // ESPACE_HAUT_TICKET_CUISINE_MM réservé en haut, pour rester cohérent avec
+  // l'impression réelle (accroche sur rail).
   const handleVoirPdf = () => {
     if (lignesCuisineTotales.length === 0) {
       setError('Aucun article cuisine sur cette commande');
@@ -376,9 +388,10 @@ export default function Caddy() {
     setError('');
     const contenu = construireContenuTicket(lignesCuisineTotales);
     // Format proche d'un ticket : 72mm de large, hauteur étendue selon le nombre de lignes
-    const hauteurMm = 40 + contenu.items.length * 8;
+    // + l'espace blanc réservé en haut du ticket.
+    const hauteurMm = 40 + ESPACE_HAUT_TICKET_CUISINE_MM + contenu.items.length * 8;
     const doc = new jsPDF({ unit: 'mm', format: [72, hauteurMm] });
-    let y = 10;
+    let y = 10 + ESPACE_HAUT_TICKET_CUISINE_MM;
     doc.setFontSize(13);
     doc.setFont(undefined, 'bold');
     doc.text('CUISINE', 36, y, { align: 'center' });
