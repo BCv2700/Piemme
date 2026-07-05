@@ -331,6 +331,15 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
                   Dépenses
                 </label>
               </div>
+              <div>
+                <label style={labelStyle}>Nb personnes</label>
+                <input
+                  type="number" min="1" style={inputStyle}
+                  value={enc.nb_personnes ?? 1}
+                  onChange={(e) => majLocal('nb_personnes', e.target.value)}
+                  onBlur={() => saveEncaissement()}
+                />
+              </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>

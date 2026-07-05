@@ -25,8 +25,12 @@ export function calculerTvaParTaux(lignes) {
 
 export function genererDonneesTicket({
   encaissementId, dateEncaissement, tableNom,
-  lignes, montantCash, montantCarte, montantTotal,
+  lignes, montantCash, montantCarte, montantTotal, nbPersonnes,
 }) {
+  // Nombre de personnes : toujours au moins 1, pour ne jamais diviser par zéro
+  // et pour rester cohérent même si la valeur n'a pas été transmise (anciens
+  // encaissements réimprimés, par exemple).
+  const nb = Number(nbPersonnes) > 0 ? Number(nbPersonnes) : 1;
   return {
     ...COORDONNEES_RESTAURANT,
     numeroTicket: encaissementId,
@@ -41,6 +45,8 @@ export function genererDonneesTicket({
     montantCash: Number(montantCash),
     montantCarte: Number(montantCarte),
     tvaParTaux: calculerTvaParTaux(lignes),
+    nbPersonnes: nb,
+    prixParPersonne: Number(montantTotal) / nb,
   };
 }
 
@@ -57,6 +63,7 @@ export function genererDonneesTicketDepuisEncaissement(enc) {
     montantCash: enc.montant_cash,
     montantCarte: enc.montant_carte,
     montantTotal: enc.montant_total,
+    nbPersonnes: enc.nb_personnes,
   });
 }
 
@@ -88,6 +95,9 @@ export function genererPdfTicket(data) {
   y += 6;
   doc.text('à payer :', 4, y);
   doc.text(data.montantTotal.toFixed(2), 76, y, { align: 'right' });
+  y += 6;
+  doc.text(data.nbPersonnes + ' pers. - Prix/pers. :', 4, y);
+  doc.text(data.prixParPersonne.toFixed(2), 76, y, { align: 'right' });
   y += 8;
   if (data.montantCarte > 0) {
     doc.text('Bancontact :', 4, y);

@@ -36,6 +36,9 @@ export default function TicketImprimable({ data }) {
       <div className="ticket-total-ligne ticket-a-payer">
         <span>à payer :</span><span>{data.montantTotal.toFixed(2)}</span>
       </div>
+      <div className="ticket-total-ligne">
+        <span>{data.nbPersonnes} pers. - Prix/pers. :</span><span>{data.prixParPersonne.toFixed(2)}</span>
+      </div>
 
       {data.montantCarte > 0 && (
         <div className="ticket-total-ligne">

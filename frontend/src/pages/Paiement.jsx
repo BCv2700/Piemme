@@ -28,6 +28,7 @@ export default function Paiement() {
   const [lignes, setLignes] = useState([]);
   const [articles, setArticles] = useState([]);
   const [nomReservation, setNomReservation] = useState(null);
+  const [nbPersonnes, setNbPersonnes] = useState(1);
   const [clients, setClients] = useState([]);
   const [clientId, setClientId] = useState(null);
   const [montantCarte, setMontantCarte] = useState('');
@@ -58,6 +59,7 @@ export default function Paiement() {
       setArticles(articlesRes.data);
       const resa = reservationsRes.data.find(r => r.table_id === Number(tableId) && r.statut !== 'annulee');
       setNomReservation(resa ? resa.nom_client : null);
+      setNbPersonnes(resa && resa.nb_personnes ? Number(resa.nb_personnes) : 1);
       setClients(clientsRes.data);
     } catch (e) {
       setError(e.response?.data?.detail || 'Impossible de charger la commande');
@@ -105,7 +107,7 @@ export default function Paiement() {
       montant_carte: carte,
       montant_cash: cash,
       montant_total: total,
-      nb_personnes: 1,
+      nb_personnes: Number(nbPersonnes) || 1,
       emporte: lignes.some(l => l.emporte),
       nom_reservation_archive: nomReservation,
       date_encaissement: dateEncodage + 'T12:00:00',
@@ -138,6 +140,7 @@ export default function Paiement() {
     montantCash: cash,
     montantCarte: carte,
     montantTotal: total,
+    nbPersonnes: Number(nbPersonnes) || 1,
   });
 
   const validerEtImprimer = async () => {
@@ -208,6 +211,15 @@ export default function Paiement() {
             <div style={{ marginBottom: 16 }}>
               <SelecteurClient clients={clients} clientId={clientId} onChange={setClientId} style={{ width: '100%', boxSizing: 'border-box' }} />
             </div>
+
+            <div style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>Nombre de personnes</div>
+            <input
+              type="number"
+              min="1"
+              value={nbPersonnes}
+              onChange={(e) => setNbPersonnes(e.target.value)}
+              style={{ ...inputStyle, textAlign: 'left', marginBottom: 16, width: 100 }}
+            />
 
             <div style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>Payer avec</div>
             <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
