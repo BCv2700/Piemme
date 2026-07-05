@@ -33,14 +33,36 @@ function dateKey(annee, mois, jour) {
   return annee + '-' + pad2(mois) + '-' + pad2(jour);
 }
 
+// Total des km d'un mois à partir d'un enregistrement recap (ou null si le
+// mois n'a jamais été touché) : km_defaut (53.4 par défaut) pour chaque jour,
+// sauf exception dans km_par_jour. Même logique que kmDuJour dans la vue
+// mensuelle, mais utilisable pour n'importe quel mois (pas seulement celui
+// affiché), pour construire le récapitulatif annuel.
+function calculerTotalKmMois(recapMois, annee, mois) {
+  const kmDefaut = recapMois ? Number(recapMois.km_defaut) : 53.4;
+  const nbJours = joursDansMois(annee, mois);
+  let total = 0;
+  for (let j = 1; j <= nbJours; j++) {
+    const exception = recapMois && recapMois.km_par_jour ? recapMois.km_par_jour[String(j)] : undefined;
+    total += exception !== undefined ? Number(exception) : kmDefaut;
+  }
+  return total;
+}
+
 export default function RecapMensuel() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [vue, setVue] = useState('tous'); // 'tous' = version 1 ; 'analyse' = version 2
+  const [afficherTotaux, setAfficherTotaux] = useState(false);
+  const [modeAffichage, setModeAffichage] = useState('mensuel'); // 'mensuel' | 'annuel'
   const dateRef = searchParams.get('date') || todayKey();
   const [anneeStr, moisStr] = dateRef.split('-');
   const annee = Number(anneeStr);
   const mois = Number(moisStr); // 1..12
+
+  const [anneeAnnuelle, setAnneeAnnuelle] = useState(annee);
+  const [recapsAnnee, setRecapsAnnee] = useState([]);
+  const [chargementAnnuel, setChargementAnnuel] = useState(false);
 
   const [encaissements, setEncaissements] = useState([]);
   const [recap, setRecap] = useState(null); // { memo, km_defaut, km_par_jour, ferme_par_jour }
@@ -72,6 +94,20 @@ export default function RecapMensuel() {
   };
 
   useEffect(() => { load(); }, [annee, mois]);
+
+  // Charge les 12 mois de l'année sélectionnée, uniquement quand la vue
+  // annuelle est active (pas besoin de le faire au chargement de la page).
+  const loadAnnee = () => {
+    setChargementAnnuel(true);
+    api.get('/recap-mensuel/annee/' + anneeAnnuelle)
+      .then(r => setRecapsAnnee(r.data))
+      .catch(() => showMsg('error', "Impossible de charger le récapitulatif de l'année"))
+      .finally(() => setChargementAnnuel(false));
+  };
+
+  useEffect(() => {
+    if (modeAffichage === 'annuel') loadAnnee();
+  }, [modeAffichage, anneeAnnuelle]);
 
   // Recettes uniquement (on exclut les dépenses), comme dans l'écran Encaissements
   const recettes = useMemo(() => encaissements.filter(e => !e.depenses), [encaissements]);
@@ -287,6 +323,24 @@ export default function RecapMensuel() {
   const thCell = (extra = {}) => ({ padding: '6px 10px', border: BORDURE, ...extra });
   const tdCell = (extra = {}) => ({ padding: '4px 10px', border: BORDURE, ...extra });
 
+  // ───── Année : totaux par mois pour le récapitulatif des km ─────────────
+  const totauxKmParMois = useMemo(() => {
+    const res = [];
+    for (let m = 1; m <= 12; m++) {
+      const recapMois = recapsAnnee.find(r => r.mois === m) || null;
+      const total = calculerTotalKmMois(recapMois, anneeAnnuelle, m);
+      res.push({ mois: m, aller: total / 2, retour: total / 2, total });
+    }
+    return res;
+  }, [recapsAnnee, anneeAnnuelle]);
+
+  const grandTotalKm = useMemo(() => {
+    return totauxKmParMois.reduce(
+      (acc, m) => ({ aller: acc.aller + m.aller, retour: acc.retour + m.retour, total: acc.total + m.total }),
+      { aller: 0, retour: 0, total: 0 }
+    );
+  }, [totauxKmParMois]);
+
   // ───── Export PDF ─────────────────────────────────────────────────────
   // genere le PDF pour la vue "tous" ou "analyse". Toutes les colonnes
   // restent remplies même sur un jour fermé ; on ajoute juste "Fermé" en
@@ -434,6 +488,62 @@ export default function RecapMensuel() {
     );
   };
 
+  // ───── Rendu : vue annuelle (récapitulatif des km par mois) ─────────────
+  if (modeAffichage === 'annuel') {
+    return (
+      <div>
+        <div className="content">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+            <button className="btn" onClick={() => setModeAffichage('mensuel')}>← Retour au récap mensuel</button>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>
+              Récapitulatif des Km par mois
+            </h2>
+            <button className="btn" onClick={() => setAnneeAnnuelle(a => a - 1)}>−</button>
+            <span style={{ fontSize: 16, fontWeight: 700 }}>{anneeAnnuelle}</span>
+            <button className="btn" onClick={() => setAnneeAnnuelle(a => a + 1)}>+</button>
+          </div>
+
+          {chargementAnnuel ? (
+            <div style={{ color: '#888' }}>Chargement...</div>
+          ) : (
+            <div style={{ background: 'white', border: BORDURE, borderRadius: 10, overflow: 'hidden', maxWidth: 640 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: '#fafaf8' }}>
+                    <th style={thCell({ textAlign: 'left' })}></th>
+                    <th style={thCell({ textAlign: 'right' })}>Aller</th>
+                    <th style={thCell({ textAlign: 'right' })}>Retour</th>
+                    <th style={thCell({ textAlign: 'right' })}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {totauxKmParMois.map(m => (
+                    <tr key={m.mois}>
+                      <td style={tdCell({ textAlign: 'left', textTransform: 'capitalize' })}>
+                        {MOIS_NOMS[m.mois - 1]}
+                      </td>
+                      <td style={tdCell({ textAlign: 'right' })}>{fmt(m.aller)}</td>
+                      <td style={tdCell({ textAlign: 'right' })}>{fmt(m.retour)}</td>
+                      <td style={tdCell({ textAlign: 'right', fontWeight: 600 })}>{fmt(m.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ fontWeight: 700, background: '#fafaf8' }}>
+                    <td style={tdCell({ textAlign: 'left' })}>Grand Total</td>
+                    <td style={tdCell({ textAlign: 'right' })}>{fmt(grandTotalKm.aller)}</td>
+                    <td style={tdCell({ textAlign: 'right' })}>{fmt(grandTotalKm.retour)}</td>
+                    <td style={tdCell({ textAlign: 'right' })}>{fmt(grandTotalKm.total)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="content">
@@ -505,6 +615,16 @@ export default function RecapMensuel() {
             >
               📄 PDF Comptable
             </button>
+            <button
+              onClick={() => { setAnneeAnnuelle(annee); setModeAffichage('annuel'); }}
+              style={{
+                padding: '6px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8,
+                border: '1px solid #ddd', background: 'white', color: '#333', cursor: 'pointer',
+              }}
+              title="Voir le récapitulatif des km par mois sur l'année"
+            >
+              📆 Vue annuelle (km)
+            </button>
           </div>
           <span style={{ fontSize: 13, color: '#888' }}>
             {vue === 'analyse' ? 'Ventes analysées uniquement' : 'Tous les encaissements'}
@@ -515,48 +635,58 @@ export default function RecapMensuel() {
           <div style={{ color: '#888' }}>Chargement...</div>
         ) : (
           <>
-            {/* Bandeau de totaux du mois */}
-            <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-              {vue === 'tous' ? (
-                <>
-                  <CarteTotal label="Total" valeur={fmt(totaux.total)} fort />
-                  <CarteTotal
-                    label="Dépenses" valeur={fmt(totaux.depenses)} couleur="#b91c1c"
-                    onClick={ouvrirHistoriqueMois} title="Voir le détail des dépenses dans l'historique du mois"
-                  />
-                  <CarteTotal label="Cash" valeur={fmt(totaux.cash)} couleur="#16a34a" />
-                  <CarteTotal label="Carte" valeur={fmt(totaux.carte)} couleur="#2563eb" />
-                  <CarteTotal label="Cash analysé" valeur={fmt(totaux.cashAnalyse)} couleur="#b45309" />
-                  {TAUX_TVA.map(taux => (
+            {/* Bandeau de totaux du mois, replié par défaut pour gagner de la place */}
+            <button
+              className="btn"
+              onClick={() => setAfficherTotaux(v => !v)}
+              style={{ marginBottom: 12, fontSize: 12, color: '#666' }}
+            >
+              {afficherTotaux ? '▲ Masquer les totaux' : '▼ Afficher les totaux'}
+            </button>
+
+            {afficherTotaux && (
+              <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+                {vue === 'tous' ? (
+                  <>
+                    <CarteTotal label="Total" valeur={fmt(totaux.total)} fort />
                     <CarteTotal
-                      key={taux}
-                      label={'TVA ' + taux + '% (' + pourcentage(totaux.tva[taux]).toFixed(2) + '%)'}
-                      valeur={fmt(totaux.tva[taux])}
+                      label="Dépenses" valeur={fmt(totaux.depenses)} couleur="#b91c1c"
+                      onClick={ouvrirHistoriqueMois} title="Voir le détail des dépenses dans l'historique du mois"
                     />
-                  ))}
-                  <CarteTotal label="TVA totale à payer" valeur={fmt(totalTvaApayer(totaux.tva))} couleur="#888" />
-                </>
-              ) : (
-                <>
-                  <CarteTotal label="Total" valeur={fmt(totaux.totalAnalyse)} fort />
-                  <CarteTotal
-                    label="Dépenses" valeur={fmt(totaux.depenses)} couleur="#b91c1c"
-                    onClick={ouvrirHistoriqueMois} title="Voir le détail des dépenses dans l'historique du mois"
-                  />
-                  <CarteTotal label="Carte" valeur={fmt(totaux.carte)} couleur="#2563eb" />
-                  <CarteTotal label="Cash analysé" valeur={fmt(totaux.cashAnalyse)} couleur="#b45309" />
-                  {TAUX_TVA.map(taux => (
+                    <CarteTotal label="Cash" valeur={fmt(totaux.cash)} couleur="#16a34a" />
+                    <CarteTotal label="Carte" valeur={fmt(totaux.carte)} couleur="#2563eb" />
+                    <CarteTotal label="Cash analysé" valeur={fmt(totaux.cashAnalyse)} couleur="#b45309" />
+                    {TAUX_TVA.map(taux => (
+                      <CarteTotal
+                        key={taux}
+                        label={'TVA ' + taux + '% (' + pourcentage(totaux.tva[taux]).toFixed(2) + '%)'}
+                        valeur={fmt(totaux.tva[taux])}
+                      />
+                    ))}
+                    <CarteTotal label="TVA totale à payer" valeur={fmt(totalTvaApayer(totaux.tva))} couleur="#888" />
+                  </>
+                ) : (
+                  <>
+                    <CarteTotal label="Total" valeur={fmt(totaux.totalAnalyse)} fort />
                     <CarteTotal
-                      key={taux}
-                      label={'TVA ' + taux + '% (' + pourcentage(totaux.tvaAnalyse[taux]).toFixed(2) + '%)'}
-                      valeur={fmt(totaux.tvaAnalyse[taux])}
+                      label="Dépenses" valeur={fmt(totaux.depenses)} couleur="#b91c1c"
+                      onClick={ouvrirHistoriqueMois} title="Voir le détail des dépenses dans l'historique du mois"
                     />
-                  ))}
-                  <CarteTotal label="TVA totale à payer" valeur={fmt(totalTvaApayer(totaux.tvaAnalyse))} couleur="#888" />
-                </>
-              )}
-              <CarteTotal label="Km A/R" valeur={fmt(totalKm)} couleur="#6b7280" />
-            </div>
+                    <CarteTotal label="Carte" valeur={fmt(totaux.carte)} couleur="#2563eb" />
+                    <CarteTotal label="Cash analysé" valeur={fmt(totaux.cashAnalyse)} couleur="#b45309" />
+                    {TAUX_TVA.map(taux => (
+                      <CarteTotal
+                        key={taux}
+                        label={'TVA ' + taux + '% (' + pourcentage(totaux.tvaAnalyse[taux]).toFixed(2) + '%)'}
+                        valeur={fmt(totaux.tvaAnalyse[taux])}
+                      />
+                    ))}
+                    <CarteTotal label="TVA totale à payer" valeur={fmt(totalTvaApayer(totaux.tvaAnalyse))} couleur="#888" />
+                  </>
+                )}
+                <CarteTotal label="Km A/R" valeur={fmt(totalKm)} couleur="#6b7280" />
+              </div>
+            )}
 
             {/* Tableau jour par jour */}
             <div style={{ background: 'white', border: BORDURE, borderRadius: 10, overflow: 'auto', marginBottom: 20 }}>
