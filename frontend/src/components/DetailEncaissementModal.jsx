@@ -32,6 +32,7 @@ function decomposerDateHeure(dateIso) {
 
 export default function DetailEncaissementModal({ encaissementId, onClose, onChanged }) {
   const [enc, setEnc] = useState(null);
+  const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
@@ -53,10 +54,14 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
 
   const load = () => {
     setLoading(true);
-    api.get('/encaissements/' + encaissementId)
-      .then(r => {
-        setEnc(r.data);
-        const { date, heure } = decomposerDateHeure(r.data.date_encaissement);
+    Promise.all([
+      api.get('/encaissements/' + encaissementId),
+      api.get('/clients/'),
+    ])
+      .then(([encRes, clientsRes]) => {
+        setEnc(encRes.data);
+        setClients(clientsRes.data);
+        const { date, heure } = decomposerDateHeure(encRes.data.date_encaissement);
         setDateSaisie(date);
         setHeureSaisie(heure);
       })
@@ -96,6 +101,21 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
       onChanged && onChanged();
     } catch (e) {
       showMsg('error', errMsg(e, 'Erreur lors de la mise à jour'));
+      load();
+    }
+  };
+
+  // Changement de client, enregistré immédiatement (pas besoin d'onBlur, comme
+  // les cases à cocher Emporté/Dépenses).
+  const changerClient = async (nouveauClientIdStr) => {
+    const nouveauClientId = nouveauClientIdStr === '' ? null : Number(nouveauClientIdStr);
+    majLocal('client_id', nouveauClientId);
+    try {
+      await api.patch('/encaissements/' + enc.id, { client_id: nouveauClientId });
+      showMsg('success', 'Client mis à jour');
+      onChanged && onChanged();
+    } catch (e) {
+      showMsg('error', errMsg(e, 'Erreur lors du changement de client'));
       load();
     }
   };
@@ -239,11 +259,27 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
             background: #fff !important;
           }
         `}</style>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
           <div style={{ fontWeight: 700, fontSize: 17 }}>
             Encaissement #{encaissementId}
           </div>
-          <button className="btn" onClick={onClose} style={{ width: 28, height: 28, padding: 0 }}>✕</button>
+          {enc && (
+            <select
+              value={enc.client_id ?? ''}
+              onChange={(e) => changerClient(e.target.value)}
+              style={{
+                fontSize: 13, padding: '6px 10px', borderRadius: 6, border: '1px solid #ddd',
+                background: 'white', color: enc.client_id ? '#333' : '#aaa', cursor: 'pointer',
+                minWidth: 180,
+              }}
+            >
+              <option value="">— Aucun client —</option>
+              {clients.map(c => (
+                <option key={c.id} value={c.id}>{c.nom}</option>
+              ))}
+            </select>
+          )}
+          <button className="btn" onClick={onClose} style={{ width: 28, height: 28, padding: 0, marginLeft: 'auto' }}>✕</button>
         </div>
 
         {msg && (
