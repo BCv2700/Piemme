@@ -245,9 +245,31 @@ export default function Clients() {
 
               {/* Colonne gauche : fiche client */}
               <div style={{ flex: 1, minWidth: 320, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <Champ label="Nom">
-                  <input style={inputStyle} value={edition.nom} onChange={e => majChamp('nom', e.target.value)} />
-                </Champ>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+                  <Champ label="Nom" style={{ flex: 1 }}>
+                    <input style={inputStyle} value={edition.nom} onChange={e => majChamp('nom', e.target.value)} />
+                  </Champ>
+                  <label style={{
+                    display: 'flex', alignItems: 'center', gap: 6, fontSize: 13,
+                    padding: '8px 12px', borderRadius: 20, border: '1px solid #ddd', cursor: 'pointer',
+                    background: edition.actif ? '#dcfce7' : 'white',
+                    borderColor: edition.actif ? '#86efac' : '#ddd',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    <input type="checkbox" checked={edition.actif} onChange={e => majChamp('actif', e.target.checked)} style={{ width: 14, height: 14 }} />
+                    Actif
+                  </label>
+                  <label style={{
+                    display: 'flex', alignItems: 'center', gap: 6, fontSize: 13,
+                    padding: '8px 12px', borderRadius: 20, border: '1px solid #ddd', cursor: 'pointer',
+                    background: edition.a_recontacter ? '#fef3c7' : 'white',
+                    borderColor: edition.a_recontacter ? '#fcd34d' : '#ddd',
+                    whiteSpace: 'nowrap',
+                  }}>
+                    <input type="checkbox" checked={edition.a_recontacter || false} onChange={e => majChamp('a_recontacter', e.target.checked)} style={{ width: 14, height: 14 }} />
+                    À recontacter
+                  </label>
+                </div>
 
                 <div style={{ display: 'flex', gap: 10 }}>
                   <Champ label="Téléphone mobile" style={{ flex: 1 }}>
@@ -256,18 +278,16 @@ export default function Clients() {
                   <Champ label="Téléphone fixe" style={{ flex: 1 }}>
                     <input style={inputStyle} value={edition.telephone_fixe || ''} onChange={e => majChamp('telephone_fixe', e.target.value)} />
                   </Champ>
+                  <Champ label="Email" style={{ flex: 1 }}>
+                    <input type="email" style={inputStyle} value={edition.email || ''} onChange={e => majChamp('email', e.target.value)} />
+                  </Champ>
                 </div>
 
-                <Champ label="Email">
-                  <input type="email" style={inputStyle} value={edition.email || ''} onChange={e => majChamp('email', e.target.value)} />
-                </Champ>
-
-                <Champ label="Adresse">
-                  <input style={inputStyle} value={edition.adresse || ''} onChange={e => majChamp('adresse', e.target.value)} />
-                </Champ>
-
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <Champ label="Code postal" style={{ width: 110 }}>
+                  <Champ label="Adresse" style={{ flex: 2 }}>
+                    <input style={inputStyle} value={edition.adresse || ''} onChange={e => majChamp('adresse', e.target.value)} />
+                  </Champ>
+                  <Champ label="Code postal" style={{ width: 90 }}>
                     <input style={inputStyle} value={edition.cp || ''} onChange={e => majChamp('cp', e.target.value)} />
                   </Champ>
                   <Champ label="Localité" style={{ flex: 1 }}>
@@ -286,32 +306,11 @@ export default function Clients() {
 
                 <Champ label="Remarques">
                   <textarea
-                    style={{ ...inputStyle, minHeight: 70, resize: 'vertical', fontFamily: 'inherit' }}
+                    style={{ ...inputStyle, minHeight: 50, resize: 'vertical', fontFamily: 'inherit' }}
                     value={edition.remarques || ''}
                     onChange={e => majChamp('remarques', e.target.value)}
                   />
                 </Champ>
-
-                <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                  <label style={{
-                    display: 'flex', alignItems: 'center', gap: 6, fontSize: 13,
-                    padding: '6px 12px', borderRadius: 20, border: '1px solid #ddd', cursor: 'pointer',
-                    background: edition.actif ? '#dcfce7' : 'white',
-                    borderColor: edition.actif ? '#86efac' : '#ddd',
-                  }}>
-                    <input type="checkbox" checked={edition.actif} onChange={e => majChamp('actif', e.target.checked)} style={{ width: 14, height: 14 }} />
-                    Actif
-                  </label>
-                  <label style={{
-                    display: 'flex', alignItems: 'center', gap: 6, fontSize: 13,
-                    padding: '6px 12px', borderRadius: 20, border: '1px solid #ddd', cursor: 'pointer',
-                    background: edition.a_recontacter ? '#fef3c7' : 'white',
-                    borderColor: edition.a_recontacter ? '#fcd34d' : '#ddd',
-                  }}>
-                    <input type="checkbox" checked={edition.a_recontacter || false} onChange={e => majChamp('a_recontacter', e.target.checked)} style={{ width: 14, height: 14 }} />
-                    À recontacter
-                  </label>
-                </div>
               </div>
 
               {/* Colonne droite : toujours présente pour garder la même largeur de
