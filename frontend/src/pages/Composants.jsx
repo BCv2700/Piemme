@@ -275,10 +275,10 @@ export default function Composants() {
               <thead>
                 <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
                   <th style={thCell()}></th>
-                  <th style={thCell()}>Plat</th>
-                  <th style={thCell()}>Catégorie</th>
                   <th style={thCell()}>Description</th>
                   <th style={thCell({ textAlign: 'right' })}>Prix</th>
+                  <th style={thCell()}>Plat</th>
+                  <th style={thCell()}>Catégorie</th>
                 </tr>
               </thead>
               <tbody>
@@ -296,18 +296,6 @@ export default function Composants() {
                         >
                           🗑
                         </button>
-                      </td>
-                      <td style={tdCell({ padding: '2px 4px', minWidth: 200 })}>
-                        <SelecteurArticle
-                          articles={articles}
-                          articleId={c.article_id}
-                          onChange={(id) => changerArticle(c, id)}
-                          compact
-                          style={{ width: '100%' }}
-                        />
-                      </td>
-                      <td style={tdCell({ color: '#666' })}>
-                        {article ? (LIBELLES_CODE_VENTE[article.code_vente] || '—') : '—'}
                       </td>
                       <td style={tdCell({ whiteSpace: 'normal', minWidth: 220 })}>
                         <input
@@ -328,6 +316,21 @@ export default function Composants() {
                           onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
                           style={{ width: 90, padding: '4px 8px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, textAlign: 'right' }}
                         />
+                      </td>
+                      <td style={tdCell({ padding: '2px 4px', minWidth: 200 })}>
+                        <SelecteurArticle
+                          articles={articles}
+                          articleId={c.article_id}
+                          onChange={(id) => changerArticle(c, id)}
+                          compact
+                          style={{
+                            width: '100%', padding: '4px 8px', borderRadius: 6,
+                            border: '1px solid #ddd', fontSize: 13,
+                          }}
+                        />
+                      </td>
+                      <td style={tdCell({ color: '#666' })}>
+                        {article ? (LIBELLES_CODE_VENTE[article.code_vente] || '—') : '—'}
                       </td>
                     </tr>
                   );
