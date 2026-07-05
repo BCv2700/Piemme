@@ -60,6 +60,7 @@ export default function PlanSalle() {
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [editingHeureArrivee, setEditingHeureArrivee] = useState(null); // { tableId, valeur }
   const roomRef = useRef(null);
   const dragRef = useRef(null);
   const clickTimerRef = useRef(null);
@@ -103,6 +104,7 @@ export default function PlanSalle() {
       pos_y: exception && exception.pos_y != null ? exception.pos_y : t.pos_y,
       statutEffectif,
       reservation,
+      heureArrivee: exception && exception.heure_arrivee ? exception.heure_arrivee.slice(0, 5) : null,
     };
   });
 
@@ -145,7 +147,8 @@ export default function PlanSalle() {
       }
       setPositionsJour(prev => {
         const others = prev.filter(p => p.table_id !== draggedId);
-        return [...others, { table_id: draggedId, date: selectedDate, pos_x: newX, pos_y: newY }];
+        const current = prev.find(p => p.table_id === draggedId);
+        return [...others, { ...(current || {}), table_id: draggedId, date: selectedDate, pos_x: newX, pos_y: newY }];
       });
     };
 
@@ -276,6 +279,40 @@ export default function PlanSalle() {
     setTimeout(() => setMsg(null), 3000);
   };
 
+  // Ouvre l'édition manuelle de l'heure d'arrivée pour une table.
+  // stopPropagation systématique pour ne jamais déclencher l'ouverture du
+  // Caddy (clic simple) ni la fenêtre de réservation (double-clic) portées
+  // par la vignette parente.
+  const ouvrirEditionHeureArrivee = (e, table) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+    }
+    setEditingHeureArrivee({ tableId: table.id, valeur: table.heureArrivee || '' });
+  };
+
+  const saveHeureArrivee = async () => {
+    if (!editingHeureArrivee || !editingHeureArrivee.valeur) {
+      setEditingHeureArrivee(null);
+      return;
+    }
+    try {
+      await api.put('/table-positions-jour/heure-arrivee', {
+        table_id: editingHeureArrivee.tableId,
+        date: selectedDate,
+        heure_arrivee: editingHeureArrivee.valeur,
+      });
+      setEditingHeureArrivee(null);
+      load();
+    } catch (e) {
+      setMsg({ type: 'error', text: extractErrorMessage(e, "Erreur lors de la mise à jour de l'heure d'arrivée") });
+      setTimeout(() => setMsg(null), 3000);
+      setEditingHeureArrivee(null);
+    }
+  };
+
   const nbLibres = tables.filter(t => t.statutEffectif === 'libre').length;
   const nbOccupees = tables.filter(t => t.statutEffectif === 'occupee').length;
   const nbReservees = tables.filter(t => t.statutEffectif === 'reservee').length;
@@ -363,6 +400,7 @@ export default function PlanSalle() {
             const heure = resa ? resa.heure.slice(0, 5) : null;
             const nomResa = resa ? resa.nom_client : null;
             const hasReservation = !!resa;
+            const isEditingHeureArrivee = editingHeureArrivee && editingHeureArrivee.tableId === table.id;
             return (
               <div
                 key={table.id}
@@ -374,7 +412,7 @@ export default function PlanSalle() {
                   left: table.pos_x,
                   top: table.pos_y,
                   width: table.forme === 'rond' ? 64 : (table.capacite >= 6 ? 100 : 80),
-                  height: table.forme === 'rond' ? 64 : (hasReservation ? 70 : 44),
+                  height: table.forme === 'rond' ? 64 : (hasReservation ? 70 : (table.heureArrivee ? 58 : 44)),
                   borderRadius: table.forme === 'rond' ? '50%' : 10,
                   background: STATUT_COLOR[table.statutEffectif] || '#9ca3af',
                   color: 'white',
@@ -404,6 +442,36 @@ export default function PlanSalle() {
                     {nomResa}
                   </span>
                 )}
+                {isEditingHeureArrivee ? (
+                  <input
+                    type="time"
+                    autoFocus
+                    value={editingHeureArrivee.valeur}
+                    onChange={(e) => setEditingHeureArrivee({ ...editingHeureArrivee, valeur: e.target.value })}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onDoubleClick={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    onBlur={saveHeureArrivee}
+                    onKeyDown={(e) => { if (e.key === 'Enter') saveHeureArrivee(); }}
+                    style={{
+                      fontSize: 10, width: 62, padding: '1px 2px', borderRadius: 4,
+                      border: '1px solid white', marginTop: 2, color: '#111',
+                    }}
+                  />
+                ) : table.heureArrivee ? (
+                  <span
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onDoubleClick={(e) => e.stopPropagation()}
+                    onClick={(e) => ouvrirEditionHeureArrivee(e, table)}
+                    title="Cliquer pour modifier l'heure d'arrivée"
+                    style={{
+                      fontSize: 10, fontWeight: 400, opacity: 0.9, marginTop: 2,
+                      cursor: 'pointer', textDecoration: 'underline dotted',
+                    }}
+                  >
+                    🕐 {table.heureArrivee}
+                  </span>
+                ) : null}
               </div>
             );
           })}
