@@ -114,7 +114,7 @@ def envoyer_commande(db: Session = Depends(get_db), utilisateur: Utilisateur = D
     corps_html = "<pre style=\"font-family: monospace; font-size: 14px;\">" + corps.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;") + "</pre>"
 
     payload = {
-        "from": "Achats L'Olive <onboarding@resend.dev>",
+        "from": "Achats L'Olive <achats@lolive.be>",
         "to": [destinataire],
         "subject": "Liste d'achats - " + date_type.today().strftime("%d/%m/%Y"),
         "text": corps,
