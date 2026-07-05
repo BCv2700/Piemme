@@ -64,6 +64,7 @@ export default function PlanSalle() {
   const roomRef = useRef(null);
   const dragRef = useRef(null);
   const clickTimerRef = useRef(null);
+  const heureClickTimerRef = useRef(null);
   const navigate = useNavigate();
 
   const isToday = selectedDate === todayKey;
@@ -286,11 +287,10 @@ export default function PlanSalle() {
   const ouvrirEditionHeureArrivee = (e, table) => {
     e.stopPropagation();
     e.preventDefault();
-    if (clickTimerRef.current) {
-      clearTimeout(clickTimerRef.current);
-      clickTimerRef.current = null;
-    }
-    setEditingHeureArrivee({ tableId: table.id, valeur: table.heureArrivee || '' });
+    if (heureClickTimerRef.current) clearTimeout(heureClickTimerRef.current);
+    heureClickTimerRef.current = setTimeout(() => {
+      setEditingHeureArrivee({ tableId: table.id, valeur: table.heureArrivee || '' });
+    }, 220);
   };
 
   const saveHeureArrivee = async () => {
@@ -310,6 +310,30 @@ export default function PlanSalle() {
       setMsg({ type: 'error', text: extractErrorMessage(e, "Erreur lors de la mise à jour de l'heure d'arrivée") });
       setTimeout(() => setMsg(null), 3000);
       setEditingHeureArrivee(null);
+    }
+  };
+
+  // Raccourci : double-clic sur l'heure affichée = "il est maintenant", enregistré
+  // directement sans passer par le champ d'édition.
+  const handleDoubleClickHeureArrivee = async (e, table) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (heureClickTimerRef.current) {
+      clearTimeout(heureClickTimerRef.current);
+      heureClickTimerRef.current = null;
+    }
+    const now = new Date();
+    const valeur = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    try {
+      await api.put('/table-positions-jour/heure-arrivee', {
+        table_id: table.id,
+        date: selectedDate,
+        heure_arrivee: valeur,
+      });
+      load();
+    } catch (err) {
+      setMsg({ type: 'error', text: extractErrorMessage(err, "Erreur lors de la mise à jour de l'heure d'arrivée") });
+      setTimeout(() => setMsg(null), 3000);
     }
   };
 
@@ -461,9 +485,9 @@ export default function PlanSalle() {
                 ) : table.heureArrivee ? (
                   <span
                     onMouseDown={(e) => e.stopPropagation()}
-                    onDoubleClick={(e) => e.stopPropagation()}
+                    onDoubleClick={(e) => handleDoubleClickHeureArrivee(e, table)}
                     onClick={(e) => ouvrirEditionHeureArrivee(e, table)}
-                    title="Cliquer pour modifier l'heure d'arrivée"
+                    title="Clic : modifier l'heure · Double-clic : mettre à l'heure actuelle"
                     style={{
                       fontSize: 10, fontWeight: 400, opacity: 0.9, marginTop: 2,
                       cursor: 'pointer', textDecoration: 'underline dotted',
