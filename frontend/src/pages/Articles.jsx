@@ -52,6 +52,8 @@ export default function Articles() {
   const [loading, setLoading] = useState(true);
   const [selection, setSelection] = useState([]); // ids des articles cochés
   const [suppressionEnCours, setSuppressionEnCours] = useState(false);
+  const [composants, setComposants] = useState([]); // lignes de recette (description + prix) du plat en édition
+  const [composantsChargement, setComposantsChargement] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -86,15 +88,81 @@ export default function Articles() {
     (!filtreBoisson || a.est_boisson)
   );
 
-  const ouvrirCreation = () => { setNouvelleCategorie(false); setEdition({ ...ARTICLE_VIDE }); };
-  const ouvrirEdition = (article) => { setNouvelleCategorie(false); setEdition({ ...article }); };
-  const fermerFormulaire = () => { setNouvelleCategorie(false); setEdition(null); };
+  const ouvrirCreation = () => { setNouvelleCategorie(false); setComposants([]); setEdition({ ...ARTICLE_VIDE }); };
+
+  const ouvrirEdition = async (article) => {
+    setNouvelleCategorie(false);
+    setEdition({ ...article });
+    setComposants([]);
+    setComposantsChargement(true);
+    try {
+      const res = await api.get('/articles-composants/', { params: { article_id: article.id } });
+      setComposants(res.data);
+    } catch (e) {
+      // Silencieux : la composition est secondaire, ne bloque pas l'édition de la fiche
+    } finally {
+      setComposantsChargement(false);
+    }
+  };
+
+  const fermerFormulaire = () => { setNouvelleCategorie(false); setEdition(null); setComposants([]); };
+
+  // Ajoute une ligne de composant vide localement (pas encore enregistrée en
+  // base tant que la description n'est pas remplie et qu'on ne quitte pas le champ).
+  const ajouterComposant = () => {
+    setComposants(prev => [...prev, { id: null, description: '', prix: 0 }]);
+  };
+
+  const modifierComposantChamp = (index, champ, valeur) => {
+    setComposants(prev => prev.map((c, i) => i === index ? { ...c, [champ]: valeur } : c));
+  };
+
+  // Enregistre une ligne de composant (création si nouvelle, mise à jour sinon).
+  // N'enregistre rien si la description est vide (ligne abandonnée).
+  const sauverComposant = async (index) => {
+    const ligne = composants[index];
+    if (!ligne.description || !ligne.description.trim()) return;
+    try {
+      if (ligne.id) {
+        const res = await api.patch('/articles-composants/' + ligne.id, {
+          description: ligne.description,
+          prix: Number(String(ligne.prix).replace(',', '.')) || 0,
+        });
+        setComposants(prev => prev.map((c, i) => i === index ? res.data : c));
+      } else {
+        const res = await api.post('/articles-composants/', {
+          article_id: edition.id,
+          description: ligne.description,
+          prix: Number(String(ligne.prix).replace(',', '.')) || 0,
+        });
+        setComposants(prev => prev.map((c, i) => i === index ? res.data : c));
+      }
+    } catch (e) {
+      setError(e.response?.data?.detail || "Erreur lors de l'enregistrement du composant");
+    }
+  };
+
+  const supprimerComposant = async (index) => {
+    const ligne = composants[index];
+    if (ligne.id) {
+      try {
+        await api.delete('/articles-composants/' + ligne.id);
+      } catch (e) {
+        setError(e.response?.data?.detail || 'Erreur lors de la suppression du composant');
+        return;
+      }
+    }
+    setComposants(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const totalComposants = composants.reduce((s, c) => s + (Number(c.prix) || 0), 0);
 
   // Duplique l'article en cours d'édition : bascule le formulaire en mode
   // création (id retiré) avec les mêmes valeurs, nom suffixé "(copie)" pour
   // éviter toute confusion si on enregistre sans y toucher.
   const dupliquerArticle = () => {
     setNouvelleCategorie(false);
+    setComposants([]);
     setEdition(prev => ({ ...prev, id: undefined, nom: prev.nom + ' (copie)' }));
   };
 
@@ -767,6 +835,64 @@ export default function Articles() {
                   🍳 Imprimer en cuisine
                 </label>
               </div>
+
+              {/* Composition (coût matière) : uniquement pour un article existant */}
+              {edition.id && (
+                <div style={{ marginTop: 8, paddingTop: 12, borderTop: '1px solid #eee' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                    <div style={{ fontSize: 12, color: '#888', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                      Composition (coût matière)
+                    </div>
+                    <button className="btn" onClick={ajouterComposant} style={{ fontSize: 12, padding: '4px 10px' }}>
+                      + Composant
+                    </button>
+                    <span style={{ marginLeft: 'auto', fontSize: 13, color: '#666' }}>
+                      Coût total : <strong style={{ color: '#111' }}>{totalComposants.toFixed(2)} €</strong>
+                    </span>
+                  </div>
+
+                  {composantsChargement ? (
+                    <div style={{ color: '#888', fontSize: 13 }}>Chargement...</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {composants.map((c, index) => (
+                        <div key={c.id ?? 'new-' + index} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <input
+                            type="text"
+                            placeholder="Ex: 5 scampis"
+                            value={c.description}
+                            onChange={(e) => modifierComposantChamp(index, 'description', e.target.value)}
+                            onBlur={() => sauverComposant(index)}
+                            style={{ ...inputStyle, flex: 1 }}
+                          />
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder="Prix"
+                            value={c.prix}
+                            onChange={(e) => modifierComposantChamp(index, 'prix', e.target.value)}
+                            onBlur={() => sauverComposant(index)}
+                            style={{ ...inputStyle, width: 90, textAlign: 'right' }}
+                          />
+                          <button
+                            className="btn"
+                            title="Supprimer ce composant"
+                            onClick={() => supprimerComposant(index)}
+                            style={{ width: 30, height: 30, padding: 0, fontSize: 12, color: '#dc2626', borderColor: '#fca5a5', flexShrink: 0 }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                      {composants.length === 0 && (
+                        <div style={{ color: '#aaa', fontSize: 13 }}>
+                          Aucun composant — le coût matière utilisera "Prix d'achat" ci-dessus.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             </div>
           </div>
