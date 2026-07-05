@@ -91,6 +91,7 @@ export default function Composants() {
   const [filtreArticleId, setFiltreArticleId] = useState(null);
   const [filtreCategorie, setFiltreCategorie] = useState('');
   const [creation, setCreation] = useState(null); // { article_id, description, prix }
+  const [propositionPropagation, setPropositionPropagation] = useState(null); // { description, prix, ids }
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -186,26 +187,44 @@ export default function Composants() {
   // EXACTEMENT la même description (insensible à la casse/espaces), sur
   // n'importe quel autre plat — comportement demandé pour que "Serviette"
   // reste au même prix partout où il apparaît.
+  // Corrige le prix d'UN SEUL composant (jamais de propagation automatique
+  // silencieuse). Si d'autres composants portent exactement le même texte
+  // avec un prix différent, propose une confirmation explicite plutôt que de
+  // les modifier sans demander.
   const changerPrix = async (composant, valeur) => {
     const n = Number(String(valeur).replace(',', '.'));
     if (!Number.isFinite(n) || n < 0) return;
-    // Garde-fou essentiel : si la valeur n'a pas réellement changé (ex: le
-    // champ perd le focus sans avoir été modifié), on ne fait RIEN — sinon
-    // chaque blur "involontaire" réécrase tous les composants identiques
-    // avec la valeur actuelle, même non modifiée.
-    if (n === Number(composant.prix)) return;
+    if (n === Number(composant.prix)) return; // rien à faire si inchangé
     setError('');
-    const cleDescription = composant.description.trim().toLowerCase();
-    const memeDescription = composants.filter(c => c.description.trim().toLowerCase() === cleDescription);
     try {
-      await Promise.all(memeDescription.map(c => api.patch('/articles-composants/' + c.id, { prix: n })));
-      const idsMaj = memeDescription.map(c => c.id);
-      setComposants(prev => prev.map(c => idsMaj.includes(c.id) ? { ...c, prix: n } : c));
-      if (memeDescription.length > 1) {
-        afficherMsg('success', 'Prix mis à jour sur ' + memeDescription.length + ' composants « ' + composant.description + ' »');
+      const res = await api.patch('/articles-composants/' + composant.id, { prix: n });
+      setComposants(prev => prev.map(c => c.id === composant.id ? res.data : c));
+      const cle = composant.description.trim().toLowerCase();
+      const autres = composants.filter(c =>
+        c.id !== composant.id && c.description.trim().toLowerCase() === cle && Number(c.prix) !== n
+      );
+      if (autres.length > 0) {
+        setPropositionPropagation({ description: composant.description, prix: n, ids: autres.map(c => c.id) });
       }
     } catch (e) {
       setError(e.response?.data?.detail || 'Erreur lors de la mise à jour');
+    }
+  };
+
+  const appliquerPropagation = async () => {
+    if (!propositionPropagation) return;
+    setError('');
+    try {
+      await Promise.all(
+        propositionPropagation.ids.map(id => api.patch('/articles-composants/' + id, { prix: propositionPropagation.prix }))
+      );
+      const idsMaj = propositionPropagation.ids;
+      setComposants(prev => prev.map(c => idsMaj.includes(c.id) ? { ...c, prix: propositionPropagation.prix } : c));
+      afficherMsg('success', 'Prix appliqué à ' + idsMaj.length + ' composant(s) supplémentaire(s)');
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Erreur lors de la mise à jour groupée');
+    } finally {
+      setPropositionPropagation(null);
     }
   };
 
@@ -352,6 +371,22 @@ export default function Composants() {
 
         {error && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
+        {propositionPropagation && (
+          <div style={{
+            padding: '10px 16px', borderRadius: 8, marginBottom: 16, fontSize: 13, fontWeight: 500,
+            background: '#eff6ff', border: '1px solid #bfdbfe',
+            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          }}>
+            <span>
+              Appliquer <strong>{propositionPropagation.prix.toFixed(2)} €</strong> aux {propositionPropagation.ids.length} autre{propositionPropagation.ids.length > 1 ? 's' : ''} composant{propositionPropagation.ids.length > 1 ? 's' : ''} « {propositionPropagation.description} » ?
+            </span>
+            <button className="btn" onClick={appliquerPropagation} style={{ background: '#2563eb', color: 'white', borderColor: '#2563eb' }}>
+              Appliquer
+            </button>
+            <button className="btn" onClick={() => setPropositionPropagation(null)}>Ignorer</button>
+          </div>
+        )}
+
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, color: '#888', fontWeight: 600, whiteSpace: 'nowrap' }}>
             {composants.length} composant{composants.length !== 1 ? 's' : ''}
@@ -433,6 +468,7 @@ export default function Composants() {
                       </td>
                       <td style={tdCell({ textAlign: 'right', padding: '2px 6px' })}>
                         <input
+                          key={c.id + '-prix-' + c.prix}
                           type="number"
                           step="0.01"
                           min="0"
