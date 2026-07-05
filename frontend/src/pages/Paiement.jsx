@@ -27,6 +27,8 @@ export default function Paiement() {
   const [lignes, setLignes] = useState([]);
   const [articles, setArticles] = useState([]);
   const [nomReservation, setNomReservation] = useState(null);
+  const [clients, setClients] = useState([]);
+  const [clientId, setClientId] = useState('');
   const [montantCarte, setMontantCarte] = useState('');
   const [montantCash, setMontantCash] = useState('');
   const [error, setError] = useState('');
@@ -43,17 +45,19 @@ export default function Paiement() {
 
   const load = async () => {
     try {
-      const [tableRes, lignesRes, articlesRes, reservationsRes] = await Promise.all([
+      const [tableRes, lignesRes, articlesRes, reservationsRes, clientsRes] = await Promise.all([
         api.get('/tables/' + tableId),
         api.get('/commandes/', { params: { table_id: tableId } }),
         api.get('/articles/'),
         api.get('/reservations/', { params: { date_reservation: dateEncodage } }),
+        api.get('/clients/'),
       ]);
       setTable(tableRes.data);
       setLignes(lignesRes.data);
       setArticles(articlesRes.data);
       const resa = reservationsRes.data.find(r => r.table_id === Number(tableId) && r.statut !== 'annulee');
       setNomReservation(resa ? resa.nom_client : null);
+      setClients(clientsRes.data);
     } catch (e) {
       setError(e.response?.data?.detail || 'Impossible de charger la commande');
     } finally {
@@ -96,6 +100,7 @@ export default function Paiement() {
   const enregistrerEncaissement = async () => {
     const res = await api.post('/encaissements/', {
       table_nom: table.nom,
+      client_id: clientId ? Number(clientId) : null,
       montant_carte: carte,
       montant_cash: cash,
       montant_total: total,
@@ -197,6 +202,18 @@ export default function Paiement() {
               <span style={{ fontSize: 16, fontWeight: 600 }}>À payer</span>
               <span style={{ fontSize: 28, fontWeight: 700 }}>{total.toFixed(2)} €</span>
             </div>
+
+            <div style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>Client (optionnel)</div>
+            <select
+              value={clientId}
+              onChange={(e) => setClientId(e.target.value)}
+              style={{ ...inputStyle, textAlign: 'left', marginBottom: 16 }}
+            >
+              <option value="">— Aucun client —</option>
+              {clients.map(c => (
+                <option key={c.id} value={c.id}>{c.nom}</option>
+              ))}
+            </select>
 
             <div style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>Payer avec</div>
             <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
