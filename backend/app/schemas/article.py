@@ -26,6 +26,9 @@ class ArticleBase(BaseModel):
     type: str = "vente"
     # True si l'article doit apparaître sur le ticket cuisine imprimé depuis le Caddy
     imprimer_cuisine: bool = False
+    # Ordre d'affichage manuel des boutons articles dans le Caddy (équivalent de
+    # l'ancien A_Ordre). None = pas d'ordre défini, l'article passe après les autres.
+    ordre: Optional[int] = None
 
 class ArticleCreate(ArticleBase):
     pass
@@ -51,6 +54,7 @@ class ArticleUpdate(BaseModel):
     actif: Optional[bool] = None
     type: Optional[str] = None
     imprimer_cuisine: Optional[bool] = None
+    ordre: Optional[int] = None
 
 class ArticleOut(ArticleBase):
     id: int

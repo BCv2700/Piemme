@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import nullslast
 from typing import Optional
 from app.database import get_db
 from app.models.article import Article
@@ -21,7 +22,10 @@ def list_articles(
         query = query.filter(Article.categorie == categorie)
     if actif is not None:
         query = query.filter(Article.actif == actif)
-    return query.order_by(Article.nom).all()
+    # Tri par ordre manuel (équivalent de l'ancien A_Ordre), les articles sans
+    # ordre défini (None) passant après ceux qui en ont un, puis par nom pour
+    # les égalités ou l'absence d'ordre.
+    return query.order_by(nullslast(Article.ordre.asc()), Article.nom).all()
 
 @router.get("/{article_id}", response_model=ArticleOut)
 def get_article(article_id: int, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)):

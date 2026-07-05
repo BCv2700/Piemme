@@ -30,3 +30,7 @@ class Article(Base):
     # le Caddy (plats à préparer). Les boissons et autres articles sans
     # préparation cuisine restent à False.
     imprimer_cuisine = Column(Boolean, default=False)
+    # Ordre d'affichage manuel des boutons articles dans le Caddy (équivalent
+    # du champ A_Ordre de l'ancienne base Access). Nullable : les articles
+    # sans ordre défini sont affichés après ceux qui en ont un, triés par nom.
+    ordre            = Column(Integer, nullable=True)
