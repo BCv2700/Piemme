@@ -15,6 +15,7 @@ const ARTICLE_ACHAT_VIDE = {
 export default function Achats() {
   const [articles, setArticles] = useState([]);
   const [recherche, setRecherche] = useState('');
+  const [filtreCochesUniquement, setFiltreCochesUniquement] = useState(false);
   const [creation, setCreation] = useState(null); // null = fermé, sinon = ARTICLE_ACHAT_VIDE en cours de saisie
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
@@ -41,8 +42,9 @@ export default function Achats() {
     .sort((a, b) => a.localeCompare(b, 'fr'));
 
   const articlesAffiches = articles.filter(a =>
-    a.nom.toLowerCase().includes(recherche.toLowerCase()) ||
-    (a.magasin || '').toLowerCase().includes(recherche.toLowerCase())
+    (a.nom.toLowerCase().includes(recherche.toLowerCase()) ||
+      (a.magasin || '').toLowerCase().includes(recherche.toLowerCase())) &&
+    (!filtreCochesUniquement || a.a_commander)
   );
 
   const sousTotal = (a) => (a.prix_achat != null ? Number(a.prix_achat) * Number(a.qte) : 0);
@@ -83,14 +85,20 @@ export default function Achats() {
     majArticle(article.id, { a_commander: !article.a_commander });
   };
 
-  // Cocher/décocher "à commander" pour tous les articles actuellement affichés
-  // (même logique que le "tout sélectionner" de Articles.jsx)
-  const toutAfficheCoche = articlesAffiches.length > 0 && articlesAffiches.every(a => a.a_commander);
-  const basculerToutAffiche = () => {
-    const nouvelleValeur = !toutAfficheCoche;
-    articlesAffiches.forEach(a => {
-      if (a.a_commander !== nouvelleValeur) majArticle(a.id, { a_commander: nouvelleValeur });
-    });
+  // Décoche tous les articles actuellement cochés "à commander". Envoi
+  // SÉQUENTIEL (une requête à la fois) pour ne pas saturer les connexions
+  // Postgres de Railway comme ça a été le cas avec "tout cocher".
+  const toutDecocher = async () => {
+    if (articlesCoches.length === 0) return;
+    setError('');
+    for (const a of articlesCoches) {
+      try {
+        const res = await api.patch('/articles-achat/' + a.id, { a_commander: false });
+        setArticles(prev => prev.map(x => x.id === a.id ? res.data : x));
+      } catch (e) {
+        setError(e.response?.data?.detail || 'Erreur lors de la mise à jour');
+      }
+    }
   };
 
   const supprimer = async (article) => {
@@ -254,6 +262,15 @@ export default function Achats() {
               border: '1px solid #ddd', fontSize: 14,
             }}
           />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer', padding: '0 4px' }}>
+            <input
+              type="checkbox"
+              checked={filtreCochesUniquement}
+              onChange={(e) => setFiltreCochesUniquement(e.target.checked)}
+              style={{ width: 16, height: 16 }}
+            />
+            Cochés uniquement
+          </label>
         </div>
 
         <div style={{
@@ -269,6 +286,9 @@ export default function Achats() {
           </button>
           <button className="btn" onClick={envoyerParMail} disabled={articlesCoches.length === 0 || envoiEnCours}>
             {envoiEnCours ? 'Envoi en cours…' : '✉️ Envoyer par mail'}
+          </button>
+          <button className="btn" onClick={toutDecocher} disabled={articlesCoches.length === 0} style={{ color: '#888' }}>
+            Tout décocher
           </button>
           <span style={{ marginLeft: 'auto', fontSize: 13, color: '#888' }}>
             Total général (liste affichée) : {totalGeneral.toFixed(2)} €
@@ -286,15 +306,7 @@ export default function Achats() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
-                  <th style={thCell()} title="Cocher/décocher tous les articles affichés">
-                    <input
-                      type="checkbox"
-                      checked={toutAfficheCoche}
-                      onChange={basculerToutAffiche}
-                      title="À commander (tout ce qui est affiché)"
-                      style={{ width: 16, height: 16, cursor: 'pointer' }}
-                    />
-                  </th>
+                  <th style={thCell()} title="À commander">Cmd.</th>
                   <th style={thCell()}></th>
                   <th style={thCell()}>ID</th>
                   <th style={thCell()}>Nom</th>
