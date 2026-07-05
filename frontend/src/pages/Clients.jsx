@@ -25,6 +25,7 @@ export default function Clients() {
   const [edition, setEdition] = useState(null);
   const [historique, setHistorique] = useState([]);
   const [historiqueChargement, setHistoriqueChargement] = useState(false);
+  const [filtreAnnee, setFiltreAnnee] = useState(null);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -56,6 +57,7 @@ export default function Clients() {
   const ouvrirEdition = async (client) => {
     setEdition({ ...client });
     setHistorique([]);
+    setFiltreAnnee(null);
     setHistoriqueChargement(true);
     try {
       const res = await api.get('/encaissements/', { params: { client_id: client.id } });
@@ -67,7 +69,7 @@ export default function Clients() {
     }
   };
 
-  const fermerFormulaire = () => { setEdition(null); setHistorique([]); };
+  const fermerFormulaire = () => { setEdition(null); setHistorique([]); setFiltreAnnee(null); };
 
   const majChamp = (champ, valeur) => setEdition(prev => ({ ...prev, [champ]: valeur }));
 
@@ -318,6 +320,39 @@ export default function Clients() {
                   <div style={{ fontSize: 12, color: '#888', fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 }}>
                     Historique des encaissements
                   </div>
+
+                  {/* Totaux des 3 dernières années, cliquables pour filtrer la liste en dessous */}
+                  {!historiqueChargement && historique.length > 0 && (() => {
+                    const anneeActuelle = new Date().getFullYear();
+                    const annees = [anneeActuelle, anneeActuelle - 1, anneeActuelle - 2];
+                    return (
+                      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                        {annees.map(annee => {
+                          const totalAnnee = historique
+                            .filter(enc => new Date(enc.date_encaissement).getFullYear() === annee)
+                            .reduce((s, enc) => s + Number(enc.montant_total), 0);
+                          const actif = filtreAnnee === annee;
+                          return (
+                            <button
+                              key={annee}
+                              onClick={() => setFiltreAnnee(actif ? null : annee)}
+                              style={{
+                                flex: 1, padding: '6px 10px', borderRadius: 8, cursor: 'pointer',
+                                border: '1px solid ' + (actif ? '#111' : '#ddd'),
+                                background: actif ? '#111' : 'white',
+                                color: actif ? 'white' : '#333',
+                                fontSize: 12, textAlign: 'left',
+                              }}
+                            >
+                              <div style={{ fontWeight: 600 }}>{annee}</div>
+                              <div style={{ fontWeight: 700 }}>{totalAnnee.toFixed(2)} €</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+
                   <div style={{ border: BORDURE, borderRadius: 8, overflow: 'hidden', flex: 1 }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                       <thead>
@@ -334,13 +369,15 @@ export default function Clients() {
                         {!historiqueChargement && historique.length === 0 && (
                           <tr><td colSpan={3} style={{ padding: 12, textAlign: 'center', color: '#888' }}>Aucun encaissement</td></tr>
                         )}
-                        {!historiqueChargement && historique.map(enc => (
-                          <tr key={enc.id}>
-                            <td style={tdCell()}>{new Date(enc.date_encaissement).toLocaleDateString('fr-BE')}</td>
-                            <td style={tdCell()}>{enc.table_nom || '—'}</td>
-                            <td style={tdCell({ textAlign: 'right' })}>{Number(enc.montant_total).toFixed(2)} €</td>
-                          </tr>
-                        ))}
+                        {!historiqueChargement && historique
+                          .filter(enc => !filtreAnnee || new Date(enc.date_encaissement).getFullYear() === filtreAnnee)
+                          .map(enc => (
+                            <tr key={enc.id}>
+                              <td style={tdCell()}>{new Date(enc.date_encaissement).toLocaleDateString('fr-BE')}</td>
+                              <td style={tdCell()}>{enc.table_nom || '—'}</td>
+                              <td style={tdCell({ textAlign: 'right' })}>{Number(enc.montant_total).toFixed(2)} €</td>
+                            </tr>
+                          ))}
                       </tbody>
                     </table>
                   </div>
