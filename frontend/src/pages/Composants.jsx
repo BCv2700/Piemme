@@ -177,6 +177,11 @@ export default function Composants() {
   const changerPrix = async (composant, valeur) => {
     const n = Number(String(valeur).replace(',', '.'));
     if (!Number.isFinite(n) || n < 0) return;
+    // Garde-fou essentiel : si la valeur n'a pas réellement changé (ex: le
+    // champ perd le focus sans avoir été modifié), on ne fait RIEN — sinon
+    // chaque blur "involontaire" réécrase tous les composants identiques
+    // avec la valeur actuelle, même non modifiée.
+    if (n === Number(composant.prix)) return;
     setError('');
     const cleDescription = composant.description.trim().toLowerCase();
     const memeDescription = composants.filter(c => c.description.trim().toLowerCase() === cleDescription);
