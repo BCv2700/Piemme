@@ -209,6 +209,13 @@ export default function Composants() {
   return (
     <div>
       <div className="content">
+        <style>{`
+          .cell-input:focus {
+            outline: none;
+            border: 1px solid #bbb !important;
+            background: #fff !important;
+          }
+        `}</style>
 
         {msg && (
           <div style={{
@@ -297,24 +304,34 @@ export default function Composants() {
                           🗑
                         </button>
                       </td>
-                      <td style={tdCell({ whiteSpace: 'normal', minWidth: 220 })}>
+                      <td style={tdCell({ whiteSpace: 'normal', minWidth: 220, padding: '2px 6px' })}>
                         <input
                           type="text"
+                          className="cell-input"
                           defaultValue={c.description}
                           onBlur={(e) => changerDescription(c, e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
-                          style={{ width: '100%', padding: '4px 8px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, boxSizing: 'border-box' }}
+                          style={{
+                            width: '100%', padding: '4px 8px', borderRadius: 5,
+                            border: '1px solid transparent', background: 'transparent',
+                            fontSize: 13, boxSizing: 'border-box',
+                          }}
                         />
                       </td>
-                      <td style={tdCell({ textAlign: 'right' })}>
+                      <td style={tdCell({ textAlign: 'right', padding: '2px 6px' })}>
                         <input
                           type="number"
                           step="0.01"
                           min="0"
+                          className="cell-input"
                           defaultValue={Number(c.prix).toFixed(2)}
                           onBlur={(e) => changerPrix(c, e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
-                          style={{ width: 90, padding: '4px 8px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, textAlign: 'right' }}
+                          style={{
+                            width: 90, padding: '4px 8px', borderRadius: 5,
+                            border: '1px solid transparent', background: 'transparent',
+                            fontSize: 13, textAlign: 'right',
+                          }}
                         />
                       </td>
                       <td style={tdCell({ padding: '2px 4px', minWidth: 200 })}>
