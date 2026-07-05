@@ -5,6 +5,7 @@ from app.routers import table_position_jour
 from app.routers import tables, articles, clients, commandes, encaissements, reservations, recap_mensuel
 from app.routers import tables, articles, clients, commandes, encaissements, reservations, recap_mensuel, auth
 from app.routers import article_achat
+from app.routers import article_composant
 
 import os
 
@@ -33,6 +34,7 @@ app.include_router(table_position_jour.router)
 app.include_router(recap_mensuel.router)
 app.include_router(auth.router)
 app.include_router(article_achat.router)
+app.include_router(article_composant.router)
 
 @app.get("/")
 def root():
