@@ -110,6 +110,7 @@ export default function NavBar() {
 
   const cheminsGestion = ['/articles', '/achats', '/clients', '/composants', '/encaissements-mois'];
   const cheminsRapports = ['/cout-matiere', '/reservations', '/historique'];
+  const cheminsStatistiques = ['/statistiques/montants-annuels'];
 
   return (
     <div style={{
@@ -136,6 +137,10 @@ export default function NavBar() {
         <Link to="/cout-matiere" style={itemMenuStyle('/cout-matiere')}>Coût matière</Link>
         <Link to="/reservations" style={itemMenuStyle('/reservations')}>Réservations</Link>
         <Link to={'/historique' + suffixeDate} style={itemMenuStyle('/historique')}>Historique</Link>
+      </MenuDeroulant>
+
+      <MenuDeroulant label="Statistiques" actif={cheminsStatistiques.includes(location.pathname)}>
+        <Link to="/statistiques/montants-annuels" style={itemMenuStyle('/statistiques/montants-annuels')}>Montants annuels</Link>
       </MenuDeroulant>
 
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
