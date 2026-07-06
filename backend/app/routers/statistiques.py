@@ -86,3 +86,34 @@ def plats_demandes(
         })
     resultat.sort(key=lambda x: x["total"], reverse=True)
     return resultat
+
+
+@router.get("/frequentation/{annee}")
+def frequentation(
+    annee: int,
+    db: Session = Depends(get_db),
+    utilisateur: Utilisateur = Depends(get_current_user),
+):
+    """
+    Somme du nombre de personnes par jour du mois, pour chaque mois de
+    l'année demandée. Exclut les dépenses et les commandes à emporter
+    (emporte = true). Retourne une liste de { jour, mois, total }.
+    """
+    lignes = (
+        db.query(
+            extract("day", Encaissement.date_encaissement).label("jour"),
+            extract("month", Encaissement.date_encaissement).label("mois"),
+            func.sum(Encaissement.nb_personnes).label("total"),
+        )
+        .filter(
+            extract("year", Encaissement.date_encaissement) == annee,
+            Encaissement.depenses == False,  # noqa: E712
+            Encaissement.emporte == False,  # noqa: E712
+        )
+        .group_by("jour", "mois")
+        .all()
+    )
+    return [
+        {"jour": int(l.jour), "mois": int(l.mois), "total": int(l.total or 0)}
+        for l in lignes
+    ]
