@@ -10,7 +10,7 @@ const fmtQte = (n) => (Number(n) % 1 === 0 ? Number(n).toString() : Number(n).to
 
 export default function PlatsDemandes() {
   const [annee, setAnnee] = useState(new Date().getFullYear());
-  const [donnees, setDonnees] = useState([]); // [{ article_id, nom, mois, total }]
+  const [donnees, setDonnees] = useState([]); // [{ nom, mois, total }]
   const [recherche, setRecherche] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -86,7 +86,7 @@ export default function PlatsDemandes() {
               </thead>
               <tbody>
                 {donneesFiltrees.map(d => (
-                  <tr key={d.article_id}>
+                  <tr key={d.nom}>
                     <td style={tdCell({ textAlign: 'left', fontWeight: 600, position: 'sticky', left: 0, background: 'white' })}>
                       {d.nom}
                     </td>

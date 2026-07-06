@@ -4,7 +4,6 @@ from sqlalchemy import func, extract
 from app.database import get_db
 from app.models.encaissement import Encaissement
 from app.models.encaissement_ligne import EncaissementLigne
-from app.models.article import Article
 from app.deps import get_current_user
 from app.models.utilisateur import Utilisateur
 
@@ -47,16 +46,17 @@ def plats_demandes(
     utilisateur: Utilisateur = Depends(get_current_user),
 ):
     """
-    Quantité vendue par article et par mois, pour l'année demandée.
-    Regroupé par article_id (pas par nom texte, qui peut varier). Les
-    encaissements de type dépenses sont exclus. Les lignes sans article_id
-    (cas rare) sont ignorées plutôt que mal regroupées.
+    Quantité vendue par plat et par mois, pour l'année demandée.
+    Regroupé par article_nom (texte archivé sur la ligne), car article_id
+    n'a été renseigné systématiquement qu'à partir de mai/juin 2026 : un
+    regroupement par article_id exclurait silencieusement tout l'historique
+    antérieur. Les encaissements de type dépenses sont exclus.
     Retourne une liste triée par quantité totale décroissante :
-    [{ article_id, nom, mois: { "1": qte, ..., "12": qte }, total }]
+    [{ nom, mois: { "1": qte, ..., "12": qte }, total }]
     """
     lignes = (
         db.query(
-            EncaissementLigne.article_id,
+            EncaissementLigne.article_nom,
             extract("month", Encaissement.date_encaissement).label("mois"),
             func.sum(EncaissementLigne.quantite).label("quantite"),
         )
@@ -64,26 +64,23 @@ def plats_demandes(
         .filter(
             extract("year", Encaissement.date_encaissement) == annee,
             Encaissement.depenses == False,  # noqa: E712
-            EncaissementLigne.article_id.isnot(None),
+            EncaissementLigne.article_nom.isnot(None),
         )
-        .group_by(EncaissementLigne.article_id, "mois")
+        .group_by(EncaissementLigne.article_nom, "mois")
         .all()
     )
 
-    noms_articles = {a.id: a.nom for a in db.query(Article.id, Article.nom).all()}
-
     data = {}
-    for article_id, mois, quantite in lignes:
-        if article_id not in data:
-            data[article_id] = {m: 0.0 for m in range(1, 13)}
-        data[article_id][int(mois)] = float(quantite or 0)
+    for nom, mois, quantite in lignes:
+        if nom not in data:
+            data[nom] = {m: 0.0 for m in range(1, 13)}
+        data[nom][int(mois)] = float(quantite or 0)
 
     resultat = []
-    for article_id, mois_dict in data.items():
+    for nom, mois_dict in data.items():
         total = sum(mois_dict.values())
         resultat.append({
-            "article_id": article_id,
-            "nom": noms_articles.get(article_id, "(article supprimé)"),
+            "nom": nom,
             "mois": mois_dict,
             "total": total,
         })
