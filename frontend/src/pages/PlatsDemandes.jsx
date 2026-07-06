@@ -77,17 +77,20 @@ export default function PlatsDemandes() {
             <table style={{ borderCollapse: 'collapse', fontSize: 12, minWidth: 1100 }}>
               <thead>
                 <tr style={{ background: '#fafaf8' }}>
-                  <th style={thCell({ textAlign: 'left', position: 'sticky', left: 0, background: '#fafaf8' })}>Plat</th>
+                  <th style={thCell({ textAlign: 'right', fontWeight: 700, position: 'sticky', left: 0, background: '#fafaf8', zIndex: 1 })}>Total</th>
+                  <th style={thCell({ textAlign: 'left', position: 'sticky', left: 60, background: '#fafaf8', zIndex: 1 })}>Plat</th>
                   {MOIS_ABR.map((nom, i) => (
                     <th key={i} style={thCell({ textAlign: 'right' })}>{nom}</th>
                   ))}
-                  <th style={thCell({ textAlign: 'right', fontWeight: 700 })}>Total</th>
                 </tr>
               </thead>
               <tbody>
                 {donneesFiltrees.map(d => (
                   <tr key={d.nom}>
-                    <td style={tdCell({ textAlign: 'left', fontWeight: 600, position: 'sticky', left: 0, background: 'white' })}>
+                    <td style={tdCell({ textAlign: 'right', fontWeight: 700, position: 'sticky', left: 0, background: 'white', zIndex: 1 })}>
+                      {fmtQte(d.total)}
+                    </td>
+                    <td style={tdCell({ textAlign: 'left', fontWeight: 600, position: 'sticky', left: 60, background: 'white', zIndex: 1 })}>
                       {d.nom}
                     </td>
                     {MOIS_ABR.map((_, i) => {
@@ -99,7 +102,6 @@ export default function PlatsDemandes() {
                         </td>
                       );
                     })}
-                    <td style={tdCell({ textAlign: 'right', fontWeight: 700 })}>{fmtQte(d.total)}</td>
                   </tr>
                 ))}
                 {donneesFiltrees.length === 0 && (
@@ -112,11 +114,11 @@ export default function PlatsDemandes() {
               </tbody>
               <tfoot>
                 <tr style={{ fontWeight: 700, background: '#fafaf8' }}>
-                  <td style={tdCell({ textAlign: 'left', position: 'sticky', left: 0, background: '#fafaf8' })}>Total</td>
+                  <td style={tdCell({ textAlign: 'right', position: 'sticky', left: 0, background: '#fafaf8', zIndex: 1 })}>{fmtQte(grandTotal)}</td>
+                  <td style={tdCell({ textAlign: 'left', position: 'sticky', left: 60, background: '#fafaf8', zIndex: 1 })}>Total</td>
                   {MOIS_ABR.map((_, i) => (
                     <td key={i} style={tdCell({ textAlign: 'right' })}>{fmtQte(totauxParMois[i + 1])}</td>
                   ))}
-                  <td style={tdCell({ textAlign: 'right' })}>{fmtQte(grandTotal)}</td>
                 </tr>
               </tfoot>
             </table>
