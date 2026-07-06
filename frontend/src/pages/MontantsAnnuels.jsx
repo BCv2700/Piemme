@@ -68,6 +68,17 @@ export default function MontantsAnnuels() {
     navigate('/encaissements?date=' + dateKey);
   };
 
+  // Ligne de totaux réutilisée en haut (sous l'en-tête) et en bas du tableau
+  const ligneTotaux = (
+    <tr style={{ fontWeight: 700, background: '#fafaf8' }}>
+      <td style={tdCell({ textAlign: 'left' })}>Total</td>
+      {MOIS_ABR.map((_, i) => (
+        <td key={i} style={tdCell({ textAlign: 'right' })}>{fmt(totalParMois[i + 1])}</td>
+      ))}
+      <td style={tdCell({ textAlign: 'right' })}>{fmt(grandTotal)}</td>
+    </tr>
+  );
+
   return (
     <div>
       <div className="content">
@@ -97,6 +108,7 @@ export default function MontantsAnnuels() {
                   ))}
                   <th style={thCell({ textAlign: 'right', fontWeight: 700 })}>Total</th>
                 </tr>
+                {ligneTotaux}
               </thead>
               <tbody>
                 {Array.from({ length: 31 }, (_, i) => i + 1).map(jour => (
@@ -126,13 +138,7 @@ export default function MontantsAnnuels() {
                 ))}
               </tbody>
               <tfoot>
-                <tr style={{ fontWeight: 700, background: '#fafaf8' }}>
-                  <td style={tdCell({ textAlign: 'left' })}>Total</td>
-                  {MOIS_ABR.map((_, i) => (
-                    <td key={i} style={tdCell({ textAlign: 'right' })}>{fmt(totalParMois[i + 1])}</td>
-                  ))}
-                  <td style={tdCell({ textAlign: 'right' })}>{fmt(grandTotal)}</td>
-                </tr>
+                {ligneTotaux}
               </tfoot>
             </table>
           </div>
