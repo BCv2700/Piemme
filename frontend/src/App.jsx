@@ -15,6 +15,7 @@ import HistoriqueVentes from './pages/HistoriqueVentes';
 import Encaissements from './pages/Encaissements';
 import RecapMensuel from './pages/RecapMensuel';
 import MontantsAnnuels from './pages/MontantsAnnuels';
+import PlatsDemandes from './pages/PlatsDemandes';
 import './App.css';
 
 // Empêche l'accès à une page si aucun jeton n'est présent : redirige vers /login.
@@ -55,6 +56,7 @@ function App() {
         <Route path="/encaissements" element={<RouteProtegee><MiseEnPage><Encaissements /></MiseEnPage></RouteProtegee>} />
         <Route path="/recap" element={<RouteProtegee><MiseEnPage><RecapMensuel /></MiseEnPage></RouteProtegee>} />
         <Route path="/statistiques/montants-annuels" element={<RouteProtegee><MiseEnPage><MontantsAnnuels /></MiseEnPage></RouteProtegee>} />
+        <Route path="/statistiques/plats-demandes" element={<RouteProtegee><MiseEnPage><PlatsDemandes /></MiseEnPage></RouteProtegee>} />
       </Routes>
     </BrowserRouter>
   );
