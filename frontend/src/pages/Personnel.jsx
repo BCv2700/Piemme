@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../api/api';
 
 const BORDURE = '1px solid #e5e5e0';
 const TAUX_PAR_DEFAUT = '15';
+
+const MOIS_NOMS = [
+  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+];
 
 function todayKey() {
   const d = new Date();
@@ -13,6 +19,18 @@ function addDays(dateKey, delta) {
   const d = new Date(dateKey + 'T00:00:00');
   d.setDate(d.getDate() + delta);
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function pad2(n) {
+  return String(n).padStart(2, '0');
+}
+
+function joursDansMois(annee, mois) {
+  return new Date(annee, mois, 0).getDate();
+}
+
+function dateKey(annee, mois, jour) {
+  return annee + '-' + pad2(mois) + '-' + pad2(jour);
 }
 
 // Nombre d'heures (décimal) entre deux heures "HH:MM". Si l'heure de fin est
@@ -44,11 +62,20 @@ const formVide = {
 };
 
 export default function Personnel() {
-  const [dateUnique, setDateUnique] = useState(todayKey());
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [vue, setVue] = useState('jour'); // 'jour' | 'mois'
+  const [dateUnique, setDateUnique] = useState(searchParams.get('date') || todayKey());
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
+
+  // Vue mensuelle : mois/année affichés, indépendants du jour ci-dessus
+  const dateRefMois = searchParams.get('date') || todayKey();
+  const [anneeMois, setAnneeMois] = useState(Number(dateRefMois.split('-')[0]));
+  const [moisMois, setMoisMois] = useState(Number(dateRefMois.split('-')[1]));
+  const [servicesMois, setServicesMois] = useState([]);
+  const [loadingMois, setLoadingMois] = useState(false);
 
   // null = fermé, formVide = création, un objet service = édition
   const [modale, setModale] = useState(null);
@@ -76,6 +103,38 @@ export default function Personnel() {
   };
 
   useEffect(() => { load(); }, [dateUnique]);
+
+  const loadMois = () => {
+    setLoadingMois(true);
+    const debut = dateKey(anneeMois, moisMois, 1);
+    const fin = dateKey(anneeMois, moisMois, joursDansMois(anneeMois, moisMois));
+    api.get('/service-personnel/', { params: { date_debut: debut, date_fin: fin } })
+      .then(res => setServicesMois(res.data))
+      .catch(() => showMsg('error', "Impossible de charger la vue mensuelle"))
+      .finally(() => setLoadingMois(false));
+  };
+
+  useEffect(() => {
+    if (vue === 'mois') loadMois();
+  }, [vue, anneeMois, moisMois]);
+
+  // Ouverture directe depuis l'écran Encaissements (lien "?date=...&service=ID") :
+  // on récupère ce service précis, on se place sur son jour, et on ouvre
+  // directement sa fiche en modification.
+  useEffect(() => {
+    const serviceId = searchParams.get('service');
+    if (!serviceId) return;
+    api.get('/service-personnel/' + serviceId)
+      .then(res => {
+        const service = res.data;
+        setDateUnique(service.date_service);
+        setVue('jour');
+        ouvrirEdition(service);
+        setSearchParams({}, { replace: true });
+      })
+      .catch(() => showMsg('error', 'Service introuvable'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const ouvrirCreation = () => {
     setModale({ ...formVide, date_service: dateUnique });
@@ -110,6 +169,11 @@ export default function Personnel() {
     if (champ === 'montant') setMontantModifieManuellement(true);
   };
 
+  const rechargerVueActive = () => {
+    load();
+    if (vue === 'mois') loadMois();
+  };
+
   const enregistrerModale = async () => {
     if (!modale.nom.trim()) {
       showMsg('error', 'Le nom est requis');
@@ -139,7 +203,7 @@ export default function Personnel() {
         showMsg('success', 'Service enregistré');
       }
       setModale(null);
-      load();
+      rechargerVueActive();
     } catch (e) {
       showMsg('error', errMsg(e, "Erreur lors de l'enregistrement"));
     }
@@ -150,7 +214,7 @@ export default function Personnel() {
     try {
       await api.delete('/service-personnel/' + service.id);
       showMsg('success', 'Service supprimé');
-      load();
+      rechargerVueActive();
     } catch (e) {
       showMsg('error', errMsg(e, 'Erreur lors de la suppression'));
     }
@@ -161,8 +225,51 @@ export default function Personnel() {
   const totalCash = services.filter(x => x.type_paiement === 'cash').reduce((s, x) => s + Number(x.montant || 0), 0);
   const totalTiers = services.filter(x => x.type_paiement === 'tiers').reduce((s, x) => s + Number(x.montant || 0), 0);
 
+  // ───── Vue mensuelle : tri chronologique + totaux par personne ──────────
+  const servicesMoisTries = [...servicesMois].sort((a, b) =>
+    a.date_service === b.date_service
+      ? a.heure_debut.localeCompare(b.heure_debut)
+      : a.date_service.localeCompare(b.date_service)
+  );
+  const totalMois = servicesMois.reduce((s, x) => s + Number(x.montant || 0), 0);
+  const totalMoisCash = servicesMois.filter(x => x.type_paiement === 'cash').reduce((s, x) => s + Number(x.montant || 0), 0);
+  const totalMoisTiers = servicesMois.filter(x => x.type_paiement === 'tiers').reduce((s, x) => s + Number(x.montant || 0), 0);
+
+  const totauxParPersonne = (() => {
+    const map = {};
+    servicesMois.forEach(s => {
+      if (!map[s.nom]) map[s.nom] = { nom: s.nom, heures: 0, montant: 0 };
+      map[s.nom].heures += heuresEntre(s.heure_debut.slice(0, 5), s.heure_fin.slice(0, 5));
+      map[s.nom].montant += Number(s.montant || 0);
+    });
+    return Object.values(map).sort((a, b) => b.montant - a.montant);
+  })();
+
+  const moisPrecedent = () => {
+    let a = anneeMois, m = moisMois - 1;
+    if (m < 1) { m = 12; a -= 1; }
+    setAnneeMois(a);
+    setMoisMois(m);
+  };
+  const moisSuivant = () => {
+    let a = anneeMois, m = moisMois + 1;
+    if (m > 12) { m = 1; a += 1; }
+    setAnneeMois(a);
+    setMoisMois(m);
+  };
+
   const thCell = (extra = {}) => ({ padding: '6px 10px', border: BORDURE, ...extra });
   const tdCell = (extra = {}) => ({ padding: '5px 10px', border: BORDURE, ...extra });
+
+  const badgePaiement = (typePaiement) => (
+    <span style={{
+      fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12,
+      color: typePaiement === 'cash' ? '#16a34a' : '#2563eb',
+      background: typePaiement === 'cash' ? '#dcfce7' : '#dbeafe',
+    }}>
+      {typePaiement === 'cash' ? 'Cash' : 'Via tiers'}
+    </span>
+  );
 
   return (
     <div>
@@ -181,17 +288,53 @@ export default function Personnel() {
 
         {error && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
-        {/* Navigation jour par jour, comme l'écran Encaissements */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-          <button className="btn" onClick={() => setDateUnique(d => addDays(d, -1))}>−</button>
-          <input
-            type="date"
-            value={dateUnique}
-            onChange={(e) => setDateUnique(e.target.value)}
-            style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 }}
-          />
-          <button className="btn" onClick={() => setDateUnique(d => addDays(d, 1))}>+</button>
-          <button className="btn" onClick={() => setDateUnique(todayKey())} style={{ color: '#888' }}>Aujourd'hui</button>
+        {/* Bascule Vue jour / Vue mensuelle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 0, border: '1px solid #ddd', borderRadius: 8, overflow: 'hidden' }}>
+            <button
+              onClick={() => setVue('jour')}
+              style={{
+                padding: '6px 16px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
+                background: vue === 'jour' ? '#111' : 'white',
+                color: vue === 'jour' ? 'white' : '#333',
+              }}
+            >
+              Vue jour
+            </button>
+            <button
+              onClick={() => setVue('mois')}
+              style={{
+                padding: '6px 16px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
+                background: vue === 'mois' ? '#111' : 'white',
+                color: vue === 'mois' ? 'white' : '#333',
+              }}
+            >
+              Vue mensuelle
+            </button>
+          </div>
+
+          {vue === 'jour' ? (
+            <>
+              <button className="btn" onClick={() => setDateUnique(d => addDays(d, -1))}>−</button>
+              <input
+                type="date"
+                value={dateUnique}
+                onChange={(e) => setDateUnique(e.target.value)}
+                style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13 }}
+              />
+              <button className="btn" onClick={() => setDateUnique(d => addDays(d, 1))}>+</button>
+              <button className="btn" onClick={() => setDateUnique(todayKey())} style={{ color: '#888' }}>Aujourd'hui</button>
+            </>
+          ) : (
+            <>
+              <button className="btn" onClick={moisPrecedent}>−</button>
+              <span style={{ fontSize: 16, fontWeight: 700, textTransform: 'capitalize' }}>
+                {MOIS_NOMS[moisMois - 1]} {anneeMois}
+              </span>
+              <button className="btn" onClick={moisSuivant}>+</button>
+            </>
+          )}
+
           <button
             className="btn"
             style={{ marginLeft: 'auto', background: '#111', color: 'white', fontWeight: 600 }}
@@ -201,78 +344,171 @@ export default function Personnel() {
           </button>
         </div>
 
-        {/* Totaux du jour */}
-        <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-          <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '8px 14px', minWidth: 110 }}>
-            <div style={{ fontSize: 11, color: '#888' }}>Total personnel</div>
-            <div style={{ fontSize: 16, fontWeight: 700 }}>{totalJour.toFixed(2)} €</div>
-          </div>
-          <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '8px 14px', minWidth: 110 }}>
-            <div style={{ fontSize: 11, color: '#888' }}>dont Cash</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#16a34a' }}>{totalCash.toFixed(2)} €</div>
-          </div>
-          <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '8px 14px', minWidth: 110 }}>
-            <div style={{ fontSize: 11, color: '#888' }}>dont Via tiers</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#2563eb' }}>{totalTiers.toFixed(2)} €</div>
-          </div>
-        </div>
+        {vue === 'jour' ? (
+          <>
+            {/* Totaux du jour */}
+            <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+              <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '8px 14px', minWidth: 110 }}>
+                <div style={{ fontSize: 11, color: '#888' }}>Total personnel</div>
+                <div style={{ fontSize: 16, fontWeight: 700 }}>{totalJour.toFixed(2)} €</div>
+              </div>
+              <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '8px 14px', minWidth: 110 }}>
+                <div style={{ fontSize: 11, color: '#888' }}>dont Cash</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#16a34a' }}>{totalCash.toFixed(2)} €</div>
+              </div>
+              <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '8px 14px', minWidth: 110 }}>
+                <div style={{ fontSize: 11, color: '#888' }}>dont Via tiers</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#2563eb' }}>{totalTiers.toFixed(2)} €</div>
+              </div>
+            </div>
 
-        {loading ? (
-          <div style={{ color: '#888' }}>Chargement...</div>
-        ) : servicesTries.length === 0 ? (
-          <div style={{ color: '#888', textAlign: 'center', padding: '40px 0' }}>Aucun service ce jour</div>
-        ) : (
-          <div style={{ background: 'white', border: BORDURE, borderRadius: 10, overflow: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
-                  <th style={thCell()}>Nom</th>
-                  <th style={thCell({ textAlign: 'center' })}>Début</th>
-                  <th style={thCell({ textAlign: 'center' })}>Fin</th>
-                  <th style={thCell({ textAlign: 'right' })}>Heures</th>
-                  <th style={thCell({ textAlign: 'right' })}>Taux</th>
-                  <th style={thCell({ textAlign: 'right' })}>Montant</th>
-                  <th style={thCell({ textAlign: 'center' })}>Paiement</th>
-                  <th style={thCell()}>Remarque</th>
-                  <th style={thCell()}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {servicesTries.map(s => {
-                  const heures = heuresEntre(s.heure_debut.slice(0, 5), s.heure_fin.slice(0, 5));
-                  return (
-                    <tr key={s.id} style={{ cursor: 'pointer' }} onClick={() => ouvrirEdition(s)}>
-                      <td style={tdCell({ fontWeight: 600 })}>{s.nom}</td>
-                      <td style={tdCell({ textAlign: 'center', color: '#666' })}>{s.heure_debut.slice(0, 5)}</td>
-                      <td style={tdCell({ textAlign: 'center', color: '#666' })}>{s.heure_fin.slice(0, 5)}</td>
-                      <td style={tdCell({ textAlign: 'right', color: '#666' })}>{heures.toFixed(2)} h</td>
-                      <td style={tdCell({ textAlign: 'right', color: '#666' })}>{Number(s.taux_horaire).toFixed(2)} €/h</td>
-                      <td style={tdCell({ textAlign: 'right', fontWeight: 700 })}>{Number(s.montant).toFixed(2)} €</td>
-                      <td style={tdCell({ textAlign: 'center' })}>
-                        <span style={{
-                          fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12,
-                          color: s.type_paiement === 'cash' ? '#16a34a' : '#2563eb',
-                          background: s.type_paiement === 'cash' ? '#dcfce7' : '#dbeafe',
-                        }}>
-                          {s.type_paiement === 'cash' ? 'Cash' : 'Via tiers'}
-                        </span>
-                      </td>
-                      <td style={tdCell({ color: '#888', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}>
-                        {s.remarque || '—'}
-                      </td>
-                      <td style={tdCell({ textAlign: 'center' })}>
-                        <button
-                          className="btn"
-                          style={{ width: 22, height: 22, padding: 0, fontSize: 11, color: '#dc2626', borderColor: '#fca5a5' }}
-                          onClick={(e) => { e.stopPropagation(); supprimer(s); }}
-                        >✕</button>
-                      </td>
+            {loading ? (
+              <div style={{ color: '#888' }}>Chargement...</div>
+            ) : servicesTries.length === 0 ? (
+              <div style={{ color: '#888', textAlign: 'center', padding: '40px 0' }}>Aucun service ce jour</div>
+            ) : (
+              <div style={{ background: 'white', border: BORDURE, borderRadius: 10, overflow: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
+                      <th style={thCell()}>Nom</th>
+                      <th style={thCell({ textAlign: 'center' })}>Début</th>
+                      <th style={thCell({ textAlign: 'center' })}>Fin</th>
+                      <th style={thCell({ textAlign: 'right' })}>Heures</th>
+                      <th style={thCell({ textAlign: 'right' })}>Taux</th>
+                      <th style={thCell({ textAlign: 'right' })}>Montant</th>
+                      <th style={thCell({ textAlign: 'center' })}>Paiement</th>
+                      <th style={thCell()}>Remarque</th>
+                      <th style={thCell()}></th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody>
+                    {servicesTries.map(s => {
+                      const heures = heuresEntre(s.heure_debut.slice(0, 5), s.heure_fin.slice(0, 5));
+                      return (
+                        <tr key={s.id} style={{ cursor: 'pointer' }} onClick={() => ouvrirEdition(s)}>
+                          <td style={tdCell({ fontWeight: 600 })}>{s.nom}</td>
+                          <td style={tdCell({ textAlign: 'center', color: '#666' })}>{s.heure_debut.slice(0, 5)}</td>
+                          <td style={tdCell({ textAlign: 'center', color: '#666' })}>{s.heure_fin.slice(0, 5)}</td>
+                          <td style={tdCell({ textAlign: 'right', color: '#666' })}>{heures.toFixed(2)} h</td>
+                          <td style={tdCell({ textAlign: 'right', color: '#666' })}>{Number(s.taux_horaire).toFixed(2)} €/h</td>
+                          <td style={tdCell({ textAlign: 'right', fontWeight: 700 })}>{Number(s.montant).toFixed(2)} €</td>
+                          <td style={tdCell({ textAlign: 'center' })}>{badgePaiement(s.type_paiement)}</td>
+                          <td style={tdCell({ color: '#888', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' })}>
+                            {s.remarque || '—'}
+                          </td>
+                          <td style={tdCell({ textAlign: 'center' })}>
+                            <button
+                              className="btn"
+                              style={{ width: 22, height: 22, padding: 0, fontSize: 11, color: '#dc2626', borderColor: '#fca5a5' }}
+                              onClick={(e) => { e.stopPropagation(); supprimer(s); }}
+                            >✕</button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {/* Totaux du mois */}
+            <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+              <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '8px 14px', minWidth: 110 }}>
+                <div style={{ fontSize: 11, color: '#888' }}>Total du mois</div>
+                <div style={{ fontSize: 16, fontWeight: 700 }}>{totalMois.toFixed(2)} €</div>
+              </div>
+              <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '8px 14px', minWidth: 110 }}>
+                <div style={{ fontSize: 11, color: '#888' }}>dont Cash</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#16a34a' }}>{totalMoisCash.toFixed(2)} €</div>
+              </div>
+              <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '8px 14px', minWidth: 110 }}>
+                <div style={{ fontSize: 11, color: '#888' }}>dont Via tiers</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#2563eb' }}>{totalMoisTiers.toFixed(2)} €</div>
+              </div>
+            </div>
+
+            {loadingMois ? (
+              <div style={{ color: '#888' }}>Chargement...</div>
+            ) : (
+              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                {/* Détail chronologique du mois */}
+                <div style={{ flex: '2 1 500px', background: 'white', border: BORDURE, borderRadius: 10, overflow: 'auto' }}>
+                  {servicesMoisTries.length === 0 ? (
+                    <div style={{ color: '#888', textAlign: 'center', padding: '40px 0' }}>Aucun service ce mois</div>
+                  ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
+                          <th style={thCell()}>Date</th>
+                          <th style={thCell()}>Nom</th>
+                          <th style={thCell({ textAlign: 'right' })}>Heures</th>
+                          <th style={thCell({ textAlign: 'right' })}>Montant</th>
+                          <th style={thCell({ textAlign: 'center' })}>Paiement</th>
+                          <th style={thCell()}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {servicesMoisTries.map(s => {
+                          const heures = heuresEntre(s.heure_debut.slice(0, 5), s.heure_fin.slice(0, 5));
+                          const d = new Date(s.date_service + 'T00:00:00');
+                          return (
+                            <tr key={s.id} style={{ cursor: 'pointer' }} onClick={() => ouvrirEdition(s)}>
+                              <td style={tdCell({ color: '#666', whiteSpace: 'nowrap' })}>
+                                {pad2(d.getDate())}/{pad2(d.getMonth() + 1)}
+                              </td>
+                              <td style={tdCell({ fontWeight: 600 })}>{s.nom}</td>
+                              <td style={tdCell({ textAlign: 'right', color: '#666' })}>{heures.toFixed(2)} h</td>
+                              <td style={tdCell({ textAlign: 'right', fontWeight: 700 })}>{Number(s.montant).toFixed(2)} €</td>
+                              <td style={tdCell({ textAlign: 'center' })}>{badgePaiement(s.type_paiement)}</td>
+                              <td style={tdCell({ textAlign: 'center' })}>
+                                <button
+                                  className="btn"
+                                  style={{ width: 22, height: 22, padding: 0, fontSize: 11, color: '#dc2626', borderColor: '#fca5a5' }}
+                                  onClick={(e) => { e.stopPropagation(); supprimer(s); }}
+                                >✕</button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{ fontWeight: 700, background: '#fafaf8' }}>
+                          <td style={tdCell()} colSpan={3}>Total {MOIS_NOMS[moisMois - 1]}</td>
+                          <td style={tdCell({ textAlign: 'right' })}>{totalMois.toFixed(2)} €</td>
+                          <td style={tdCell()} colSpan={2}></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  )}
+                </div>
+
+                {/* Totaux par personne */}
+                <div style={{ flex: '1 1 260px', background: 'white', border: BORDURE, borderRadius: 10, overflow: 'hidden' }}>
+                  <div style={{ padding: '10px 14px', fontSize: 12, fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: 0.4, borderBottom: BORDURE }}>
+                    Totaux par personne
+                  </div>
+                  {totauxParPersonne.length === 0 ? (
+                    <div style={{ color: '#888', padding: 14, fontSize: 13 }}>—</div>
+                  ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <tbody>
+                        {totauxParPersonne.map(p => (
+                          <tr key={p.nom}>
+                            <td style={tdCell({ fontWeight: 600 })}>{p.nom}</td>
+                            <td style={tdCell({ textAlign: 'right', color: '#666' })}>{p.heures.toFixed(2)} h</td>
+                            <td style={tdCell({ textAlign: 'right', fontWeight: 700 })}>{p.montant.toFixed(2)} €</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 

@@ -107,6 +107,22 @@ def get_service_personnel(
     return service
 
 
+@router.get("/by-encaissement/{encaissement_id}", response_model=ServicePersonnelOut)
+def get_service_personnel_par_encaissement(
+    encaissement_id: int, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)
+):
+    """
+    Retrouve la saisie de service personnel liée à un encaissement de dépense
+    donné. Utilisé par l'écran Encaissements pour rediriger vers l'écran
+    Personnel (plutôt que la fenêtre de détail générique) quand la ligne
+    cliquée provient d'une saisie de service.
+    """
+    service = db.query(ServicePersonnel).filter(ServicePersonnel.encaissement_id == encaissement_id).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Aucun service personnel lié à cet encaissement")
+    return service
+
+
 @router.post("/", response_model=ServicePersonnelOut)
 def create_service_personnel(
     payload: ServicePersonnelCreate, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)

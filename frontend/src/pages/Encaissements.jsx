@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../api/api';
 import DetailEncaissementModal from '../components/DetailEncaissementModal';
 import TicketImprimable from '../components/TicketImprimable';
@@ -24,6 +24,7 @@ const BORDURE = '1px solid #e5e5e0';
 
 export default function Encaissements() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   // Lit la date transmise par le Plan de salle (NavBar) au montage du composant.
   // S'il n'y en a pas (accès direct à /encaissements), on retombe sur aujourd'hui.
   const dateInitiale = searchParams.get('date') || todayKey();
@@ -180,6 +181,26 @@ export default function Encaissements() {
     genererPdfTicket(data);
   };
 
+  // Clic sur "⋯" : si la dépense provient d'une saisie de service personnel
+  // (module Personnel), on redirige vers cet écran pour corriger les heures,
+  // le taux ou le type de paiement — la fenêtre de détail générique ne gère
+  // pas ces champs, qui vivent dans la table service_personnel. Sinon, on
+  // ouvre la fenêtre de détail classique comme avant.
+  const ouvrirDetailOuService = async (enc) => {
+    if (enc.depenses) {
+      try {
+        const res = await api.get('/service-personnel/by-encaissement/' + enc.id);
+        const service = res.data;
+        navigate('/personnel?date=' + service.date_service + '&service=' + service.id);
+        return;
+      } catch (e) {
+        // Pas de service personnel lié (ex: dépense nourriture/loyer) : on
+        // continue normalement vers le détail générique.
+      }
+    }
+    setDetailOuvert(enc.id);
+  };
+
   const encaissementsTries = [...encaissements].sort((a, b) => new Date(a.date_encaissement) - new Date(b.date_encaissement));
 
   // Styles de cellules avec quadrillage, resserrés pour laisser de la place à
@@ -286,7 +307,7 @@ export default function Encaissements() {
                         className="btn"
                         style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
                         title="Voir / corriger le détail"
-                        onClick={() => setDetailOuvert(enc.id)}
+                        onClick={() => ouvrirDetailOuService(enc)}
                       >⋯</button>
                     </td>
                     <td style={tdCell()}>
