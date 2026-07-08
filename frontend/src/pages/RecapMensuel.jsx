@@ -358,6 +358,11 @@ export default function RecapMensuel() {
   // genere le PDF pour la vue "tous" ou "analyse". Toutes les colonnes
   // restent remplies même sur un jour fermé ; on ajoute juste "Fermé" en
   // rouge à côté de la date.
+  //
+  // ⚠️ Règle : le PDF doit refléter EXACTEMENT l'écran correspondant.
+  // La colonne "Contrôle" est donc, comme à l'écran, la somme des 3 TVA
+  // (qui doit être égale au Total) — et NON carte + cash analysé (ancienne
+  // formule qui créait un écart entre l'écran et le PDF, corrigé le 8 juillet).
   const genererPdf = (vueExport) => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const nomMois = MOIS_NOMS[mois - 1];
@@ -371,33 +376,41 @@ export default function RecapMensuel() {
     doc.text(nomMoisMaj + ' ' + annee, 90, 15);
     doc.setFont(undefined, 'normal');
 
-    // ligne de totaux / pourcentages TVA, juste sous le titre (comme l'ancien PDF Access)
+    // ligne de totaux / pourcentages TVA, juste sous le titre (comme l'ancien PDF Access).
+    // Les pourcentages sont calculés sur la vue EXPORTÉE (tvaRef), pas sur la vue
+    // affichée à l'écran au moment du clic (sinon "PDF Comptable" cliqué depuis la
+    // vue "Tous" donnait des pourcentages faux).
     const tvaRef = estTous ? totaux.tva : totaux.tvaAnalyse;
+    const baseTvaRef = tvaRef[6] + tvaRef[12] + tvaRef[21];
+    const pourcentageRef = (montant) => (baseTvaRef > 0 ? (montant / baseTvaRef) * 100 : 0);
     doc.setFontSize(8);
     let ligneInfo = (estTous ? 'Total ' + fmt(totaux.total) : 'Total ' + fmt(totaux.totalAnalyse))
       + '   Cash ' + fmt(estTous ? totaux.cash : totaux.cashAnalyse)
       + '   Carte ' + fmt(totaux.carte)
       + '   Km A/R ' + fmt(totalKm);
     doc.text(ligneInfo, 14, 21);
-    let lignePourcent = TAUX_TVA.map(t => t + '% : ' + pourcentage(tvaRef[t]).toFixed(2) + '%').join('    ');
+    let lignePourcent = TAUX_TVA.map(t => t + '% : ' + pourcentageRef(tvaRef[t]).toFixed(2) + '%').join('    ');
     doc.text(lignePourcent, 14, 26);
 
-    // En-têtes et colonnes selon la vue (la colonne Dépenses est inutile dans le PDF comptable)
+    // En-têtes et colonnes selon la vue, identiques à l'écran (la colonne
+    // Dépenses reste volontairement absente du PDF comptable)
     const head = estTous
-      ? ['Jour', 'Total', 'Total analysé', 'Dépenses', 'Cash', 'Carte', 'Cash analysé', 'TVA 6%', 'TVA 12%', 'TVA 21%', 'Km A/R']
-      : ['Jour', 'Total', 'Carte', 'Cash', 'Contrôle', 'TVA 6%', 'TVA 12%', 'TVA 21%', 'Km A/R'];
+      ? ['Jour', 'Total', 'Total analysé', 'Dépenses', 'Cash', 'Carte', 'Cash analysé', 'Contrôle', 'TVA 6%', 'TVA 12%', 'TVA 21%', 'Km A/R']
+      : ['Jour', 'Total', 'Carte', 'Cash analysé', 'Contrôle', 'TVA 6%', 'TVA 12%', 'TVA 21%', 'Km A/R'];
 
     const body = jours.map(j => {
       const d = parJour[j];
       const ferme = estFerme(j);
       const libelleJour = pad2(j) + ' ' + nomJourSemaine(j) + (ferme ? '  Fermé' : '');
       if (estTous) {
+        const controle = d.tva[6] + d.tva[12] + d.tva[21];
         return [
           libelleJour, fmt(d.total), fmt(d.totalAnalyse), fmt(d.depenses), fmt(d.cash), fmt(d.carte), fmt(d.cashAnalyse),
-          fmt(d.tva[6]), fmt(d.tva[12]), fmt(d.tva[21]), fmt(kmDuJour(j)),
+          fmt(controle), fmt(d.tva[6]), fmt(d.tva[12]), fmt(d.tva[21]), fmt(kmDuJour(j)),
         ];
       }
-      const controle = d.carte + d.cashAnalyse;
+      // Contrôle = somme des 3 TVA analysées, comme dans le tableau à l'écran
+      const controle = d.tvaAnalyse[6] + d.tvaAnalyse[12] + d.tvaAnalyse[21];
       return [
         libelleJour, fmt(d.totalAnalyse), fmt(d.carte), fmt(d.cashAnalyse), fmt(controle),
         fmt(d.tvaAnalyse[6]), fmt(d.tvaAnalyse[12]), fmt(d.tvaAnalyse[21]), fmt(kmDuJour(j)),
@@ -405,16 +418,16 @@ export default function RecapMensuel() {
     });
 
     const ligneTotaux = estTous
-      ? ['Totaux ' + nomMois, fmt(totaux.total), fmt(totaux.totalAnalyse), fmt(totaux.depenses), fmt(totaux.cash), fmt(totaux.carte), fmt(totaux.cashAnalyse), fmt(totaux.tva[6]), fmt(totaux.tva[12]), fmt(totaux.tva[21]), fmt(totalKm)]
-      : ['Totaux ' + nomMois, fmt(totaux.totalAnalyse), fmt(totaux.carte), fmt(totaux.cashAnalyse), fmt(totaux.carte + totaux.cashAnalyse), fmt(totaux.tvaAnalyse[6]), fmt(totaux.tvaAnalyse[12]), fmt(totaux.tvaAnalyse[21]), fmt(totalKm)];
+      ? ['Totaux ' + nomMois, fmt(totaux.total), fmt(totaux.totalAnalyse), fmt(totaux.depenses), fmt(totaux.cash), fmt(totaux.carte), fmt(totaux.cashAnalyse), fmt(totaux.tva[6] + totaux.tva[12] + totaux.tva[21]), fmt(totaux.tva[6]), fmt(totaux.tva[12]), fmt(totaux.tva[21]), fmt(totalKm)]
+      : ['Totaux ' + nomMois, fmt(totaux.totalAnalyse), fmt(totaux.carte), fmt(totaux.cashAnalyse), fmt(totaux.tvaAnalyse[6] + totaux.tvaAnalyse[12] + totaux.tvaAnalyse[21]), fmt(totaux.tvaAnalyse[6]), fmt(totaux.tvaAnalyse[12]), fmt(totaux.tvaAnalyse[21]), fmt(totalKm)];
 
     const ligneTvaApayer = estTous
-      ? ['TVA à payer', '', '', '', '', '', '', fmt(tvaApayer(totaux.tva[6], 6)), fmt(tvaApayer(totaux.tva[12], 12)), fmt(tvaApayer(totaux.tva[21], 21)), '']
+      ? ['TVA à payer', '', '', '', '', '', '', '', fmt(tvaApayer(totaux.tva[6], 6)), fmt(tvaApayer(totaux.tva[12], 12)), fmt(tvaApayer(totaux.tva[21], 21)), '']
       : ['TVA à payer', '', '', '', '', fmt(tvaApayer(totaux.tvaAnalyse[6], 6)), fmt(tvaApayer(totaux.tvaAnalyse[12], 12)), fmt(tvaApayer(totaux.tvaAnalyse[21], 21)), ''];
 
     const sommeTva = estTous ? totalTvaApayer(totaux.tva) : totalTvaApayer(totaux.tvaAnalyse);
     const ligneSomme = estTous
-      ? ['Somme des 3 TVA', '', '', '', '', '', '', '', '', fmt(sommeTva), '']
+      ? ['Somme des 3 TVA', '', '', '', '', '', '', '', '', '', fmt(sommeTva), '']
       : ['Somme des 3 TVA', '', '', '', '', '', '', fmt(sommeTva), ''];
 
     autoTable(doc, {
@@ -424,12 +437,11 @@ export default function RecapMensuel() {
       styles: { fontSize: 7, cellPadding: 1.2, lineColor: [229, 229, 224], lineWidth: 0.1 },
       headStyles: { fillColor: [250, 250, 248], textColor: [40, 40, 40], fontStyle: 'bold' },
       columnStyles: {
-        0: { halign: 'left', cellWidth: 38 },
+        0: { halign: 'left', cellWidth: 34 },
       },
       bodyStyles: { halign: 'right' },
       didParseCell: (data) => {
         // Mise en évidence des 3 dernières lignes (totaux / tva à payer / somme)
-        const nbLignesSpeciales = 3;
         const estLigneSpeciale = data.row.index >= body.length;
         if (estLigneSpeciale) {
           data.cell.styles.fontStyle = 'bold';

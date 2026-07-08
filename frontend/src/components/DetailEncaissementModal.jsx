@@ -385,12 +385,12 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
             <div style={{ border: BORDURE, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, tableLayout: 'fixed' }}>
                 <colgroup>
-                  <col style={{ width: '34%' }} />
-                  <col style={{ width: '6%' }} />
-                  <col style={{ width: '15%' }} />
+                  <col style={{ width: '29%' }} />
                   <col style={{ width: '11%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '10%' }} />
                   <col style={{ width: '15%' }} />
-                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '13%' }} />
                   <col style={{ width: '8%' }} />
                 </colgroup>
                 <thead>
