@@ -291,6 +291,23 @@ export default function RecapMensuel() {
   const nbJours = joursDansMois(annee, mois);
   const jours = Array.from({ length: nbJours }, (_, i) => i + 1);
 
+  // Nombre de jours cochés "Fermé" ce mois-ci, affiché en tête du bloc Annotations
+  const nbJoursFermes = useMemo(() => jours.filter(j => estFerme(j)).length, [jours, recap]);
+
+  // Recette moyenne par jour "d'ouverture", défini comme un jour où cash+carte
+  // est positif (peu importe la case Fermé, qui est une étiquette manuelle) :
+  // total du mois sur ces jours, divisé par leur nombre.
+  const joursAvecRecette = useMemo(
+    () => jours.filter(j => (parJour[j].cash + parJour[j].carte) > 0),
+    [jours, parJour]
+  );
+  const nbJoursAvecRecette = joursAvecRecette.length;
+  const recetteMoyenneParJour = useMemo(() => {
+    if (nbJoursAvecRecette === 0) return 0;
+    const totalJoursOuverts = joursAvecRecette.reduce((s, j) => s + parJour[j].total, 0);
+    return totalJoursOuverts / nbJoursAvecRecette;
+  }, [joursAvecRecette, parJour, nbJoursAvecRecette]);
+
   const nomJourSemaine = (jour) => {
     const d = new Date(annee, mois - 1, jour);
     return d.toLocaleDateString('fr-BE', { weekday: 'long' });
@@ -459,16 +476,26 @@ export default function RecapMensuel() {
       margin: { left: 14, right: 14 },
     });
 
+    // Annotations du mois : jours fermés (les 2 PDF) + recette moyenne par jour
+    // d'ouverture (PDF Tous uniquement, cf. écran), puis le mémo libre s'il existe.
+    let yAnnotations = doc.lastAutoTable.finalY + 10;
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'bold');
+    doc.text('Annotations du mois', 14, yAnnotations);
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(8);
+    yAnnotations += 5;
+    let ligneStats = nbJoursFermes + ' jour' + (nbJoursFermes > 1 ? 's' : '') + ' fermé' + (nbJoursFermes > 1 ? 's' : '') + ' ce mois-ci';
+    if (estTous) {
+      ligneStats += '    ·    recette moyenne sur ' + nbJoursAvecRecette + ' jour' + (nbJoursAvecRecette > 1 ? 's' : '') + " d'ouverture : " + fmt(recetteMoyenneParJour) + ' €';
+    }
+    doc.text(ligneStats, 14, yAnnotations);
+    yAnnotations += 5;
+
     // Mémo du mois, si présent
     if (memoLocal && memoLocal.trim()) {
-      const yFinTableau = doc.lastAutoTable.finalY + 10;
-      doc.setFontSize(9);
-      doc.setFont(undefined, 'bold');
-      doc.text('Annotations du mois', 14, yFinTableau);
-      doc.setFont(undefined, 'normal');
-      doc.setFontSize(8);
       const lignesMemo = doc.splitTextToSize(memoLocal, 180);
-      doc.text(lignesMemo, 14, yFinTableau + 5);
+      doc.text(lignesMemo, 14, yAnnotations);
     }
 
     const suffixe = estTous ? 'tous' : 'comptable';
@@ -891,6 +918,11 @@ export default function RecapMensuel() {
               <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>
                 Annotations du mois (nettoyage, justifications de km…)
               </label>
+              <div style={{ fontSize: 13, color: '#666', marginBottom: 6 }}>
+                <strong style={{ color: '#111' }}>{nbJoursFermes}</strong> jour{nbJoursFermes > 1 ? 's' : ''} fermé{nbJoursFermes > 1 ? 's' : ''} ce mois-ci
+                {' · '}
+                recette moyenne sur <strong style={{ color: '#111' }}>{nbJoursAvecRecette}</strong> jour{nbJoursAvecRecette > 1 ? 's' : ''} d'ouverture : <strong style={{ color: '#111' }}>{fmt(recetteMoyenneParJour)} €</strong>
+              </div>
               <textarea
                 value={memoLocal}
                 onChange={(e) => setMemoLocal(e.target.value)}
