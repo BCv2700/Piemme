@@ -7,6 +7,7 @@ from app.routers import tables, articles, clients, commandes, encaissements, res
 from app.routers import article_achat
 from app.routers import article_composant
 from app.routers import statistiques
+from app.routers import service_personnel
 
 import os
 
@@ -37,6 +38,7 @@ app.include_router(auth.router)
 app.include_router(article_achat.router)
 app.include_router(article_composant.router)
 app.include_router(statistiques.router)
+app.include_router(service_personnel.router)
 
 @app.get("/")
 def root():

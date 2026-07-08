@@ -124,6 +124,7 @@ export default function NavBar() {
       <Link to={urlPlanSalle} style={linkStyle('/')}>Plan de salle</Link>
       <Link to={'/encaissements' + suffixeDate} style={linkStyle('/encaissements')}>Encaissements</Link>
       <Link to={'/recap' + suffixeDate} style={linkStyle('/recap')}>Récap</Link>
+      <Link to="/personnel" style={linkStyle('/personnel')}>Personnel</Link>
 
       <MenuDeroulant label="Gestion" actif={cheminsGestion.includes(location.pathname)}>
         <Link to="/articles" style={itemMenuStyle('/articles')}>Articles</Link>

@@ -17,6 +17,7 @@ import RecapMensuel from './pages/RecapMensuel';
 import MontantsAnnuels from './pages/MontantsAnnuels';
 import PlatsDemandes from './pages/PlatsDemandes';
 import Frequentation from './pages/Frequentation';
+import Personnel from './pages/Personnel';
 import './App.css';
 
 // Empêche l'accès à une page si aucun jeton n'est présent : redirige vers /login.
@@ -59,6 +60,7 @@ function App() {
         <Route path="/statistiques/montants-annuels" element={<RouteProtegee><MiseEnPage><MontantsAnnuels /></MiseEnPage></RouteProtegee>} />
         <Route path="/statistiques/plats-demandes" element={<RouteProtegee><MiseEnPage><PlatsDemandes /></MiseEnPage></RouteProtegee>} />
         <Route path="/statistiques/frequentation" element={<RouteProtegee><MiseEnPage><Frequentation /></MiseEnPage></RouteProtegee>} />
+        <Route path="/personnel" element={<RouteProtegee><MiseEnPage><Personnel /></MiseEnPage></RouteProtegee>} />
       </Routes>
     </BrowserRouter>
   );
