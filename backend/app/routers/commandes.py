@@ -47,7 +47,21 @@ def delete_commande(commande_id: int, db: Session = Depends(get_db), utilisateur
     db_commande = db.query(Commande).filter(Commande.id == commande_id).first()
     if not db_commande:
         raise HTTPException(status_code=404, detail="Ligne de commande introuvable")
+    table_id = db_commande.table_id
     db.delete(db_commande)
+    db.flush()
+
+    # Si cette suppression vide entièrement le caddy de la table (dernier
+    # article retiré sans passer par le paiement, ex: ajout puis annulation),
+    # on libère la table plutôt que de la laisser "occupée" indéfiniment.
+    # Corrige un bug où une table restait rouge sur le plan de salle après
+    # une commande annulée avant paiement.
+    lignes_restantes = db.query(Commande).filter(Commande.table_id == table_id).count()
+    if lignes_restantes == 0:
+        table = db.query(Table).filter(Table.id == table_id).first()
+        if table and table.statut == 'occupee':
+            table.statut = 'libre'
+
     db.commit()
     return {"message": "Ligne supprimée"}
 
