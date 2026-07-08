@@ -796,8 +796,9 @@ export default function RecapMensuel() {
                     </tr>
                     <tr style={{ background: '#fafaf8' }}>
                       <td style={tdCell({ textAlign: 'left', color: '#888', fontWeight: 700 })}>Somme des 3 TVA</td>
-                      <td style={tdCell()} colSpan={10}></td>
+                      <td style={tdCell()} colSpan={9}></td>
                       <td style={tdCell({ textAlign: 'right', color: '#888', fontWeight: 700 })}>{fmt(totalTvaApayer(totaux.tva))}</td>
+                      <td style={tdCell()}></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -876,8 +877,9 @@ export default function RecapMensuel() {
                     </tr>
                     <tr style={{ background: '#fafaf8' }}>
                       <td style={tdCell({ textAlign: 'left', color: '#888', fontWeight: 700 })}>Somme des 3 TVA</td>
-                      <td style={tdCell()} colSpan={8}></td>
+                      <td style={tdCell()} colSpan={7}></td>
                       <td style={tdCell({ textAlign: 'right', color: '#888', fontWeight: 700 })}>{fmt(totalTvaApayer(totaux.tvaAnalyse))}</td>
+                      <td style={tdCell()}></td>
                     </tr>
                   </tfoot>
                 </table>
