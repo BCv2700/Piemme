@@ -43,7 +43,8 @@ export default function EncaissementsMois() {
   const [msg, setMsg] = useState(null);
   const [detailOuvert, setDetailOuvert] = useState(null);
   const [ticketAImprimer, setTicketAImprimer] = useState(null);
-  const [filtreTable, setFiltreTable] = useState('');
+  const [filtreTable, setFiltreTable] = useState(searchParams.get('filtre') || '');
+  const [idsServicesLies, setIdsServicesLies] = useState(new Set());
 
   const load = () => {
     setLoading(true);
@@ -52,10 +53,15 @@ export default function EncaissementsMois() {
     Promise.all([
       api.get('/encaissements/', { params: { date_debut: dateDebut, date_fin: dateFin } }),
       api.get('/clients/'),
+      api.get('/service-personnel/', { params: { date_debut: dateDebut, date_fin: dateFin } }),
     ])
-      .then(([encRes, clientsRes]) => {
+      .then(([encRes, clientsRes, servicesRes]) => {
         setEncaissements(encRes.data);
         setClients(clientsRes.data);
+        // Encaissements déjà reliés à une fiche Personnel (sert à distinguer
+        // les "Service XXX" déjà corrigés de ceux qui restent à migrer).
+        const ids = new Set(servicesRes.data.map(s => s.encaissement_id).filter(id => id != null));
+        setIdsServicesLies(ids);
       })
       .catch(() => setError('Impossible de charger les encaissements'))
       .finally(() => setLoading(false));
@@ -171,6 +177,10 @@ export default function EncaissementsMois() {
     genererPdfTicket(data);
   };
 
+  // Lien vers Personnel, en conservant le filtre actif (query "filtre") pour
+  // qu'il soit toujours là au retour, au lieu de repartir à vide.
+  const suffixeFiltre = filtreTable.trim() ? '&filtre=' + encodeURIComponent(filtreTable.trim()) : '';
+
   // Clic sur "⋯" : si la dépense provient d'une saisie de service personnel
   // (module Personnel), on redirige vers cet écran (avec retour=mois, pour
   // revenir ici à la fermeture) plutôt que d'ouvrir le détail générique.
@@ -179,7 +189,7 @@ export default function EncaissementsMois() {
       try {
         const res = await api.get('/service-personnel/by-encaissement/' + enc.id);
         const service = res.data;
-        navigate('/personnel?date=' + service.date_service + '&service=' + service.id + '&retour=mois');
+        navigate('/personnel?date=' + service.date_service + '&service=' + service.id + '&retour=mois' + suffixeFiltre);
         return;
       } catch (e) {
         // Pas de service personnel lié : détail générique comme avant.
@@ -197,6 +207,11 @@ export default function EncaissementsMois() {
     return nomArticle.startsWith('service ');
   };
 
+  // Un "Service XXX" déjà relié à une fiche Personnel (migré ou créé
+  // directement via le nouveau module) : plus besoin du bouton de migration,
+  // juste un indicateur visuel qu'il a déjà été corrigé.
+  const estDejaCorrige = (enc) => idsServicesLies.has(enc.id);
+
   // ⚠️ TEMPORAIRE : relie un ancien encaissement "Service XXX" à une nouvelle
   // fiche du module Personnel (sans créer de nouvelle dépense), puis ouvre
   // cette fiche pour corriger les heures et le taux horaire. retour=mois pour
@@ -204,7 +219,7 @@ export default function EncaissementsMois() {
   const migrerVersPersonnel = async (enc) => {
     try {
       const res = await api.post('/service-personnel/depuis-encaissement/' + enc.id);
-      navigate('/personnel?date=' + res.data.date_service + '&service=' + res.data.id + '&retour=mois');
+      navigate('/personnel?date=' + res.data.date_service + '&service=' + res.data.id + '&retour=mois' + suffixeFiltre);
     } catch (e) {
       showMsg('error', errMsg(e, 'Erreur lors de la migration'));
     }
@@ -221,6 +236,9 @@ export default function EncaissementsMois() {
   const encaissementsAffiches = filtreTable.trim() === ''
     ? encaissementsTries
     : encaissementsTries.filter(enc => libelleTable(enc).toLowerCase().includes(filtreTable.trim().toLowerCase()));
+
+  const servicesAMigrer = encaissementsTries.filter(enc => estServiceMigrable(enc) && !estDejaCorrige(enc)).length;
+  const servicesCorriges = encaissementsTries.filter(enc => estServiceMigrable(enc) && estDejaCorrige(enc)).length;
 
   const thCell = (extra = {}) => ({ padding: '5px 6px', border: BORDURE, ...extra });
   const tdCell = (extra = {}) => ({ padding: '3px 6px', border: BORDURE, ...extra });
@@ -263,8 +281,15 @@ export default function EncaissementsMois() {
             placeholder="Filtrer sur Table (ex: Service)"
             style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, width: 220 }}
           />
-          <span style={{ marginLeft: 'auto', fontSize: 14, fontWeight: 700 }}>
-            Total du mois : {totalMois.toFixed(2)} €
+          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 14 }}>
+            {(servicesAMigrer > 0 || servicesCorriges > 0) && (
+              <span style={{ fontSize: 12, color: '#888' }}>
+                Services : <span style={{ color: '#16a34a', fontWeight: 700 }}>{servicesCorriges} corrigés</span>
+                {' · '}
+                <span style={{ color: '#b45309', fontWeight: 700 }}>{servicesAMigrer} à migrer</span>
+              </span>
+            )}
+            <span style={{ fontSize: 14, fontWeight: 700 }}>Total du mois : {totalMois.toFixed(2)} €</span>
           </span>
         </div>
 
@@ -297,7 +322,7 @@ export default function EncaissementsMois() {
               </thead>
               <tbody>
                 {encaissementsAffiches.map(enc => (
-                  <tr key={enc.id}>
+                  <tr key={enc.id} style={estDejaCorrige(enc) ? { background: '#f0fdf4' } : undefined}>
                     <td style={tdCell()}>
                       <button
                         className="btn"
@@ -320,12 +345,21 @@ export default function EncaissementsMois() {
                           <button className="btn" style={{ width: 20, height: 20, padding: 0, fontSize: 11 }} title="Ticket en PDF" onClick={() => telechargerPdfTicket(enc)}>📄</button>
                         </>
                       ) : estServiceMigrable(enc) ? (
-                        <button
-                          className="btn"
-                          style={{ width: 20, height: 20, padding: 0, fontSize: 11, color: '#b45309', borderColor: '#fde68a' }}
-                          title="Migrer (temporaire) vers le module Personnel"
-                          onClick={() => migrerVersPersonnel(enc)}
-                        >🔧</button>
+                        estDejaCorrige(enc) ? (
+                          <button
+                            className="btn"
+                            style={{ width: 20, height: 20, padding: 0, fontSize: 11, color: '#16a34a', borderColor: '#86efac' }}
+                            title="Déjà repris dans Personnel — cliquer pour ouvrir sa fiche"
+                            onClick={() => ouvrirDetailOuService(enc)}
+                          >✔</button>
+                        ) : (
+                          <button
+                            className="btn"
+                            style={{ width: 20, height: 20, padding: 0, fontSize: 11, color: '#b45309', borderColor: '#fde68a' }}
+                            title="Migrer (temporaire) vers le module Personnel"
+                            onClick={() => migrerVersPersonnel(enc)}
+                          >🔧</button>
+                        )
                       ) : null}
                     </td>
                     <td style={tdCell({ color: '#aaa' })}>{enc.id}</td>

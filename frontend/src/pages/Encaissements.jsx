@@ -37,16 +37,22 @@ export default function Encaissements() {
   const [msg, setMsg] = useState(null);
   const [detailOuvert, setDetailOuvert] = useState(null); // id de l'encaissement affiché dans la modale, ou null
   const [ticketAImprimer, setTicketAImprimer] = useState(null); // données du ticket en cours de réimpression papier
+  const [idsServicesLies, setIdsServicesLies] = useState(new Set());
 
   const load = () => {
     setLoading(true);
     Promise.all([
       api.get('/encaissements/', { params: { date_debut: dateUnique, date_fin: dateUnique } }),
       api.get('/clients/'),
+      api.get('/service-personnel/', { params: { date_debut: dateUnique, date_fin: dateUnique } }),
     ])
-      .then(([encRes, clientsRes]) => {
+      .then(([encRes, clientsRes, servicesRes]) => {
         setEncaissements(encRes.data);
         setClients(clientsRes.data);
+        // Encaissements déjà reliés à une fiche Personnel (sert à distinguer
+        // les "Service XXX" déjà corrigés de ceux qui restent à migrer).
+        const ids = new Set(servicesRes.data.map(s => s.encaissement_id).filter(id => id != null));
+        setIdsServicesLies(ids);
       })
       .catch(() => setError('Impossible de charger les encaissements'))
       .finally(() => setLoading(false));
@@ -210,6 +216,11 @@ export default function Encaissements() {
     return nomArticle.startsWith('service ');
   };
 
+  // Un "Service XXX" déjà relié à une fiche Personnel (migré ou créé
+  // directement via le nouveau module) : plus besoin du bouton de migration,
+  // juste un indicateur visuel qu'il a déjà été corrigé.
+  const estDejaCorrige = (enc) => idsServicesLies.has(enc.id);
+
   // ⚠️ TEMPORAIRE : relie un ancien encaissement "Service XXX" à une nouvelle
   // fiche du module Personnel (sans créer de nouvelle dépense), puis ouvre
   // cette fiche pour corriger les heures et le taux horaire, inconnus dans
@@ -323,7 +334,7 @@ export default function Encaissements() {
               </thead>
               <tbody>
                 {encaissementsTries.map(enc => (
-                  <tr key={enc.id}>
+                  <tr key={enc.id} style={estDejaCorrige(enc) ? { background: '#f0fdf4' } : undefined}>
                     <td style={tdCell()}>
                       <button
                         className="btn"
@@ -356,12 +367,21 @@ export default function Encaissements() {
                           >📄</button>
                         </>
                       ) : estServiceMigrable(enc) ? (
-                        <button
-                          className="btn"
-                          style={{ width: 20, height: 20, padding: 0, fontSize: 11, color: '#b45309', borderColor: '#fde68a' }}
-                          title="Migrer (temporaire) vers le module Personnel"
-                          onClick={() => migrerVersPersonnel(enc)}
-                        >🔧</button>
+                        estDejaCorrige(enc) ? (
+                          <button
+                            className="btn"
+                            style={{ width: 20, height: 20, padding: 0, fontSize: 11, color: '#16a34a', borderColor: '#86efac' }}
+                            title="Déjà repris dans Personnel — cliquer pour ouvrir sa fiche"
+                            onClick={() => ouvrirDetailOuService(enc)}
+                          >✔</button>
+                        ) : (
+                          <button
+                            className="btn"
+                            style={{ width: 20, height: 20, padding: 0, fontSize: 11, color: '#b45309', borderColor: '#fde68a' }}
+                            title="Migrer (temporaire) vers le module Personnel"
+                            onClick={() => migrerVersPersonnel(enc)}
+                          >🔧</button>
+                        )
                       ) : null}
                     </td>
                     <td style={tdCell({ color: '#aaa', width: 44 })}>{enc.id}</td>
