@@ -128,9 +128,10 @@ export default function Personnel() {
     api.get('/service-personnel/' + serviceId)
       .then(res => {
         const service = res.data;
+        const retourVers = searchParams.get('retour') === 'mois' ? 'mois' : 'jour';
         setDateUnique(service.date_service);
         setVue('jour');
-        ouvrirEdition(service, true);
+        ouvrirEdition(service, retourVers);
         setSearchParams({}, { replace: true });
       })
       .catch(() => showMsg('error', 'Service introuvable'));
@@ -142,7 +143,7 @@ export default function Personnel() {
     setMontantModifieManuellement(false);
   };
 
-  const ouvrirEdition = (service, viaEncaissements = false) => {
+  const ouvrirEdition = (service, retourVers = null) => {
     setModale({
       id: service.id,
       nom: service.nom,
@@ -153,20 +154,30 @@ export default function Personnel() {
       montant: String(service.montant),
       type_paiement: service.type_paiement,
       remarque: service.remarque || '',
-      viaEncaissements, // arrivé via le lien "⋯"/"🔧" d'Encaissements : on y retourne à la fermeture
+      // D'où vient la demande d'édition : null = ouvert normalement depuis
+      // Personnel (on y reste après fermeture) ; 'jour' ou 'mois' = ouvert
+      // depuis Encaissements (jour) ou Encaissements (mois) — à la fermeture,
+      // on y retourne directement à la bonne date, sans avoir à la rechercher.
+      retourVers,
     });
     setMontantModifieManuellement(true); // on ne réécrase pas un montant déjà validé
   };
 
-  // Ferme la fiche en cours. Si elle a été ouverte depuis l'écran
-  // Encaissements (bouton "⋯" ou migration temporaire "🔧"), on y retourne
+  const urlRetour = (dateRetour, retourVers) =>
+    retourVers === 'mois'
+      ? '/encaissements-mois?date=' + dateRetour
+      : '/encaissements?date=' + dateRetour;
+
+  // Ferme la fiche en cours. Si elle a été ouverte depuis un écran
+  // d'encaissements (bouton "⋯" ou migration temporaire "🔧"), on y retourne
   // directement à la bonne date au lieu de rester sur Personnel — évite
   // d'avoir à rechercher la date à chaque correction.
   const fermerModale = () => {
-    if (modale && modale.viaEncaissements) {
+    if (modale && modale.retourVers) {
       const dateRetour = modale.date_service;
+      const retourVers = modale.retourVers;
       setModale(null);
-      navigate('/encaissements?date=' + dateRetour);
+      navigate(urlRetour(dateRetour, retourVers));
     } else {
       setModale(null);
     }
@@ -218,10 +229,11 @@ export default function Personnel() {
         await api.post('/service-personnel/', payload);
         showMsg('success', 'Service enregistré');
       }
-      if (modale.viaEncaissements) {
+      if (modale.retourVers) {
         const dateRetour = modale.date_service;
+        const retourVers = modale.retourVers;
         setModale(null);
-        navigate('/encaissements?date=' + dateRetour);
+        navigate(urlRetour(dateRetour, retourVers));
       } else {
         setModale(null);
         rechargerVueActive();

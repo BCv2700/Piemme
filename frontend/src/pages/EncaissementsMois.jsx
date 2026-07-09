@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../api/api';
 import DetailEncaissementModal from '../components/DetailEncaissementModal';
 import SelecteurClient from '../components/SelecteurClient';
@@ -30,6 +30,7 @@ const BORDURE = '1px solid #e5e5e0';
 
 export default function EncaissementsMois() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const dateInitiale = searchParams.get('date') || todayKey();
   const [anneeStr, moisStr] = dateInitiale.split('-');
 
@@ -169,6 +170,45 @@ export default function EncaissementsMois() {
     genererPdfTicket(data);
   };
 
+  // Clic sur "⋯" : si la dépense provient d'une saisie de service personnel
+  // (module Personnel), on redirige vers cet écran (avec retour=mois, pour
+  // revenir ici à la fermeture) plutôt que d'ouvrir le détail générique.
+  const ouvrirDetailOuService = async (enc) => {
+    if (enc.depenses) {
+      try {
+        const res = await api.get('/service-personnel/by-encaissement/' + enc.id);
+        const service = res.data;
+        navigate('/personnel?date=' + service.date_service + '&service=' + service.id + '&retour=mois');
+        return;
+      } catch (e) {
+        // Pas de service personnel lié : détail générique comme avant.
+      }
+    }
+    setDetailOuvert(enc.id);
+  };
+
+  // Repère les anciennes dépenses "Service XXX" pas encore reliées au module
+  // Personnel (bouton de migration temporaire, à retirer une fois
+  // l'historique repris).
+  const estServiceMigrable = (enc) => {
+    if (!enc.depenses || !enc.lignes || !enc.lignes[0]) return false;
+    const nomArticle = (enc.lignes[0].article_nom || '').trim().toLowerCase();
+    return nomArticle.startsWith('service ');
+  };
+
+  // ⚠️ TEMPORAIRE : relie un ancien encaissement "Service XXX" à une nouvelle
+  // fiche du module Personnel (sans créer de nouvelle dépense), puis ouvre
+  // cette fiche pour corriger les heures et le taux horaire. retour=mois pour
+  // revenir directement ici (Encaissements du mois) après correction.
+  const migrerVersPersonnel = async (enc) => {
+    try {
+      const res = await api.post('/service-personnel/depuis-encaissement/' + enc.id);
+      navigate('/personnel?date=' + res.data.date_service + '&service=' + res.data.id + '&retour=mois');
+    } catch (e) {
+      showMsg('error', errMsg(e, 'Erreur lors de la migration'));
+    }
+  };
+
   const encaissementsTries = [...encaissements].sort((a, b) => new Date(a.date_encaissement) - new Date(b.date_encaissement));
 
   const thCell = (extra = {}) => ({ padding: '5px 6px', border: BORDURE, ...extra });
@@ -243,7 +283,7 @@ export default function EncaissementsMois() {
                         className="btn"
                         style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
                         title="Voir / corriger le détail"
-                        onClick={() => setDetailOuvert(enc.id)}
+                        onClick={() => ouvrirDetailOuService(enc)}
                       >⋯</button>
                     </td>
                     <td style={tdCell()}>
@@ -254,12 +294,19 @@ export default function EncaissementsMois() {
                       >✕</button>
                     </td>
                     <td style={tdCell({ textAlign: 'center', whiteSpace: 'nowrap' })}>
-                      {!enc.depenses && (
+                      {!enc.depenses ? (
                         <>
                           <button className="btn" style={{ width: 20, height: 20, padding: 0, fontSize: 11, marginRight: 3 }} title="Réimprimer le ticket" onClick={() => reimprimerTicket(enc)}>🖨️</button>
                           <button className="btn" style={{ width: 20, height: 20, padding: 0, fontSize: 11 }} title="Ticket en PDF" onClick={() => telechargerPdfTicket(enc)}>📄</button>
                         </>
-                      )}
+                      ) : estServiceMigrable(enc) ? (
+                        <button
+                          className="btn"
+                          style={{ width: 20, height: 20, padding: 0, fontSize: 11, color: '#b45309', borderColor: '#fde68a' }}
+                          title="Migrer (temporaire) vers le module Personnel"
+                          onClick={() => migrerVersPersonnel(enc)}
+                        >🔧</button>
+                      ) : null}
                     </td>
                     <td style={tdCell({ color: '#aaa' })}>{enc.id}</td>
                     <td style={tdCell({ whiteSpace: 'nowrap', color: '#666' })}>
