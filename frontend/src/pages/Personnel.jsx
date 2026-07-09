@@ -224,6 +224,7 @@ export default function Personnel() {
   const totalJour = services.reduce((s, x) => s + Number(x.montant || 0), 0);
   const totalCash = services.filter(x => x.type_paiement === 'cash').reduce((s, x) => s + Number(x.montant || 0), 0);
   const totalTiers = services.filter(x => x.type_paiement === 'tiers').reduce((s, x) => s + Number(x.montant || 0), 0);
+  const totalDu = services.filter(x => x.type_paiement === 'du').reduce((s, x) => s + Number(x.montant || 0), 0);
 
   // ───── Vue mensuelle : tri chronologique + totaux par personne ──────────
   const servicesMoisTries = [...servicesMois].sort((a, b) =>
@@ -234,6 +235,7 @@ export default function Personnel() {
   const totalMois = servicesMois.reduce((s, x) => s + Number(x.montant || 0), 0);
   const totalMoisCash = servicesMois.filter(x => x.type_paiement === 'cash').reduce((s, x) => s + Number(x.montant || 0), 0);
   const totalMoisTiers = servicesMois.filter(x => x.type_paiement === 'tiers').reduce((s, x) => s + Number(x.montant || 0), 0);
+  const totalMoisDu = servicesMois.filter(x => x.type_paiement === 'du').reduce((s, x) => s + Number(x.montant || 0), 0);
 
   const totauxParPersonne = (() => {
     const map = {};
@@ -261,15 +263,21 @@ export default function Personnel() {
   const thCell = (extra = {}) => ({ padding: '6px 10px', border: BORDURE, ...extra });
   const tdCell = (extra = {}) => ({ padding: '5px 10px', border: BORDURE, ...extra });
 
-  const badgePaiement = (typePaiement) => (
-    <span style={{
-      fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12,
-      color: typePaiement === 'cash' ? '#16a34a' : '#2563eb',
-      background: typePaiement === 'cash' ? '#dcfce7' : '#dbeafe',
-    }}>
-      {typePaiement === 'cash' ? 'Cash' : 'Via tiers'}
-    </span>
-  );
+  const badgePaiement = (typePaiement) => {
+    const config = {
+      cash: { label: 'Cash', color: '#16a34a', bg: '#dcfce7' },
+      tiers: { label: 'Via tiers', color: '#2563eb', bg: '#dbeafe' },
+      du: { label: 'Dû', color: '#b45309', bg: '#fef3c7' },
+    }[typePaiement] || { label: typePaiement, color: '#666', bg: '#f0f0ee' };
+    return (
+      <span style={{
+        fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12,
+        color: config.color, background: config.bg,
+      }}>
+        {config.label}
+      </span>
+    );
+  };
 
   return (
     <div>
@@ -360,6 +368,10 @@ export default function Personnel() {
                 <div style={{ fontSize: 11, color: '#888' }}>dont Via tiers</div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: '#2563eb' }}>{totalTiers.toFixed(2)} €</div>
               </div>
+              <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '8px 14px', minWidth: 110 }}>
+                <div style={{ fontSize: 11, color: '#888' }}>dont Dû</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#b45309' }}>{totalDu.toFixed(2)} €</div>
+              </div>
             </div>
 
             {loading ? (
@@ -427,6 +439,10 @@ export default function Personnel() {
               <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '8px 14px', minWidth: 110 }}>
                 <div style={{ fontSize: 11, color: '#888' }}>dont Via tiers</div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: '#2563eb' }}>{totalMoisTiers.toFixed(2)} €</div>
+              </div>
+              <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '8px 14px', minWidth: 110 }}>
+                <div style={{ fontSize: 11, color: '#888' }}>dont Dû</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#b45309' }}>{totalMoisDu.toFixed(2)} €</div>
               </div>
             </div>
 
@@ -593,7 +609,7 @@ export default function Personnel() {
             </div>
 
             <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 6 }}>Paiement</label>
-            <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
               <button
                 className="btn"
                 style={{
@@ -601,7 +617,7 @@ export default function Personnel() {
                   background: modale.type_paiement === 'cash' ? '#16a34a' : 'white',
                   color: modale.type_paiement === 'cash' ? 'white' : '#333',
                   borderColor: modale.type_paiement === 'cash' ? '#16a34a' : '#ddd',
-                  fontWeight: 600,
+                  fontWeight: 600, fontSize: 13,
                 }}
                 onClick={() => majModale('type_paiement', 'cash')}
               >
@@ -614,13 +630,31 @@ export default function Personnel() {
                   background: modale.type_paiement === 'tiers' ? '#2563eb' : 'white',
                   color: modale.type_paiement === 'tiers' ? 'white' : '#333',
                   borderColor: modale.type_paiement === 'tiers' ? '#2563eb' : '#ddd',
-                  fontWeight: 600,
+                  fontWeight: 600, fontSize: 13,
                 }}
                 onClick={() => majModale('type_paiement', 'tiers')}
               >
-                🏦 Via tiers
+                🏦 Tiers
+              </button>
+              <button
+                className="btn"
+                style={{
+                  flex: 1, padding: '10px 0',
+                  background: modale.type_paiement === 'du' ? '#b45309' : 'white',
+                  color: modale.type_paiement === 'du' ? 'white' : '#333',
+                  borderColor: modale.type_paiement === 'du' ? '#b45309' : '#ddd',
+                  fontWeight: 600, fontSize: 13,
+                }}
+                onClick={() => majModale('type_paiement', 'du')}
+              >
+                🕒 Dû
               </button>
             </div>
+            {modale.type_paiement === 'du' && (
+              <div style={{ fontSize: 11, color: '#b45309', marginBottom: 14, marginTop: -8 }}>
+                Ce service reste enregistré, mais n'apparaîtra pas comme dépense en caisse tant qu'il n'est pas repassé en Cash ou Tiers.
+              </div>
+            )}
 
             <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Remarque (optionnel)</label>
             <input

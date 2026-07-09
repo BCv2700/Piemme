@@ -128,14 +128,21 @@ def create_service_personnel(
     payload: ServicePersonnelCreate, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)
 ):
     """
-    Crée une saisie de service personnel ET, automatiquement, la dépense
-    correspondante dans les encaissements du jour (voir
-    _creer_ou_maj_encaissement_depense).
+    Crée une saisie de service personnel. Si le paiement est 'cash' ou
+    'tiers', crée aussi automatiquement la dépense correspondante dans les
+    encaissements du jour (voir _creer_ou_maj_encaissement_depense). Si le
+    paiement est 'du' (rendu mais pas encore payé), aucune dépense n'est
+    créée : le service reste enregistré seul, sans impact caisse, jusqu'à ce
+    qu'il soit repassé en cash ou tiers.
     """
-    if payload.type_paiement not in ('cash', 'tiers'):
-        raise HTTPException(status_code=422, detail="type_paiement doit être 'cash' ou 'tiers'")
+    if payload.type_paiement not in ('cash', 'tiers', 'du'):
+        raise HTTPException(status_code=422, detail="type_paiement doit être 'cash', 'tiers' ou 'du'")
 
-    enc = _creer_ou_maj_encaissement_depense(db, payload)
+    encaissement_id = None
+    if payload.type_paiement in ('cash', 'tiers'):
+        enc = _creer_ou_maj_encaissement_depense(db, payload)
+        encaissement_id = enc.id
+
     db_service = ServicePersonnel(
         nom=payload.nom,
         date_service=payload.date_service,
@@ -145,7 +152,7 @@ def create_service_personnel(
         montant=payload.montant,
         type_paiement=payload.type_paiement,
         remarque=payload.remarque,
-        encaissement_id=enc.id,
+        encaissement_id=encaissement_id,
     )
     db.add(db_service)
     db.commit()
@@ -162,33 +169,58 @@ def update_service_personnel(
 ):
     """
     Modifie une saisie de service personnel et répercute automatiquement les
-    changements (montant, type de paiement, date, heures) sur l'encaissement
-    de dépense lié, pour qu'ils restent toujours cohérents.
+    changements sur l'encaissement de dépense lié :
+    - cash/tiers -> cash/tiers : met à jour l'encaissement existant (montant,
+      répartition cash/carte, date, heures).
+    - 'du' -> cash/tiers : le service est réglé, on crée l'encaissement à
+      ce moment-là.
+    - cash/tiers -> 'du' : le service redevient dû, on supprime l'encaissement
+      existant (il ne doit plus apparaître comme une dépense réglée).
+    - 'du' -> 'du' : rien à faire côté encaissement.
     """
     db_service = db.query(ServicePersonnel).filter(ServicePersonnel.id == service_id).first()
     if not db_service:
         raise HTTPException(status_code=404, detail="Service introuvable")
 
     updates = payload.dict(exclude_unset=True)
-    if 'type_paiement' in updates and updates['type_paiement'] not in ('cash', 'tiers'):
-        raise HTTPException(status_code=422, detail="type_paiement doit être 'cash' ou 'tiers'")
+    if 'type_paiement' in updates and updates['type_paiement'] not in ('cash', 'tiers', 'du'):
+        raise HTTPException(status_code=422, detail="type_paiement doit être 'cash', 'tiers' ou 'du'")
 
+    ancien_encaissement_id = db_service.encaissement_id
     for key, value in updates.items():
         setattr(db_service, key, value)
 
-    enc = db.query(Encaissement).filter(Encaissement.id == db_service.encaissement_id).first()
-    if enc:
-        service_complet = ServicePersonnelCreate(
-            nom=db_service.nom,
-            date_service=db_service.date_service,
-            heure_debut=db_service.heure_debut,
-            heure_fin=db_service.heure_fin,
-            taux_horaire=db_service.taux_horaire,
-            montant=db_service.montant,
-            type_paiement=db_service.type_paiement,
-            remarque=db_service.remarque,
-        )
+    service_complet = ServicePersonnelCreate(
+        nom=db_service.nom,
+        date_service=db_service.date_service,
+        heure_debut=db_service.heure_debut,
+        heure_fin=db_service.heure_fin,
+        taux_horaire=db_service.taux_horaire,
+        montant=db_service.montant,
+        type_paiement=db_service.type_paiement,
+        remarque=db_service.remarque,
+    )
+
+    enc = (
+        db.query(Encaissement).filter(Encaissement.id == ancien_encaissement_id).first()
+        if ancien_encaissement_id else None
+    )
+
+    if db_service.type_paiement == 'du':
+        if enc:
+            # On coupe d'abord le lien et on l'envoie en base (flush) AVANT de
+            # supprimer l'encaissement : la colonne encaissement_id a un
+            # ON DELETE CASCADE, donc si on supprimait l'encaissement pendant
+            # que ce service le référence encore, la fiche du service serait
+            # supprimée en même temps — l'inverse de ce qu'on veut ici.
+            db_service.encaissement_id = None
+            db.flush()
+            db.delete(enc)
+    elif enc:
         _creer_ou_maj_encaissement_depense(db, service_complet, encaissement_existant=enc)
+    else:
+        nouvel_enc = _creer_ou_maj_encaissement_depense(db, service_complet)
+        db_service.encaissement_id = nouvel_enc.id
 
     db.commit()
     db.refresh(db_service)
