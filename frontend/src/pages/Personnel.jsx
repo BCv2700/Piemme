@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../api/api';
 
 const BORDURE = '1px solid #e5e5e0';
@@ -63,6 +63,7 @@ const formVide = {
 
 export default function Personnel() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [vue, setVue] = useState('jour'); // 'jour' | 'mois'
   const [dateUnique, setDateUnique] = useState(searchParams.get('date') || todayKey());
   const [services, setServices] = useState([]);
@@ -129,7 +130,7 @@ export default function Personnel() {
         const service = res.data;
         setDateUnique(service.date_service);
         setVue('jour');
-        ouvrirEdition(service);
+        ouvrirEdition(service, true);
         setSearchParams({}, { replace: true });
       })
       .catch(() => showMsg('error', 'Service introuvable'));
@@ -141,7 +142,7 @@ export default function Personnel() {
     setMontantModifieManuellement(false);
   };
 
-  const ouvrirEdition = (service) => {
+  const ouvrirEdition = (service, viaEncaissements = false) => {
     setModale({
       id: service.id,
       nom: service.nom,
@@ -152,8 +153,23 @@ export default function Personnel() {
       montant: String(service.montant),
       type_paiement: service.type_paiement,
       remarque: service.remarque || '',
+      viaEncaissements, // arrivé via le lien "⋯"/"🔧" d'Encaissements : on y retourne à la fermeture
     });
     setMontantModifieManuellement(true); // on ne réécrase pas un montant déjà validé
+  };
+
+  // Ferme la fiche en cours. Si elle a été ouverte depuis l'écran
+  // Encaissements (bouton "⋯" ou migration temporaire "🔧"), on y retourne
+  // directement à la bonne date au lieu de rester sur Personnel — évite
+  // d'avoir à rechercher la date à chaque correction.
+  const fermerModale = () => {
+    if (modale && modale.viaEncaissements) {
+      const dateRetour = modale.date_service;
+      setModale(null);
+      navigate('/encaissements?date=' + dateRetour);
+    } else {
+      setModale(null);
+    }
   };
 
   // Recalcule le montant suggéré tant que l'utilisateur n'a pas modifié le
@@ -202,8 +218,14 @@ export default function Personnel() {
         await api.post('/service-personnel/', payload);
         showMsg('success', 'Service enregistré');
       }
-      setModale(null);
-      rechargerVueActive();
+      if (modale.viaEncaissements) {
+        const dateRetour = modale.date_service;
+        setModale(null);
+        navigate('/encaissements?date=' + dateRetour);
+      } else {
+        setModale(null);
+        rechargerVueActive();
+      }
     } catch (e) {
       showMsg('error', errMsg(e, "Erreur lors de l'enregistrement"));
     }
@@ -535,7 +557,7 @@ export default function Personnel() {
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
           }}
-          onClick={() => setModale(null)}
+          onClick={fermerModale}
         >
           <div
             style={{ background: 'white', borderRadius: 10, padding: 24, width: 380 }}
@@ -666,7 +688,7 @@ export default function Personnel() {
             />
 
             <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn" style={{ flex: 1 }} onClick={() => setModale(null)}>Annuler</button>
+              <button className="btn" style={{ flex: 1 }} onClick={fermerModale}>Annuler</button>
               <button
                 className="btn"
                 style={{ flex: 1, background: '#111', color: 'white', fontWeight: 600 }}
