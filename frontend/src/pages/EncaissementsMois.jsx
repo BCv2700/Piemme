@@ -43,6 +43,7 @@ export default function EncaissementsMois() {
   const [msg, setMsg] = useState(null);
   const [detailOuvert, setDetailOuvert] = useState(null);
   const [ticketAImprimer, setTicketAImprimer] = useState(null);
+  const [filtreTable, setFiltreTable] = useState('');
 
   const load = () => {
     setLoading(true);
@@ -211,6 +212,16 @@ export default function EncaissementsMois() {
 
   const encaissementsTries = [...encaissements].sort((a, b) => new Date(a.date_encaissement) - new Date(b.date_encaissement));
 
+  // Ce qui s'affiche réellement dans la colonne "Table" : le nom de la table
+  // pour une recette, le nom de l'article pour une dépense (ex: "Service
+  // Elise"). Sert de base au filtre texte ci-dessous.
+  const libelleTable = (enc) =>
+    enc.depenses ? ((enc.lignes && enc.lignes[0] ? enc.lignes[0].article_nom : '') || '') : (enc.table_nom || '');
+
+  const encaissementsAffiches = filtreTable.trim() === ''
+    ? encaissementsTries
+    : encaissementsTries.filter(enc => libelleTable(enc).toLowerCase().includes(filtreTable.trim().toLowerCase()));
+
   const thCell = (extra = {}) => ({ padding: '5px 6px', border: BORDURE, ...extra });
   const tdCell = (extra = {}) => ({ padding: '3px 6px', border: BORDURE, ...extra });
 
@@ -245,6 +256,13 @@ export default function EncaissementsMois() {
           <button className="btn" onClick={moisPrecedent}>−</button>
           <button className="btn" onClick={moisSuivant}>+</button>
           <button className="btn" onClick={moisActuel} style={{ color: '#888' }}>Ce mois</button>
+          <input
+            type="text"
+            value={filtreTable}
+            onChange={(e) => setFiltreTable(e.target.value)}
+            placeholder="Filtrer sur Table (ex: Service)"
+            style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, width: 220 }}
+          />
           <span style={{ marginLeft: 'auto', fontSize: 14, fontWeight: 700 }}>
             Total du mois : {totalMois.toFixed(2)} €
           </span>
@@ -252,8 +270,10 @@ export default function EncaissementsMois() {
 
         {loading ? (
           <div style={{ color: '#888' }}>Chargement...</div>
-        ) : encaissementsTries.length === 0 ? (
-          <div style={{ color: '#888', textAlign: 'center', padding: '40px 0' }}>Aucun encaissement ce mois</div>
+        ) : encaissementsAffiches.length === 0 ? (
+          <div style={{ color: '#888', textAlign: 'center', padding: '40px 0' }}>
+            {filtreTable.trim() === '' ? 'Aucun encaissement ce mois' : 'Aucun résultat pour ce filtre'}
+          </div>
         ) : (
           <div style={{ background: 'white', border: BORDURE, borderRadius: 10, overflow: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -276,7 +296,7 @@ export default function EncaissementsMois() {
                 </tr>
               </thead>
               <tbody>
-                {encaissementsTries.map(enc => (
+                {encaissementsAffiches.map(enc => (
                   <tr key={enc.id}>
                     <td style={tdCell()}>
                       <button
