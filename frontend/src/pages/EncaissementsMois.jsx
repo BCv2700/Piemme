@@ -29,7 +29,7 @@ function dateKey(annee, mois, jour) {
 const BORDURE = '1px solid #e5e5e0';
 
 export default function EncaissementsMois() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const dateInitiale = searchParams.get('date') || todayKey();
   const [anneeStr, moisStr] = dateInitiale.split('-');
@@ -45,6 +45,18 @@ export default function EncaissementsMois() {
   const [ticketAImprimer, setTicketAImprimer] = useState(null);
   const [filtreTable, setFiltreTable] = useState(searchParams.get('filtre') || '');
   const [idsServicesLies, setIdsServicesLies] = useState(new Set());
+
+  // Garde le filtre dans l'URL en temps réel (pas seulement au moment du
+  // clic vers Personnel) : ainsi il survit aussi à un bouton "précédent" du
+  // navigateur, une actualisation de page, ou un lien partagé — pas
+  // uniquement au retour via nos propres boutons Annuler/Enregistrer.
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (filtreTable.trim()) next.set('filtre', filtreTable.trim());
+    else next.delete('filtre');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtreTable]);
 
   const load = () => {
     setLoading(true);
