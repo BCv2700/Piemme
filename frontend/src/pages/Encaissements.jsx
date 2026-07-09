@@ -201,6 +201,28 @@ export default function Encaissements() {
     setDetailOuvert(enc.id);
   };
 
+  // Repère les anciennes dépenses "Service XXX" encodées avant l'existence du
+  // module Personnel (bouton de migration temporaire, à retirer une fois
+  // l'historique repris).
+  const estServiceMigrable = (enc) => {
+    if (!enc.depenses || !enc.lignes || !enc.lignes[0]) return false;
+    const nomArticle = (enc.lignes[0].article_nom || '').trim().toLowerCase();
+    return nomArticle.startsWith('service ');
+  };
+
+  // ⚠️ TEMPORAIRE : relie un ancien encaissement "Service XXX" à une nouvelle
+  // fiche du module Personnel (sans créer de nouvelle dépense), puis ouvre
+  // cette fiche pour corriger les heures et le taux horaire, inconnus dans
+  // l'ancien système. À retirer une fois la reprise de l'historique terminée.
+  const migrerVersPersonnel = async (enc) => {
+    try {
+      const res = await api.post('/service-personnel/depuis-encaissement/' + enc.id);
+      navigate('/personnel?date=' + res.data.date_service + '&service=' + res.data.id);
+    } catch (e) {
+      showMsg('error', errMsg(e, 'Erreur lors de la migration'));
+    }
+  };
+
   const encaissementsTries = [...encaissements].sort((a, b) => new Date(a.date_encaissement) - new Date(b.date_encaissement));
 
   // Styles de cellules avec quadrillage, resserrés pour laisser de la place à
@@ -318,7 +340,7 @@ export default function Encaissements() {
                       >✕</button>
                     </td>
                     <td style={tdCell({ textAlign: 'center', whiteSpace: 'nowrap' })}>
-                      {!enc.depenses && (
+                      {!enc.depenses ? (
                         <>
                           <button
                             className="btn"
@@ -333,7 +355,14 @@ export default function Encaissements() {
                             onClick={() => telechargerPdfTicket(enc)}
                           >📄</button>
                         </>
-                      )}
+                      ) : estServiceMigrable(enc) ? (
+                        <button
+                          className="btn"
+                          style={{ width: 20, height: 20, padding: 0, fontSize: 11, color: '#b45309', borderColor: '#fde68a' }}
+                          title="Migrer (temporaire) vers le module Personnel"
+                          onClick={() => migrerVersPersonnel(enc)}
+                        >🔧</button>
+                      ) : null}
                     </td>
                     <td style={tdCell({ color: '#aaa', width: 44 })}>{enc.id}</td>
                     <td style={tdCell({ whiteSpace: 'nowrap', color: '#666', width: 54 })}>

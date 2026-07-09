@@ -97,6 +97,69 @@ def list_service_personnel(
     return query.order_by(ServicePersonnel.date_service.desc(), ServicePersonnel.heure_debut).all()
 
 
+@router.post("/depuis-encaissement/{encaissement_id}", response_model=ServicePersonnelOut)
+def migrer_depuis_encaissement(
+    encaissement_id: int, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)
+):
+    """
+    ⚠️ ENDPOINT TEMPORAIRE, à retirer une fois la reprise de l'historique
+    terminée. Convertit un ancien encaissement de dépense "Service XXX"
+    (encodé manuellement via Caddy avant l'existence du module Personnel) en
+    une fiche service_personnel, SANS créer de nouvel encaissement : on relie
+    simplement la nouvelle fiche à celui qui existe déjà, pour ne jamais
+    dupliquer la dépense.
+
+    Les heures et le taux horaire ne sont pas connus historiquement (l'ancien
+    système ne demandait qu'un montant global) : ils sont préremplis avec des
+    valeurs par défaut (l'heure de l'encaissement pour début=fin, 15 €/h) que
+    l'utilisateur doit corriger manuellement après la redirection vers
+    l'écran Personnel. Le montant, la date et le type de paiement, eux, sont
+    fiables et repris tels quels.
+    """
+    enc = db.query(Encaissement).filter(Encaissement.id == encaissement_id).first()
+    if not enc:
+        raise HTTPException(status_code=404, detail="Encaissement introuvable")
+    if not enc.depenses:
+        raise HTTPException(status_code=400, detail="Cet encaissement n'est pas une dépense")
+
+    deja_lie = db.query(ServicePersonnel).filter(ServicePersonnel.encaissement_id == encaissement_id).first()
+    if deja_lie:
+        raise HTTPException(status_code=400, detail="Cet encaissement est déjà relié à une fiche Personnel")
+
+    ligne = enc.lignes[0] if enc.lignes else None
+    article_nom = (ligne.article_nom if ligne else "Service").strip()
+    prefixe = "service "
+    nom = article_nom[len(prefixe):].strip() if article_nom.lower().startswith(prefixe) else article_nom
+
+    montant_cash = Decimal(str(enc.montant_cash or 0))
+    montant_carte = Decimal(str(enc.montant_carte or 0))
+    if montant_cash != 0:
+        type_paiement = 'cash'
+    elif montant_carte != 0:
+        type_paiement = 'tiers'
+    else:
+        type_paiement = 'du'
+
+    montant = abs(Decimal(str(enc.montant_total or 0)))
+    heure = enc.date_encaissement.time()
+
+    db_service = ServicePersonnel(
+        nom=nom or "Inconnu",
+        date_service=enc.date_encaissement.date(),
+        heure_debut=heure,
+        heure_fin=heure,
+        taux_horaire=Decimal('15'),
+        montant=montant,
+        type_paiement=type_paiement,
+        remarque="Repris depuis l'ancien système — heures et taux à corriger",
+        encaissement_id=enc.id,
+    )
+    db.add(db_service)
+    db.commit()
+    db.refresh(db_service)
+    return db_service
+
+
 @router.get("/{service_id}", response_model=ServicePersonnelOut)
 def get_service_personnel(
     service_id: int, db: Session = Depends(get_db), utilisateur: Utilisateur = Depends(get_current_user)
