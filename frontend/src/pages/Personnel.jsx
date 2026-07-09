@@ -129,9 +129,17 @@ export default function Personnel() {
       .then(res => {
         const service = res.data;
         const retourVers = searchParams.get('retour') === 'mois' ? 'mois' : 'jour';
+        // On conserve TOUS les autres paramètres reçus (filtre, etc.) pour
+        // les réinjecter tels quels au retour, plutôt que de ne gérer que
+        // "filtre" individuellement — évite de perdre un paramètre en route.
+        const autresParams = new URLSearchParams(searchParams);
+        autresParams.delete('service');
+        autresParams.delete('retour');
+        autresParams.delete('date'); // reconstruite à partir du service, toujours à jour
+        const autresParamsRetour = autresParams.toString();
         setDateUnique(service.date_service);
         setVue('jour');
-        ouvrirEdition(service, retourVers);
+        ouvrirEdition(service, retourVers, autresParamsRetour);
         setSearchParams({}, { replace: true });
       })
       .catch(() => showMsg('error', 'Service introuvable'));
@@ -143,7 +151,7 @@ export default function Personnel() {
     setMontantModifieManuellement(false);
   };
 
-  const ouvrirEdition = (service, retourVers = null) => {
+  const ouvrirEdition = (service, retourVers = null, autresParamsRetour = '') => {
     setModale({
       id: service.id,
       nom: service.nom,
@@ -159,14 +167,18 @@ export default function Personnel() {
       // depuis Encaissements (jour) ou Encaissements (mois) — à la fermeture,
       // on y retourne directement à la bonne date, sans avoir à la rechercher.
       retourVers,
+      // Autres paramètres actifs sur l'écran d'origine (ex: "filtre=service"),
+      // à réappliquer tels quels au retour pour qu'ils ne repartent pas à vide.
+      autresParamsRetour,
     });
     setMontantModifieManuellement(true); // on ne réécrase pas un montant déjà validé
   };
 
-  const urlRetour = (dateRetour, retourVers) =>
-    retourVers === 'mois'
-      ? '/encaissements-mois?date=' + dateRetour
-      : '/encaissements?date=' + dateRetour;
+  const urlRetour = (dateRetour, retourVers, autresParamsRetour) => {
+    const base = retourVers === 'mois' ? '/encaissements-mois' : '/encaissements';
+    const suffixe = autresParamsRetour ? '&' + autresParamsRetour : '';
+    return base + '?date=' + dateRetour + suffixe;
+  };
 
   // Ferme la fiche en cours. Si elle a été ouverte depuis un écran
   // d'encaissements (bouton "⋯" ou migration temporaire "🔧"), on y retourne
@@ -176,8 +188,9 @@ export default function Personnel() {
     if (modale && modale.retourVers) {
       const dateRetour = modale.date_service;
       const retourVers = modale.retourVers;
+      const autresParamsRetour = modale.autresParamsRetour;
       setModale(null);
-      navigate(urlRetour(dateRetour, retourVers));
+      navigate(urlRetour(dateRetour, retourVers, autresParamsRetour));
     } else {
       setModale(null);
     }
@@ -232,8 +245,9 @@ export default function Personnel() {
       if (modale.retourVers) {
         const dateRetour = modale.date_service;
         const retourVers = modale.retourVers;
+        const autresParamsRetour = modale.autresParamsRetour;
         setModale(null);
-        navigate(urlRetour(dateRetour, retourVers));
+        navigate(urlRetour(dateRetour, retourVers, autresParamsRetour));
       } else {
         setModale(null);
         rechargerVueActive();

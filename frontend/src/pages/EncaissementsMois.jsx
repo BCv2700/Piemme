@@ -189,9 +189,17 @@ export default function EncaissementsMois() {
     genererPdfTicket(data);
   };
 
-  // Lien vers Personnel, en conservant le filtre actif (query "filtre") pour
+  // Construit l'URL vers Personnel via URLSearchParams (plus fiable qu'une
+  // concaténation manuelle de chaînes), en conservant le filtre actif pour
   // qu'il soit toujours là au retour, au lieu de repartir à vide.
-  const suffixeFiltre = filtreTable.trim() ? '&filtre=' + encodeURIComponent(filtreTable.trim()) : '';
+  const construireUrlPersonnel = (dateService, serviceId) => {
+    const params = new URLSearchParams();
+    params.set('date', dateService);
+    params.set('service', String(serviceId));
+    params.set('retour', 'mois');
+    if (filtreTable.trim()) params.set('filtre', filtreTable.trim());
+    return '/personnel?' + params.toString();
+  };
 
   // Clic sur "⋯" : si la dépense provient d'une saisie de service personnel
   // (module Personnel), on redirige vers cet écran (avec retour=mois, pour
@@ -201,7 +209,7 @@ export default function EncaissementsMois() {
       try {
         const res = await api.get('/service-personnel/by-encaissement/' + enc.id);
         const service = res.data;
-        navigate('/personnel?date=' + service.date_service + '&service=' + service.id + '&retour=mois' + suffixeFiltre);
+        navigate(construireUrlPersonnel(service.date_service, service.id));
         return;
       } catch (e) {
         // Pas de service personnel lié : détail générique comme avant.
@@ -231,7 +239,7 @@ export default function EncaissementsMois() {
   const migrerVersPersonnel = async (enc) => {
     try {
       const res = await api.post('/service-personnel/depuis-encaissement/' + enc.id);
-      navigate('/personnel?date=' + res.data.date_service + '&service=' + res.data.id + '&retour=mois' + suffixeFiltre);
+      navigate(construireUrlPersonnel(res.data.date_service, res.data.id));
     } catch (e) {
       showMsg('error', errMsg(e, 'Erreur lors de la migration'));
     }
