@@ -64,7 +64,7 @@ const formVide = {
 export default function Personnel() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [vue, setVue] = useState('jour'); // 'jour' | 'mois'
+  const [vue, setVue] = useState('jour'); // 'jour' | 'mois' | 'annee'
   const [dateUnique, setDateUnique] = useState(searchParams.get('date') || todayKey());
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -77,6 +77,11 @@ export default function Personnel() {
   const [moisMois, setMoisMois] = useState(Number(dateRefMois.split('-')[1]));
   const [servicesMois, setServicesMois] = useState([]);
   const [loadingMois, setLoadingMois] = useState(false);
+
+  // Vue annuelle : récap par personne × par mois, sur toute une année
+  const [anneeAnnuelle, setAnneeAnnuelle] = useState(Number(dateRefMois.split('-')[0]));
+  const [servicesAnnee, setServicesAnnee] = useState([]);
+  const [loadingAnnee, setLoadingAnnee] = useState(false);
 
   // null = fermé, formVide = création, un objet service = édition
   const [modale, setModale] = useState(null);
@@ -118,6 +123,20 @@ export default function Personnel() {
   useEffect(() => {
     if (vue === 'mois') loadMois();
   }, [vue, anneeMois, moisMois]);
+
+  const loadAnnee = () => {
+    setLoadingAnnee(true);
+    const debut = anneeAnnuelle + '-01-01';
+    const fin = anneeAnnuelle + '-12-31';
+    api.get('/service-personnel/', { params: { date_debut: debut, date_fin: fin } })
+      .then(res => setServicesAnnee(res.data))
+      .catch(() => showMsg('error', "Impossible de charger la vue annuelle"))
+      .finally(() => setLoadingAnnee(false));
+  };
+
+  useEffect(() => {
+    if (vue === 'annee') loadAnnee();
+  }, [vue, anneeAnnuelle]);
 
   // Ouverture directe depuis l'écran Encaissements (lien "?date=...&service=ID") :
   // on récupère ce service précis, on se place sur son jour, et on ouvre
@@ -295,6 +314,23 @@ export default function Personnel() {
     return Object.values(map).sort((a, b) => b.montant - a.montant);
   })();
 
+  // ───── Vue annuelle : pivot Personne × Mois ─────────────────────────────
+  const pivotAnnuel = (() => {
+    const parPersonne = {}; // nom -> tableau de 12 montants
+    servicesAnnee.forEach(s => {
+      const m = Number(s.date_service.split('-')[1]); // 1..12
+      if (!parPersonne[s.nom]) parPersonne[s.nom] = Array(12).fill(0);
+      parPersonne[s.nom][m - 1] += Number(s.montant || 0);
+    });
+    const lignes = Object.entries(parPersonne)
+      .map(([nom, moisArr]) => ({ nom, moisArr, total: moisArr.reduce((a, b) => a + b, 0) }))
+      .sort((a, b) => b.total - a.total);
+    const totauxParMois = Array(12).fill(0);
+    lignes.forEach(l => l.moisArr.forEach((v, i) => { totauxParMois[i] += v; }));
+    const grandTotal = totauxParMois.reduce((a, b) => a + b, 0);
+    return { lignes, totauxParMois, grandTotal };
+  })();
+
   const moisPrecedent = () => {
     let a = anneeMois, m = moisMois - 1;
     if (m < 1) { m = 12; a -= 1; }
@@ -367,6 +403,16 @@ export default function Personnel() {
             >
               Vue mensuelle
             </button>
+            <button
+              onClick={() => setVue('annee')}
+              style={{
+                padding: '6px 16px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer',
+                background: vue === 'annee' ? '#111' : 'white',
+                color: vue === 'annee' ? 'white' : '#333',
+              }}
+            >
+              Vue annuelle
+            </button>
           </div>
 
           {vue === 'jour' ? (
@@ -381,13 +427,19 @@ export default function Personnel() {
               <button className="btn" onClick={() => setDateUnique(d => addDays(d, 1))}>+</button>
               <button className="btn" onClick={() => setDateUnique(todayKey())} style={{ color: '#888' }}>Aujourd'hui</button>
             </>
-          ) : (
+          ) : vue === 'mois' ? (
             <>
               <button className="btn" onClick={moisPrecedent}>−</button>
               <span style={{ fontSize: 16, fontWeight: 700, textTransform: 'capitalize' }}>
                 {MOIS_NOMS[moisMois - 1]} {anneeMois}
               </span>
               <button className="btn" onClick={moisSuivant}>+</button>
+            </>
+          ) : (
+            <>
+              <button className="btn" onClick={() => setAnneeAnnuelle(a => a - 1)}>−</button>
+              <span style={{ fontSize: 16, fontWeight: 700 }}>{anneeAnnuelle}</span>
+              <button className="btn" onClick={() => setAnneeAnnuelle(a => a + 1)}>+</button>
             </>
           )}
 
@@ -472,7 +524,7 @@ export default function Personnel() {
               </div>
             )}
           </>
-        ) : (
+        ) : vue === 'mois' ? (
           <>
             {/* Totaux du mois */}
             <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -570,6 +622,57 @@ export default function Personnel() {
                     </table>
                   )}
                 </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {/* Vue annuelle : pivot Personne × Mois */}
+            {loadingAnnee ? (
+              <div style={{ color: '#888' }}>Chargement...</div>
+            ) : pivotAnnuel.lignes.length === 0 ? (
+              <div style={{ color: '#888', textAlign: 'center', padding: '40px 0' }}>Aucun service en {anneeAnnuelle}</div>
+            ) : (
+              <div style={{ background: 'white', border: BORDURE, borderRadius: 10, overflow: 'auto', maxHeight: '70vh' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
+                      <th style={thCell({ position: 'sticky', left: 0, background: '#fafaf8', zIndex: 2 })}>Nom</th>
+                      <th style={thCell({ textAlign: 'right', position: 'sticky', left: 90, background: '#fafaf8', zIndex: 2 })}>Total</th>
+                      {MOIS_NOMS.map((nom, i) => (
+                        <th key={i} style={thCell({ textAlign: 'right', textTransform: 'capitalize', whiteSpace: 'nowrap' })}>
+                          {nom.slice(0, 3)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pivotAnnuel.lignes.map(ligne => (
+                      <tr key={ligne.nom}>
+                        <td style={tdCell({ fontWeight: 600, position: 'sticky', left: 0, background: 'white', zIndex: 1 })}>{ligne.nom}</td>
+                        <td style={tdCell({ textAlign: 'right', fontWeight: 700, position: 'sticky', left: 90, background: 'white', zIndex: 1 })}>
+                          {ligne.total.toFixed(2)} €
+                        </td>
+                        {ligne.moisArr.map((v, i) => (
+                          <td key={i} style={tdCell({ textAlign: 'right', color: v > 0 ? '#111' : '#ccc' })}>
+                            {v > 0 ? v.toFixed(2) : '—'}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ fontWeight: 700, background: '#fafaf8' }}>
+                      <td style={tdCell({ position: 'sticky', left: 0, background: '#fafaf8', zIndex: 1 })}>Total {anneeAnnuelle}</td>
+                      <td style={tdCell({ textAlign: 'right', position: 'sticky', left: 90, background: '#fafaf8', zIndex: 1 })}>
+                        {pivotAnnuel.grandTotal.toFixed(2)} €
+                      </td>
+                      {pivotAnnuel.totauxParMois.map((v, i) => (
+                        <td key={i} style={tdCell({ textAlign: 'right' })}>{v.toFixed(2)}</td>
+                      ))}
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
             )}
           </>
