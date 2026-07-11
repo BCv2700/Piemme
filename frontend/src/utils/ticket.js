@@ -109,13 +109,10 @@ function calculerMiseEnPage(largeurMm) {
   const xGauche = marge;
   const xCentre = largeurMm / 2;
   const xDroite = largeurMm - marge;
-  const xArticleNom = marge + (largeurMm >= 80 ? 9 : 7);
-  const reservePourPrix = 22; // mm réservés à droite pour les montants (jusqu'à ~7 caractères)
-  const largeurDispoNom = Math.max(10, xDroite - reservePourPrix - xArticleNom);
   const largeurDispoCentre = largeurMm - 2 * marge;
   const largeurDispoLabel = largeurMm - 2 * marge;
   const hauteurLigne = 8;
-  return { marge, xGauche, xCentre, xDroite, xArticleNom, largeurDispoNom, largeurDispoCentre, largeurDispoLabel, hauteurLigne };
+  return { marge, xGauche, xCentre, xDroite, largeurDispoCentre, largeurDispoLabel, hauteurLigne };
 }
 
 // Construit la liste complète des lignes de texte à imprimer, avec leur
@@ -143,10 +140,12 @@ function construireLignesTicket(data, mise, measureDoc) {
     y += mise.hauteurLigne;
   };
 
+  // En-tête : nom du restaurant, ville, téléphones (sans le préfixe "Tel :",
+  // ce sont clairement des numéros de téléphone) et TVA. L'adresse (rue) n'est
+  // volontairement plus imprimée, pour un ticket plus court et plus lisible.
   ajouterMultiligne(data.nom, mise.xCentre, 'center', mise.largeurDispoCentre);
-  ajouterMultiligne(data.adresse, mise.xCentre, 'center', mise.largeurDispoCentre);
   ajouterMultiligne(data.codePostalVille, mise.xCentre, 'center', mise.largeurDispoCentre);
-  data.telephones.forEach(tel => ajouterMultiligne('Tel : ' + tel, mise.xCentre, 'center', mise.largeurDispoCentre));
+  data.telephones.forEach(tel => ajouterMultiligne(tel, mise.xCentre, 'center', mise.largeurDispoCentre));
   ajouterMultiligne(data.tva, mise.xCentre, 'center', mise.largeurDispoCentre);
   y += 2;
   ajouterMultiligne(new Date(data.date).toLocaleDateString('fr-BE'), mise.xCentre, 'center', mise.largeurDispoCentre);
@@ -155,20 +154,18 @@ function construireLignesTicket(data, mise, measureDoc) {
   }
   y += 2;
 
+  // Chaque article : quantité + nom sur une (ou plusieurs, si le nom est
+  // long) ligne(s) pleine largeur, puis le prix seul sur la ligne suivante,
+  // aligné à droite — plus de risque de chevauchement entre le nom et le
+  // prix, quelle que soit la taille de police ou la largeur du papier.
   data.lignes.forEach(l => {
-    const morceauxNom = measureDoc.splitTextToSize(String(l.nom), mise.largeurDispoNom);
-    ajouter(String(l.quantite), mise.xGauche, 'left');
-    ajouter(morceauxNom[0] || '', mise.xArticleNom, 'left');
+    ajouterMultiligne(l.quantite + ' ' + l.nom, mise.xGauche, 'left', mise.largeurDispoLabel);
     ajouter(l.total.toFixed(2), mise.xDroite, 'right');
     y += mise.hauteurLigne;
-    for (let i = 1; i < morceauxNom.length; i++) {
-      ajouter(morceauxNom[i], mise.xArticleNom, 'left');
-      y += mise.hauteurLigne;
-    }
   });
   y += 2;
 
-  ajouterLabelPuisValeur('Total des achats :', data.montantTotal.toFixed(2));
+  ajouterLabelPuisValeur('Total :', data.montantTotal.toFixed(2));
   ajouterLabelPuisValeur('à payer :', data.montantTotal.toFixed(2));
   ajouterLabelPuisValeur(data.nbPersonnes + ' pers. - Prix/pers. :', data.prixParPersonne.toFixed(2));
   if (data.montantCarte > 0) ajouterLabelPuisValeur('Bancontact :', data.montantCarte.toFixed(2));
