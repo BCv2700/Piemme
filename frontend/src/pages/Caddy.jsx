@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import jsPDF from 'jspdf';
 import api from '../api/api';
+import { genererDonneesTicket, genererPdfTicket } from '../utils/ticket';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Les dépenses (code_vente 9001) sont regroupées par leur champ « categorie »,
@@ -445,6 +446,37 @@ export default function Caddy() {
     window.open(blobUrl, '_blank');
   };
 
+  // Bouton "Imprimer l'addition" : ticket au format caisse (même mise en page
+  // que le ticket de paiement final), mais SANS mode de paiement puisque rien
+  // n'a encore été encaissé — montantCash et montantCarte sont donc à 0, ce
+  // qui masque automatiquement ces deux lignes sur le ticket (voir ticket.js).
+  // Le numéro de ticket affiche "Provisoire" tant qu'aucun encaissement réel
+  // n'existe encore pour cette table.
+  const handleImprimerAddition = () => {
+    if (lignes.length === 0) {
+      setError('Aucun article dans la commande');
+      return;
+    }
+    setError('');
+    const lignesPourTicket = lignes.map(l => ({
+      article_nom: nomArticle(l.article_id),
+      quantite: Number(l.quantite),
+      prix_vente: Number(l.prix_unitaire),
+      tva: Number(l.tva),
+    }));
+    const data = genererDonneesTicket({
+      encaissementId: 'Provisoire',
+      dateEncaissement: new Date().toISOString(),
+      tableNom: table ? table.nom : '',
+      lignes: lignesPourTicket,
+      montantCash: 0,
+      montantCarte: 0,
+      montantTotal: total,
+      nbPersonnes: 1,
+    });
+    genererPdfTicket(data);
+  };
+
   const total = lignes.reduce((sum, l) => sum + Number(l.prix_unitaire) * Number(l.quantite), 0);
 
   if (loading) {
@@ -483,6 +515,15 @@ export default function Caddy() {
                 />
                 À emporter
               </label>
+            )}
+            {!estEcranDepense && (
+              <button
+                className="btn"
+                onClick={handleImprimerAddition}
+                title="Imprime l'addition avant paiement (sans mode de paiement)"
+              >
+                🧾 Imprimer l'addition
+              </button>
             )}
             <button
               className="btn"

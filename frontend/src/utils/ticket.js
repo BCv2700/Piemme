@@ -67,125 +67,162 @@ export function genererDonneesTicketDepuisEncaissement(enc) {
   });
 }
 
-// Largeur du rouleau de papier utilisé par l'imprimante (POP10 BLK : 58mm).
-// Si un jour l'imprimante ou le papier change pour du 80mm, il suffit de
-// modifier cette seule valeur : toutes les positions ci-dessous sont
-// calculées à partir d'elle, rien n'est écrit en dur.
-const LARGEUR_PAPIER_MM = 58;
-const MARGE_MM = 3;
-const X_GAUCHE = MARGE_MM;
-const X_CENTRE = LARGEUR_PAPIER_MM / 2;
-const X_DROITE = LARGEUR_PAPIER_MM - MARGE_MM;
-const X_ARTICLE_NOM = MARGE_MM + 7; // juste après la colonne quantité
-const TAILLE_POLICE = 11; // agrandie (était 8) pour une meilleure lisibilité
-const STYLE_POLICE = 'bold'; // le gras aide aussi à imprimer plus foncé sur une imprimante thermique
-const HAUTEUR_LIGNE = 6; // hauteur d'une ligne de texte à cette taille de police
-const LONGUEUR_MAX_LIGNE1_NOM = 10; // caractères du nom d'article tenant sur la 1re ligne (à côté de qté + prix)
-const LONGUEUR_MAX_LIGNE2_NOM = 16; // caractères pouvant tenir sur une 2e ligne dédiée au nom
+// ─── Largeur du papier : réglable par ordinateur, mémorisée dans ce navigateur ───
+// Chaque poste (Mac maison avec l'imprimante 58mm, PC caisse resto avec la
+// TSP100 80mm) mémorise son propre réglage indéfiniment, via localStorage.
+// Pas besoin de modifier le code ni de redéployer en changeant de poste :
+// un simple clic sur le bouton de réglage (voir Encaissements.jsx) suffit,
+// une seule fois par ordinateur.
+const CLE_STOCKAGE_LARGEUR = 'lolive_largeur_ticket_mm';
+const LARGEURS_VALIDES = [58, 80];
+const LARGEUR_PAR_DEFAUT = 58;
 
-// Découpe le nom d'un article sur une ou deux lignes si besoin, plutôt que de
-// le tronquer. Renvoie toujours un tableau de 1 ou 2 chaînes.
-function decouperNomArticle(nom) {
-  if (nom.length <= LONGUEUR_MAX_LIGNE1_NOM) return [nom];
-  const ligne1 = nom.slice(0, LONGUEUR_MAX_LIGNE1_NOM);
-  const reste = nom.slice(LONGUEUR_MAX_LIGNE1_NOM, LONGUEUR_MAX_LIGNE1_NOM + LONGUEUR_MAX_LIGNE2_NOM);
-  return reste ? [ligne1, reste] : [ligne1];
+export function obtenirLargeurPapier() {
+  try {
+    const v = Number(localStorage.getItem(CLE_STOCKAGE_LARGEUR));
+    return LARGEURS_VALIDES.includes(v) ? v : LARGEUR_PAR_DEFAUT;
+  } catch {
+    return LARGEUR_PAR_DEFAUT;
+  }
 }
 
-// Calcule à l'avance la hauteur de papier nécessaire (en mm) pour un ticket
-// donné, en fonction de son contenu réel (nombre de lignes, présence d'une
-// table, d'un paiement carte/cash, nombre de taux de TVA utilisés...).
-// Reprend exactement les mêmes incréments de "y" que la fonction de dessin
-// ci-dessous, afin que la page fasse toujours la bonne taille : ni trop
-// courte (contenu coupé), ni trop longue (papier vierge gaspillé — c'est ce
-// qui causait l'impression d'un ticket suivi d'un long espace blanc).
-function calculerHauteurTicket(data) {
+export function definirLargeurPapier(mm) {
+  if (!LARGEURS_VALIDES.includes(mm)) return;
+  try {
+    localStorage.setItem(CLE_STOCKAGE_LARGEUR, String(mm));
+  } catch {
+    // localStorage indisponible (navigation privée, etc.) : le réglage ne sera
+    // pas mémorisé d'une session à l'autre, mais l'impression en cours fonctionnera.
+  }
+}
+
+const TAILLE_POLICE = 15; // grande police, lisible de loin
+const STYLE_POLICE = 'bold';
+
+// Calcule toutes les positions et largeurs disponibles à partir de la largeur
+// de papier choisie, pour ne jamais avoir de valeur écrite en dur pour une
+// largeur donnée. Les largeurs "disponibles" servent à replier automatiquement
+// tout texte trop long sur plusieurs lignes plutôt que de le tronquer ou de le
+// laisser déborder du papier.
+function calculerMiseEnPage(largeurMm) {
+  const marge = largeurMm >= 80 ? 4 : 3;
+  const xGauche = marge;
+  const xCentre = largeurMm / 2;
+  const xDroite = largeurMm - marge;
+  const xArticleNom = marge + (largeurMm >= 80 ? 9 : 7);
+  const reservePourPrix = 22; // mm réservés à droite pour les montants (jusqu'à ~7 caractères)
+  const largeurDispoNom = Math.max(10, xDroite - reservePourPrix - xArticleNom);
+  const largeurDispoCentre = largeurMm - 2 * marge;
+  const largeurDispoLabel = largeurMm - 2 * marge;
+  const hauteurLigne = 8;
+  return { marge, xGauche, xCentre, xDroite, xArticleNom, largeurDispoNom, largeurDispoCentre, largeurDispoLabel, hauteurLigne };
+}
+
+// Construit la liste complète des lignes de texte à imprimer, avec leur
+// position (x, y) et alignement déjà calculés — en repliant automatiquement
+// tout texte trop long sur plusieurs lignes selon la largeur disponible.
+// measureDoc sert uniquement à mesurer le texte (splitTextToSize), sa taille
+// de page n'a pas d'importance : c'est la même police/taille que le document
+// final, donc les mesures sont exactes.
+function construireLignesTicket(data, mise, measureDoc) {
+  const lignes = [];
   let y = 8;
-  y += HAUTEUR_LIGNE + 5 + 5; // nom, adresse, code postal/ville
-  y += data.telephones.length * 5;
-  y += 5; // tva
-  y += 7; // espace après en-tête
-  y += 7; // date
-  if (data.table) y += 7;
+
+  const ajouter = (texte, x, align) => { lignes.push({ texte, x, y, align }); };
+  const ajouterMultiligne = (texte, x, align, largeurDispo) => {
+    measureDoc.splitTextToSize(String(texte), largeurDispo).forEach(morceau => {
+      ajouter(morceau, x, align);
+      y += mise.hauteurLigne;
+    });
+  };
+  const ajouterLabelPuisValeur = (label, valeur) => {
+    ajouterMultiligne(label, mise.xGauche, 'left', mise.largeurDispoLabel);
+    // La valeur vient sur sa propre ligne, alignée à droite, pour ne jamais
+    // risquer de chevaucher un libellé long à cette taille de police.
+    ajouter(valeur, mise.xDroite, 'right');
+    y += mise.hauteurLigne;
+  };
+
+  ajouterMultiligne(data.nom, mise.xCentre, 'center', mise.largeurDispoCentre);
+  ajouterMultiligne(data.adresse, mise.xCentre, 'center', mise.largeurDispoCentre);
+  ajouterMultiligne(data.codePostalVille, mise.xCentre, 'center', mise.largeurDispoCentre);
+  data.telephones.forEach(tel => ajouterMultiligne('Tel : ' + tel, mise.xCentre, 'center', mise.largeurDispoCentre));
+  ajouterMultiligne(data.tva, mise.xCentre, 'center', mise.largeurDispoCentre);
+  y += 2;
+  ajouterMultiligne(new Date(data.date).toLocaleDateString('fr-BE'), mise.xCentre, 'center', mise.largeurDispoCentre);
+  if (data.table) {
+    ajouterMultiligne(data.table, mise.xGauche, 'left', mise.largeurDispoLabel);
+  }
+  y += 2;
+
   data.lignes.forEach(l => {
-    y += decouperNomArticle(l.nom).length * HAUTEUR_LIGNE;
+    const morceauxNom = measureDoc.splitTextToSize(String(l.nom), mise.largeurDispoNom);
+    ajouter(String(l.quantite), mise.xGauche, 'left');
+    ajouter(morceauxNom[0] || '', mise.xArticleNom, 'left');
+    ajouter(l.total.toFixed(2), mise.xDroite, 'right');
+    y += mise.hauteurLigne;
+    for (let i = 1; i < morceauxNom.length; i++) {
+      ajouter(morceauxNom[i], mise.xArticleNom, 'left');
+      y += mise.hauteurLigne;
+    }
   });
-  y += 3;
-  y += 7; // total des achats
-  y += 7; // à payer
-  y += 9; // pers. - prix/pers.
-  if (data.montantCarte > 0) y += 6;
-  if (data.montantCash > 0) y += 6;
-  y += 5;
-  y += 9; // ref ticket
-  y += 5 + 9; // merci pour votre visite / et à bientôt
-  const nbTauxUtilises = [6, 12, 21].filter(t => data.tvaParTaux[t] > 0).length;
-  y += nbTauxUtilises * 6;
+  y += 2;
+
+  ajouterLabelPuisValeur('Total des achats :', data.montantTotal.toFixed(2));
+  ajouterLabelPuisValeur('à payer :', data.montantTotal.toFixed(2));
+  ajouterLabelPuisValeur(data.nbPersonnes + ' pers. - Prix/pers. :', data.prixParPersonne.toFixed(2));
+  if (data.montantCarte > 0) ajouterLabelPuisValeur('Bancontact :', data.montantCarte.toFixed(2));
+  if (data.montantCash > 0) ajouterLabelPuisValeur('Cash :', data.montantCash.toFixed(2));
+  y += 2;
+
+  ajouterMultiligne('Ref ticket : ' + data.numeroTicket, mise.xGauche, 'left', mise.largeurDispoLabel);
+  y += 2;
+  ajouterMultiligne('MERCI POUR VOTRE VISITE', mise.xCentre, 'center', mise.largeurDispoCentre);
+  ajouterMultiligne('ET A BIENTÔT.', mise.xCentre, 'center', mise.largeurDispoCentre);
+  y += 2;
+
+  [6, 12, 21].forEach(taux => {
+    if (data.tvaParTaux[taux] > 0) {
+      ajouter('TVA ' + taux + '%', mise.xGauche, 'left');
+      ajouter(data.tvaParTaux[taux].toFixed(2), mise.xDroite, 'right');
+      y += mise.hauteurLigne;
+    }
+  });
   y += 8; // marge de bas de page
 
-  const HAUTEUR_MIN = 70; // évite un ticket ridiculement court même sur un cas extrême
-  return Math.max(HAUTEUR_MIN, Math.round(y));
+  return { lignes, hauteurTotale: Math.max(70, Math.round(y)) };
 }
 
 // Génère le PDF du ticket et l'ouvre dans un nouvel onglet du navigateur.
+// La largeur de papier utilisée est celle réglée sur cet ordinateur (voir
+// obtenirLargeurPapier / definirLargeurPapier ci-dessus).
 export function genererPdfTicket(data) {
-  const hauteur = calculerHauteurTicket(data);
-  const doc = new jsPDF({ unit: 'mm', format: [LARGEUR_PAPIER_MM, hauteur] });
-  let y = 8;
+  const largeurMm = obtenirLargeurPapier();
+  const mise = calculerMiseEnPage(largeurMm);
+
+  // Document de mesure : sert uniquement à calculer les retours à la ligne
+  // avec la police exacte utilisée à l'impression ; sa hauteur de page n'a
+  // aucune importance puisqu'on n'y dessine rien.
+  const measureDoc = new jsPDF({ unit: 'mm', format: [largeurMm, 10] });
+  measureDoc.setFont('courier', STYLE_POLICE);
+  measureDoc.setFontSize(TAILLE_POLICE);
+
+  const { lignes, hauteurTotale } = construireLignesTicket(data, mise, measureDoc);
+
+  // Document final, cette fois avec la hauteur exacte calculée ci-dessus —
+  // ni trop courte (texte coupé), ni trop longue (papier vierge gaspillé).
+  const doc = new jsPDF({ unit: 'mm', format: [largeurMm, hauteurTotale] });
   doc.setFont('courier', STYLE_POLICE);
   doc.setFontSize(TAILLE_POLICE);
-  doc.text(data.nom, X_CENTRE, y, { align: 'center' }); y += HAUTEUR_LIGNE;
-  doc.text(data.adresse, X_CENTRE, y, { align: 'center' }); y += 5;
-  doc.text(data.codePostalVille, X_CENTRE, y, { align: 'center' }); y += 5;
-  data.telephones.forEach(tel => { doc.text('Tel : ' + tel, X_CENTRE, y, { align: 'center' }); y += 5; });
-  doc.text(data.tva, X_CENTRE, y, { align: 'center' }); y += 7;
-  doc.text(new Date(data.date).toLocaleDateString('fr-BE'), X_CENTRE, y, { align: 'center' }); y += 7;
-  if (data.table) {
-    doc.text(data.table, X_GAUCHE, y);
-    y += 7;
-  }
-  data.lignes.forEach(l => {
-    const lignesNom = decouperNomArticle(l.nom);
-    doc.text(String(l.quantite), X_GAUCHE, y);
-    doc.text(lignesNom[0], X_ARTICLE_NOM, y);
-    doc.text(l.total.toFixed(2), X_DROITE, y, { align: 'right' });
-    y += HAUTEUR_LIGNE;
-    if (lignesNom[1]) {
-      doc.text(lignesNom[1], X_ARTICLE_NOM, y);
-      y += HAUTEUR_LIGNE;
-    }
+  // Contour noir en plus du remplissage : dépose visuellement plus d'encre,
+  // pour un rendu plus foncé sur une imprimante thermique.
+  doc.setLineWidth(0.25);
+  doc.setDrawColor(0, 0, 0);
+
+  lignes.forEach(l => {
+    doc.text(l.texte, l.x, l.y, { align: l.align, renderingMode: 'fillThenStroke' });
   });
-  y += 3;
-  doc.text('Total des achats :', X_GAUCHE, y);
-  doc.text(data.montantTotal.toFixed(2), X_DROITE, y, { align: 'right' });
-  y += 7;
-  doc.text('à payer :', X_GAUCHE, y);
-  doc.text(data.montantTotal.toFixed(2), X_DROITE, y, { align: 'right' });
-  y += 7;
-  doc.text(data.nbPersonnes + ' pers. - Prix/pers. :', X_GAUCHE, y);
-  doc.text(data.prixParPersonne.toFixed(2), X_DROITE, y, { align: 'right' });
-  y += 9;
-  if (data.montantCarte > 0) {
-    doc.text('Bancontact :', X_GAUCHE, y);
-    doc.text(data.montantCarte.toFixed(2), X_DROITE, y, { align: 'right' });
-    y += 6;
-  }
-  if (data.montantCash > 0) {
-    doc.text('Cash :', X_GAUCHE, y);
-    doc.text(data.montantCash.toFixed(2), X_DROITE, y, { align: 'right' });
-    y += 6;
-  }
-  y += 5;
-  doc.text('Ref ticket : ' + data.numeroTicket, X_GAUCHE, y); y += 9;
-  doc.text('MERCI POUR VOTRE VISITE', X_CENTRE, y, { align: 'center' }); y += 5;
-  doc.text('ET A BIENTÔT.', X_CENTRE, y, { align: 'center' }); y += 9;
-  [6, 12, 21].forEach(taux => {
-    if (data.tvaParTaux[taux] > 0) {
-      doc.text('TVA ' + taux + '%', X_GAUCHE, y);
-      doc.text(data.tvaParTaux[taux].toFixed(2), X_DROITE, y, { align: 'right' });
-      y += 6;
-    }
-  });
+
   const blobUrl = doc.output('bloburl');
   window.open(blobUrl, '_blank');
 }
