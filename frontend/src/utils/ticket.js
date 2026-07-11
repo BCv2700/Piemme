@@ -67,9 +67,43 @@ export function genererDonneesTicketDepuisEncaissement(enc) {
   });
 }
 
+// Calcule à l'avance la hauteur de papier nécessaire (en mm) pour un ticket
+// donné, en fonction de son contenu réel (nombre de lignes, présence d'une
+// table, d'un paiement carte/cash, nombre de taux de TVA utilisés...).
+// Reprend exactement les mêmes incréments de "y" que la fonction de dessin
+// ci-dessous, afin que la page fasse toujours la bonne taille : ni trop
+// courte (contenu coupé), ni trop longue (papier vierge gaspillé — c'est ce
+// qui causait l'impression d'un ticket suivi d'un long espace blanc).
+function calculerHauteurTicket(data) {
+  let y = 8;
+  y += 5 + 4 + 4; // nom, adresse, code postal/ville
+  y += data.telephones.length * 4;
+  y += 4; // tva
+  y += 6; // espace après en-tête
+  y += 6; // date
+  if (data.table) y += 6;
+  y += data.lignes.length * 5;
+  y += 2;
+  y += 6; // total des achats
+  y += 6; // à payer
+  y += 8; // pers. - prix/pers.
+  if (data.montantCarte > 0) y += 5;
+  if (data.montantCash > 0) y += 5;
+  y += 4;
+  y += 8; // ref ticket
+  y += 4 + 8; // merci pour votre visite / et à bientôt
+  const nbTauxUtilises = [6, 12, 21].filter(t => data.tvaParTaux[t] > 0).length;
+  y += nbTauxUtilises * 5;
+  y += 8; // marge de bas de page
+
+  const HAUTEUR_MIN = 60; // évite un ticket ridiculement court même sur un cas extrême
+  return Math.max(HAUTEUR_MIN, Math.round(y));
+}
+
 // Génère le PDF du ticket et l'ouvre dans un nouvel onglet du navigateur.
 export function genererPdfTicket(data) {
-  const doc = new jsPDF({ unit: 'mm', format: [80, 200] });
+  const hauteur = calculerHauteurTicket(data);
+  const doc = new jsPDF({ unit: 'mm', format: [80, hauteur] });
   let y = 8;
   doc.setFont('courier', 'normal');
   doc.setFontSize(10);
