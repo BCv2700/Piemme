@@ -66,6 +66,7 @@ export default function PlanSalle() {
   const [tablesRef, setTablesRef] = useState([]); // disposition de référence (Table.pos_x/pos_y/statut...)
   const [positionsJour, setPositionsJour] = useState([]); // exceptions de position pour le jour affiché
   const [reservationsJour, setReservationsJour] = useState([]); // réservations confirmées du jour affiché
+  const [commandesEnCours, setCommandesEnCours] = useState([]); // toutes les lignes de caddy actuellement ouvertes (tous, pas encore payées), pour le total temporaire par table
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -85,16 +86,28 @@ export default function PlanSalle() {
       api.get('/tables/'),
       api.get('/table-positions-jour/', { params: { date_jour: selectedDate } }),
       api.get('/reservations/', { params: { date_reservation: selectedDate } }),
+      api.get('/commandes/'),
     ])
-      .then(([tablesRes, positionsRes, reservationsRes]) => {
+      .then(([tablesRes, positionsRes, reservationsRes, commandesRes]) => {
         setTablesRef(tablesRes.data);
         setPositionsJour(positionsRes.data);
         setReservationsJour(reservationsRes.data.filter(r => r.statut !== 'annulee'));
+        setCommandesEnCours(commandesRes.data);
       })
       .catch(() => setError('Impossible de charger le plan de salle'));
   };
 
   useEffect(() => { load(); }, [selectedDate]);
+
+  // Total temporaire du caddy de chaque table (commandes pas encore payées),
+  // affiché sur la vignette pour repérer d'un coup d'œil les tables avec une
+  // addition déjà en cours. { table_id: total }
+  const totalCaddyParTable = commandesEnCours.reduce((acc, c) => {
+    const t = Number(c.table_id);
+    const montant = Number(c.prix_unitaire) * Number(c.quantite);
+    acc[t] = (acc[t] || 0) + montant;
+    return acc;
+  }, {});
 
   // Fusionne la disposition de référence avec les exceptions du jour affiché,
   // et calcule pour chaque table sa réservation du jour (s'il y en a une) et son statut effectif.
@@ -116,6 +129,7 @@ export default function PlanSalle() {
       statutEffectif,
       reservation,
       heureArrivee: exception && exception.heure_arrivee ? exception.heure_arrivee.slice(0, 5) : null,
+      totalCaddy: totalCaddyParTable[t.id] || 0,
     };
   });
 
@@ -358,12 +372,18 @@ export default function PlanSalle() {
     .filter(t => t.reservation)
     .sort((a, b) => a.reservation.heure.localeCompare(b.reservation.heure));
 
+  // Nombre de lignes de texte supplémentaires affichées sur une vignette
+  // (heure d'arrivée et/ou total du caddy), pour calculer sa hauteur.
+  const nbLignesExtra = (table) => (table.heureArrivee ? 1 : 0) + (table.totalCaddy > 0 ? 1 : 0);
+
   // Dimensions de chaque table (mêmes règles que dans le rendu ci-dessous),
   // centralisées ici pour calculer la taille du cadre du plan de salle.
   const getTableDims = (table) => {
     const width = table.forme === 'rond' ? 64 : (table.capacite >= 6 ? 100 : 80);
     const hasReservation = !!table.reservation;
-    const height = table.forme === 'rond' ? 64 : (hasReservation ? 70 : (table.heureArrivee ? 58 : 44));
+    const height = table.forme === 'rond'
+      ? 64
+      : (hasReservation ? 70 : (44 + nbLignesExtra(table) * 14));
     return { width, height };
   };
 
@@ -475,7 +495,7 @@ export default function PlanSalle() {
                   left: table.pos_x,
                   top: table.pos_y,
                   width: table.forme === 'rond' ? 64 : (table.capacite >= 6 ? 100 : 80),
-                  height: table.forme === 'rond' ? 64 : (hasReservation ? 70 : (table.heureArrivee ? 58 : 44)),
+                  height: table.forme === 'rond' ? 64 : (hasReservation ? 70 : (44 + nbLignesExtra(table) * 14)),
                   borderRadius: table.forme === 'rond' ? '50%' : 10,
                   background: STATUT_COLOR[table.statutEffectif] || '#9ca3af',
                   color: 'white',
@@ -492,7 +512,7 @@ export default function PlanSalle() {
                   boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
                   padding: '2px 4px',
                 }}
-                title={table.nom + ' — ' + STATUT_LABEL[table.statutEffectif] + (nomResa ? ' — ' + nomResa : '') + (heure ? ' — ' + heure : '')}
+                title={table.nom + ' — ' + STATUT_LABEL[table.statutEffectif] + (nomResa ? ' — ' + nomResa : '') + (heure ? ' — ' + heure : '') + (table.totalCaddy > 0 ? ' — ' + table.totalCaddy.toFixed(2) + ' €' : '')}
               >
                 <span>{table.nom}</span>
                 {resa && (
@@ -535,6 +555,14 @@ export default function PlanSalle() {
                     🕐 {table.heureArrivee}
                   </span>
                 ) : null}
+                {table.totalCaddy > 0 && (
+                  <span
+                    title="Total temporaire du caddy (pas encore payé)"
+                    style={{ fontSize: 10, fontWeight: 700, opacity: 0.95, marginTop: 2 }}
+                  >
+                    🛒 {table.totalCaddy.toFixed(2)} €
+                  </span>
+                )}
               </div>
             );
           })}

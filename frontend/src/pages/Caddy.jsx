@@ -4,21 +4,10 @@ import jsPDF from 'jspdf';
 import api from '../api/api';
 import { genererDonneesTicket, genererPdfTicket } from '../utils/ticket';
 
-// ───────────────────────────────────────────────────────────────────────────
-// Les dépenses (code_vente 9001) sont regroupées par leur champ « categorie »,
-// défini pour chaque dépense dans l'onglet Articles. Aucune liste en dur ici :
-// les catégories sont relevées automatiquement depuis la base. Une dépense sans
-// catégorie apparaît dans « Non classé ».
-// ───────────────────────────────────────────────────────────────────────────
 const CODE_VENTE_DEPENSE = 9001;
+const ESPACE_HAUT_TICKET_CUISINE_MM = 30;
+const BORDURE = '1px solid #e5e5e0';
 
-// Hauteur de l'espace blanc à laisser en haut du ticket cuisine (impression
-// réelle ET PDF), pour pouvoir accrocher le ticket sur un rail sans cacher
-// les inscriptions.
-const ESPACE_HAUT_TICKET_CUISINE_MM = 30; // 3 cm
-
-// Normalise un nom de table pour le comparer sans tenir compte de la casse ni
-// des accents : "DÉPENSES", "Dépenses", "depenses" donnent tous "depenses".
 const normaliser = (s) =>
   (s || '')
     .normalize('NFD')
@@ -26,12 +15,6 @@ const normaliser = (s) =>
     .toLowerCase()
     .trim();
 
-// Extrait un message d'erreur affichable (toujours une chaîne) depuis une
-// erreur Axios. Le detail renvoyé par FastAPI peut être une simple chaîne,
-// ou un tableau d'objets {type, loc, msg, input} (erreurs de validation
-// Pydantic, ex: 422) — dans ce cas on ne doit JAMAIS afficher l'objet brut
-// dans le JSX, React plante sinon (erreur #31 : objects are not valid
-// as a React child).
 const errMsg = (e, fallback) => {
   const detail = e.response?.data?.detail;
   if (!detail) return fallback;
@@ -48,30 +31,29 @@ export default function Caddy() {
   const urlRetourPlan = retourDate ? '/?date=' + retourDate : '/';
 
   const [table, setTable] = useState(null);
+  const [toutesLesTables, setToutesLesTables] = useState([]);
   const [articles, setArticles] = useState([]);
   const [lignes, setLignes] = useState([]);
-  const [heureArrivee, setHeureArrivee] = useState(null); // heure d'arrivée de la table, pour le ticket cuisine
-  const [codeVente, setCodeVente] = useState(null); // niveau 1 : code_vente (Boissons Alcools, Nourriture...)
-  const [categorie, setCategorie] = useState(null); // niveau 2 : type_article (2. APERITIF, VIN ROUGE...)
+  const [heureArrivee, setHeureArrivee] = useState(null);
+  const [codeVente, setCodeVente] = useState(null);
+  const [categorie, setCategorie] = useState(null);
   const [emporte, setEmporte] = useState(false);
   const [error, setError] = useState('');
+  const [msg, setMsg] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [saisieDepense, setSaisieDepense] = useState(null);
 
-  // Saisie d'un montant de dépense (null = fenêtre fermée)
-  const [saisieDepense, setSaisieDepense] = useState(null); // { article, montant }
+  const showMsg = (type, text) => {
+    setMsg({ type, text });
+    setTimeout(() => setMsg(null), 2500);
+  };
 
   const load = async () => {
-    // Garde-fou : si l'id de table est manquant ou invalide (ex: composant
-    // monté par erreur, navigation incomplète), on n'appelle jamais l'API
-    // avec un id "undefined" — on affiche un message clair à la place.
     if (!tableId || tableId === 'undefined') {
       setError('Aucune table sélectionnée (identifiant manquant).');
       setLoading(false);
       return;
     }
-    // Jour concerné : celui d'où on vient (retourDate, si on ouvre le caddy
-    // depuis un autre jour du plan de salle) sinon aujourd'hui — c'est ce
-    // jour-là qui porte l'heure d'arrivée éventuelle de la table.
     const todayKey = (() => {
       const d = new Date();
       const y = d.getFullYear();
@@ -81,13 +63,15 @@ export default function Caddy() {
     })();
     const dateAUtiliser = retourDate || todayKey;
     try {
-      const [tableRes, articlesRes, lignesRes, positionsRes] = await Promise.all([
+      const [tableRes, toutesTablesRes, articlesRes, lignesRes, positionsRes] = await Promise.all([
         api.get('/tables/' + tableId),
+        api.get('/tables/'),
         api.get('/articles/', { params: { actif: true } }),
         api.get('/commandes/', { params: { table_id: tableId } }),
         api.get('/table-positions-jour/', { params: { date_jour: dateAUtiliser } }),
       ]);
       setTable(tableRes.data);
+      setToutesLesTables(toutesTablesRes.data);
       setArticles(articlesRes.data);
       setLignes(lignesRes.data);
       const positionJour = positionsRes.data.find(p => p.table_id === Number(tableId));
@@ -110,14 +94,8 @@ export default function Caddy() {
     9001: 'Dépenses',
   };
 
-  // Cet écran est-il un écran de dépenses ? Il l'est UNIQUEMENT pour la table
-  // nommée « Dépenses » (la seule du plan de salle à porter ce nom). On se base
-  // donc sur le nom de la table cliquée, et non sur la simple présence d'articles
-  // 9001 dans la base (qui existent toujours et rendaient la détection toujours
-  // vraie, affichant les dépenses sur toutes les tables).
   const estEcranDepense = table != null && normaliser(table.nom) === 'depenses';
 
-  // Niveau 1 : codes de vente présents (Boissons Alcools, Nourriture...), dans l'ordre des codes
   const codesVente = [...new Set(articles.map(a => a.code_vente))]
     .filter(c => c != null)
     .sort((a, b) => a - b);
@@ -126,19 +104,13 @@ export default function Caddy() {
     if (!codeVente && codesVente.length > 0) setCodeVente(codesVente[0]);
   }, [codesVente, codeVente]);
 
-  // ───── MODE DÉPENSE ──────────────────────────────────────────────────────
-  // On ne montre que les articles 9001, regroupés par leur champ « categorie ».
-  // Le "niveau 2" devient la catégorie (Magasins, Frais fixes, ...).
   const articlesDepense = articles.filter(a => a.code_vente === CODE_VENTE_DEPENSE);
 
-  // Pour chaque dépense, sa catégorie vient du champ « categorie » (saisi dans
-  // l'onglet Articles). Vide ou absent => 'Non classé'.
   const categorieDe = (article) => {
     const c = (article.categorie || '').trim();
     return c === '' ? 'Non classé' : c;
   };
 
-  // Liste des catégories présentes, par ordre alphabétique, 'Non classé' à la fin
   const categoriesDepense = (() => {
     const presentes = [...new Set(articlesDepense.map(a => categorieDe(a)))];
     const sansNonClasse = presentes.filter(c => c !== 'Non classé')
@@ -147,16 +119,12 @@ export default function Caddy() {
     return sansNonClasse;
   })();
 
-  // ───── MODE VENTE (inchangé) ─────────────────────────────────────────────
-  // Niveau 2 : types précis disponibles pour le code de vente sélectionné
   const typesNiveau2 = [...new Set(
     articles
       .filter(a => a.code_vente === codeVente)
       .map(a => a.type_article || 'Sans type')
   )].sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
 
-  // Quand on change de code de vente (niveau 1), on resélectionne le premier type disponible.
-  // En mode dépense, le niveau 2 = catégories de dépense.
   useEffect(() => {
     if (estEcranDepense) {
       if (categoriesDepense.length > 0 && !categoriesDepense.includes(categorie)) {
@@ -169,7 +137,6 @@ export default function Caddy() {
     }
   }, [estEcranDepense, typesNiveau2, categoriesDepense, categorie]);
 
-  // Niveau 3 : articles affichés
   const articlesAffiches = estEcranDepense
     ? articlesDepense.filter(a => categorieDe(a) === categorie)
         .sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { numeric: true }))
@@ -178,7 +145,6 @@ export default function Caddy() {
         (a.type_article || 'Sans type') === categorie
       );
 
-  // ───── AJOUT D'UN ARTICLE DE VENTE (inchangé) ────────────────────────────
   const ajouterArticle = async (article) => {
     setError('');
     const prix = emporte && article.prix_vente_away != null ? article.prix_vente_away : article.prix_vente;
@@ -207,11 +173,6 @@ export default function Caddy() {
     }
   };
 
-  // ───── AJOUT D'UNE DÉPENSE (avec saisie du montant) ──────────────────────
-  // Important : la quantité d'une ligne de dépense est TOUJOURS -1 (et non 1).
-  // Le montant saisi reste positif (prix_unitaire > 0), mais prix_unitaire × quantite
-  // donne donc un total de ligne négatif, cohérent avec le fait qu'une dépense
-  // est une sortie de caisse (montant_total négatif au niveau de l'encaissement).
   const ouvrirSaisieDepense = (article) => {
     setSaisieDepense({ article, montant: '' });
   };
@@ -240,7 +201,6 @@ export default function Caddy() {
     }
   };
 
-  // ───── ÉDITION DU MONTANT D'UNE LIGNE (dépense) ──────────────────────────
   const modifierMontantLigne = async (ligne, nouveauMontantStr) => {
     const montant = Number(String(nouveauMontantStr).replace(',', '.'));
     if (!Number.isFinite(montant) || montant < 0) return;
@@ -279,15 +239,40 @@ export default function Caddy() {
     }
   };
 
+  const viderCaddy = async () => {
+    if (lignes.length === 0) return;
+    if (!window.confirm('Vider tout le caddy de cette table ? Cette action est irréversible.')) return;
+    setError('');
+    try {
+      await Promise.all(lignes.map(l => api.delete('/commandes/' + l.id)));
+      setLignes([]);
+      showMsg('success', 'Caddy vidé');
+    } catch (e) {
+      setError(errMsg(e, 'Erreur lors du vidage du caddy'));
+      load();
+    }
+  };
+
+  const changerTableLigne = async (ligne, nouveauTableIdStr) => {
+    const nouveauTableId = Number(nouveauTableIdStr);
+    if (!nouveauTableId || nouveauTableId === Number(tableId)) return;
+    setError('');
+    try {
+      await api.patch('/commandes/' + ligne.id, { table_id: nouveauTableId });
+      setLignes(prev => prev.filter(l => l.id !== ligne.id));
+      const nomCible = toutesLesTables.find(t => t.id === nouveauTableId)?.nom || 'la table choisie';
+      showMsg('success', 'Article déplacé vers ' + nomCible);
+    } catch (e) {
+      setError(errMsg(e, "Erreur lors du changement de table (le backend accepte-t-il de modifier table_id sur une commande ?)"));
+      load();
+    }
+  };
+
   const nomArticle = (articleId) => {
     const a = articles.find(a => a.id === articleId);
     return a ? a.nom : 'Article #' + articleId;
   };
 
-  // ───── TICKET CUISINE ─────────────────────────────────────────────────────
-  // Une ligne de commande va sur le ticket cuisine si son article est coché
-  // "imprimer_cuisine" dans l'onglet Articles. On exclut le mode dépense (la
-  // table Dépenses n'a pas de ticket cuisine).
   const estArticleCuisine = (articleId) => {
     const a = articles.find(a => a.id === articleId);
     return !!(a && a.imprimer_cuisine);
@@ -296,8 +281,6 @@ export default function Caddy() {
   const lignesCuisineTotales = estEcranDepense ? [] : lignes.filter(l => estArticleCuisine(l.article_id));
   const lignesCuisineNonImprimees = lignesCuisineTotales.filter(l => !l.imprime);
 
-  // Construit le contenu texte du ticket (table + réservation + liste articles,
-  // sans prix) à partir d'une liste de lignes données.
   const construireContenuTicket = (lignesTicket) => {
     const items = lignesTicket.map(l => ({
       nom: nomArticle(l.article_id),
@@ -311,11 +294,6 @@ export default function Caddy() {
     };
   };
 
-  // Ouvre une fenêtre d'impression avec une mise en page adaptée à un ticket
-  // thermique (largeur ~72mm), via l'impression standard du navigateur.
-  // Un espace blanc de ESPACE_HAUT_TICKET_CUISINE_MM est réservé en haut du
-  // ticket (avant l'en-tête "CUISINE") pour pouvoir l'accrocher sur un rail
-  // sans cacher les inscriptions.
   const imprimerTicket = (contenu) => {
     const fenetre = window.open('', '_blank', 'width=400,height=600');
     if (!fenetre) {
@@ -362,7 +340,6 @@ export default function Caddy() {
   const escapeHtml = (s) =>
     String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  // Marque une liste de lignes comme imprimées (statut "imprime" sur la commande)
   const marquerImprimees = async (lignesAMarquer) => {
     try {
       await Promise.all(lignesAMarquer.map(l => api.patch('/commandes/' + l.id, { imprime: true })));
@@ -374,7 +351,6 @@ export default function Caddy() {
     }
   };
 
-  // Bouton "Imprimer cuisine" : uniquement les nouvelles lignes, puis on les marque imprimées
   const handleImprimerCuisine = async () => {
     if (lignesCuisineNonImprimees.length === 0) {
       setError('Aucun nouvel article à envoyer en cuisine');
@@ -385,7 +361,6 @@ export default function Caddy() {
     await marquerImprimees(lignesCuisineNonImprimees);
   };
 
-  // Bouton "Réimprimer le ticket complet" : toutes les lignes cuisine, sans toucher au statut
   const handleReimprimerComplet = () => {
     if (lignesCuisineTotales.length === 0) {
       setError('Aucun article cuisine sur cette commande');
@@ -395,10 +370,6 @@ export default function Caddy() {
     imprimerTicket(construireContenuTicket(lignesCuisineTotales));
   };
 
-  // Bouton "Voir en PDF" : même contenu que le ticket complet, pour test ou secours.
-  // Ne modifie jamais le statut imprimé. Même espace blanc de
-  // ESPACE_HAUT_TICKET_CUISINE_MM réservé en haut, pour rester cohérent avec
-  // l'impression réelle (accroche sur rail).
   const handleVoirPdf = () => {
     if (lignesCuisineTotales.length === 0) {
       setError('Aucun article cuisine sur cette commande');
@@ -406,8 +377,6 @@ export default function Caddy() {
     }
     setError('');
     const contenu = construireContenuTicket(lignesCuisineTotales);
-    // Format proche d'un ticket : 72mm de large, hauteur étendue selon le nombre de lignes
-    // + l'espace blanc réservé en haut du ticket + une ligne en plus si heure d'arrivée.
     const hauteurMm = 40 + ESPACE_HAUT_TICKET_CUISINE_MM + (contenu.heureArrivee ? 6 : 0) + contenu.items.length * 8;
     const doc = new jsPDF({ unit: 'mm', format: [72, hauteurMm] });
     let y = 10 + ESPACE_HAUT_TICKET_CUISINE_MM;
@@ -446,12 +415,6 @@ export default function Caddy() {
     window.open(blobUrl, '_blank');
   };
 
-  // Bouton "Imprimer l'addition" : ticket au format caisse (même mise en page
-  // que le ticket de paiement final), mais SANS mode de paiement puisque rien
-  // n'a encore été encaissé — montantCash et montantCarte sont donc à 0, ce
-  // qui masque automatiquement ces deux lignes sur le ticket (voir ticket.js).
-  // Le numéro de ticket affiche "Provisoire" tant qu'aucun encaissement réel
-  // n'existe encore pour cette table.
   const handleImprimerAddition = () => {
     if (lignes.length === 0) {
       setError('Aucun article dans la commande');
@@ -480,6 +443,9 @@ export default function Caddy() {
 
   const total = lignes.reduce((sum, l) => sum + Number(l.prix_unitaire) * Number(l.quantite), 0);
 
+  const thCell = (extra = {}) => ({ padding: '5px 6px', border: BORDURE, ...extra });
+  const tdCell = (extra = {}) => ({ padding: '3px 6px', border: BORDURE, ...extra });
+
   if (loading) {
     return (
       <div>
@@ -493,6 +459,15 @@ export default function Caddy() {
       <div className="content">
 
         {error && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 12 }}>{error}</div>}
+        {msg && (
+          <div style={{
+            padding: '8px 14px', borderRadius: 8, marginBottom: 12, fontSize: 13, fontWeight: 500,
+            background: msg.type === 'success' ? '#dcfce7' : '#fee2e2',
+            color: msg.type === 'success' ? '#16a34a' : '#dc2626',
+          }}>
+            {msg.text}
+          </div>
+        )}
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -538,7 +513,6 @@ export default function Caddy() {
 
         <div style={{ display: 'flex', gap: 16 }}>
 
-          {/* Colonne 1 : codes de vente — masquée en mode dépense (un seul code) */}
           {!estEcranDepense && (
             <div style={{ width: 130, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
               {codesVente.filter(c => c !== CODE_VENTE_DEPENSE).map(code => (
@@ -560,7 +534,6 @@ export default function Caddy() {
             </div>
           )}
 
-          {/* Colonne 2 : types précis (vente) OU catégories (dépense) */}
           <div style={{
             width: 150,
             flexShrink: 0,
@@ -601,7 +574,6 @@ export default function Caddy() {
             )}
           </div>
 
-          {/* Colonne 3 : articles de la catégorie sélectionnée */}
           <div style={{ flex: '1 1 0%', minWidth: 0 }}>
             <div style={{
               display: 'flex',
@@ -651,9 +623,8 @@ export default function Caddy() {
             </div>
           </div>
 
-          {/* Colonne 4 : ticket de caisse */}
           <div style={{
-            width: 280,
+            width: estEcranDepense ? 420 : 480,
             flexShrink: 0,
             background: 'white',
             border: '1px solid #e5e5e0',
@@ -663,8 +634,20 @@ export default function Caddy() {
             position: 'sticky',
             top: 16,
           }}>
-            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>
-              {estEcranDepense ? 'Dépenses en cours' : 'Commande en cours'}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div style={{ fontWeight: 600, fontSize: 15 }}>
+                {estEcranDepense ? 'Dépenses en cours' : 'Commande en cours'}
+              </div>
+              {lignes.length > 0 && (
+                <button
+                  className="btn"
+                  style={{ fontSize: 12, color: '#dc2626', borderColor: '#fca5a5' }}
+                  onClick={viderCaddy}
+                  title="Supprime toutes les lignes de ce caddy"
+                >
+                  🗑️ Vider tout
+                </button>
+              )}
             </div>
 
             {!estEcranDepense && lignesCuisineTotales.length > 0 && (
@@ -703,79 +686,100 @@ export default function Caddy() {
               </div>
             )}
 
-            {lignes.length === 0 && (
+            {lignes.length === 0 ? (
               <div style={{ color: '#888', fontSize: 13, marginBottom: 12 }}>
                 {estEcranDepense ? 'Aucune dépense saisie' : 'Aucun article commandé'}
               </div>
+            ) : (
+              <div style={{ border: BORDURE, borderRadius: 8, overflow: 'auto', marginBottom: 16 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
+                      <th style={thCell()}>Article</th>
+                      {!estEcranDepense && <th style={thCell({ textAlign: 'center' })}>Qté</th>}
+                      <th style={thCell({ textAlign: 'right' })}>{estEcranDepense ? 'Montant' : 'Prix u.'}</th>
+                      {!estEcranDepense && <th style={thCell({ textAlign: 'right' })}>Total</th>}
+                      {!estEcranDepense && <th style={thCell()}>Table</th>}
+                      <th style={thCell()}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lignes.map(ligne => (
+                      <tr key={ligne.id}>
+                        <td style={tdCell({ maxWidth: 140 })}>
+                          <div style={{ fontWeight: 500 }}>
+                            {nomArticle(ligne.article_id)}
+                            {ligne.emporte && <span style={{ fontSize: 11, color: '#888' }}> (emporté)</span>}
+                          </div>
+                        </td>
+
+                        {!estEcranDepense && (
+                          <td style={tdCell({ textAlign: 'center' })}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                              <button
+                                className="btn"
+                                style={{ width: 22, height: 22, padding: 0, fontSize: 13, lineHeight: 1 }}
+                                onClick={() => changerQuantite(ligne, -1)}
+                              >−</button>
+                              <span style={{ minWidth: 16, textAlign: 'center' }}>{Number(ligne.quantite)}</span>
+                              <button
+                                className="btn"
+                                style={{ width: 22, height: 22, padding: 0, fontSize: 13, lineHeight: 1 }}
+                                onClick={() => changerQuantite(ligne, 1)}
+                              >+</button>
+                            </div>
+                          </td>
+                        )}
+
+                        <td style={tdCell({ padding: '2px 4px' })}>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            defaultValue={Number(ligne.prix_unitaire).toFixed(2)}
+                            onBlur={(e) => modifierMontantLigne(ligne, e.target.value)}
+                            style={{
+                              width: estEcranDepense ? 80 : 60, padding: '4px 6px', borderRadius: 6,
+                              border: '1px solid #ddd', fontSize: 12, textAlign: 'right', boxSizing: 'border-box',
+                            }}
+                          />
+                        </td>
+
+                        {!estEcranDepense && (
+                          <td style={tdCell({ textAlign: 'right', fontWeight: 600 })}>
+                            {(Number(ligne.prix_unitaire) * Number(ligne.quantite)).toFixed(2)} €
+                          </td>
+                        )}
+
+                        {!estEcranDepense && (
+                          <td style={tdCell({ padding: '2px 4px' })}>
+                            <select
+                              value={ligne.table_id ?? Number(tableId)}
+                              onChange={(e) => changerTableLigne(ligne, e.target.value)}
+                              style={{ width: '100%', padding: '3px 4px', borderRadius: 5, border: '1px solid #ddd', fontSize: 11 }}
+                              title="Déplacer cet article vers une autre table"
+                            >
+                              {toutesLesTables.map(t => (
+                                <option key={t.id} value={t.id}>{t.nom}</option>
+                              ))}
+                            </select>
+                          </td>
+                        )}
+
+                        <td style={tdCell()}>
+                          <button
+                            className="btn"
+                            style={{ width: 22, height: 22, padding: 0, fontSize: 11, color: '#dc2626', borderColor: '#fca5a5' }}
+                            onClick={() => supprimerLigne(ligne)}
+                            title="Supprimer cette ligne"
+                          >✕</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-              {lignes.map(ligne => (
-                <div key={ligne.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500 }}>
-                      {nomArticle(ligne.article_id)}
-                      {ligne.emporte && <span style={{ fontSize: 11, color: '#888' }}> (emporté)</span>}
-                    </div>
-                    {estEcranDepense ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          defaultValue={Number(ligne.prix_unitaire).toFixed(2)}
-                          onBlur={(e) => modifierMontantLigne(ligne, e.target.value)}
-                          style={{
-                            width: 80, padding: '4px 6px', borderRadius: 6,
-                            border: '1px solid #ddd', fontSize: 13,
-                          }}
-                        />
-                        <span style={{ fontSize: 12, color: '#888' }}>€</span>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          defaultValue={Number(ligne.prix_unitaire).toFixed(2)}
-                          onBlur={(e) => modifierMontantLigne(ligne, e.target.value)}
-                          style={{
-                            width: 64, padding: '4px 6px', borderRadius: 6,
-                            border: '1px solid #ddd', fontSize: 12,
-                          }}
-                        />
-                        <span style={{ fontSize: 12, color: '#888' }}>€ × {Number(ligne.quantite)}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Quantité : seulement en mode vente */}
-                  {!estEcranDepense && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <button
-                        className="btn"
-                        style={{ width: 26, height: 26, padding: 0, fontSize: 14, lineHeight: 1 }}
-                        onClick={() => changerQuantite(ligne, -1)}
-                      >−</button>
-                      <span style={{ fontSize: 13, minWidth: 18, textAlign: 'center' }}>{Number(ligne.quantite)}</span>
-                      <button
-                        className="btn"
-                        style={{ width: 26, height: 26, padding: 0, fontSize: 14, lineHeight: 1 }}
-                        onClick={() => changerQuantite(ligne, 1)}
-                      >+</button>
-                    </div>
-                  )}
-
-                  <button
-                    className="btn"
-                    style={{ width: 26, height: 26, padding: 0, fontSize: 12, lineHeight: 1, color: '#dc2626', borderColor: '#fca5a5' }}
-                    onClick={() => supprimerLigne(ligne)}
-                    title="Supprimer cette ligne"
-                  >✕</button>
-                </div>
-              ))}
-            </div>
 
             <div style={{
               borderTop: '1px solid #e5e5e0',
@@ -793,7 +797,6 @@ export default function Caddy() {
         </div>
       </div>
 
-      {/* Fenêtre de saisie du montant d'une dépense */}
       {saisieDepense && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
