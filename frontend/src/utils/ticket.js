@@ -201,7 +201,14 @@ function construireLignesTicket(data, mise, measureDoc) {
   }
   y += 8; // marge de bas de page
 
-  return { lignes, hauteurTotale: Math.max(50, Math.round(y)) };
+  // Hauteur minimale relevée à 100mm : certaines imprimantes thermiques (ou
+  // leur driver) semblent imposer une longueur de page minimale en interne —
+  // en dessous, elles rallongent le job d'impression en ajoutant du papier
+  // blanc en haut, indépendamment de ce que contient le PDF. Un ticket plus
+  // long (donc plus proche ou au-dessus de ce seuil) n'a pas ce problème.
+  // Cette valeur est une première estimation à ajuster si besoin.
+  const HAUTEUR_MIN = 100;
+  return { lignes, hauteurTotale: Math.max(HAUTEUR_MIN, Math.round(y)) };
 }
 
 // Génère le PDF du ticket et l'ouvre dans un nouvel onglet du navigateur.
