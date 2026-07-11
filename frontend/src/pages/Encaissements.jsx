@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../api/api';
 import DetailEncaissementModal from '../components/DetailEncaissementModal';
-import TicketImprimable from '../components/TicketImprimable';
 import SelecteurClient from '../components/SelecteurClient';
 import { genererDonneesTicketDepuisEncaissement, genererPdfTicket } from '../utils/ticket';
 
@@ -36,7 +35,6 @@ export default function Encaissements() {
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
   const [detailOuvert, setDetailOuvert] = useState(null); // id de l'encaissement affiché dans la modale, ou null
-  const [ticketAImprimer, setTicketAImprimer] = useState(null); // données du ticket en cours de réimpression papier
   const [idsServicesLies, setIdsServicesLies] = useState(new Set());
 
   const load = () => {
@@ -171,14 +169,15 @@ export default function Encaissements() {
     }
   };
 
-  // Réimpression papier d'un ticket déjà enregistré : on construit les
-  // données du ticket depuis l'encaissement existant (pas de recréation en
-  // base), on les pousse dans TicketImprimable, puis on déclenche l'impression.
+  // Réimpression papier ET PDF passent désormais toutes les deux par le même
+  // modèle de ticket (genererPdfTicket dans utils/ticket.js) : un seul et
+  // même rendu, qu'on clique sur 🖨️ ou sur 📄. Auparavant, le bouton 🖨️
+  // utilisait un composant séparé (TicketImprimable.jsx + window.print()),
+  // ce qui causait des incohérences entre les deux boutons — supprimé ici.
   const reimprimerTicket = (enc) => {
     if (enc.depenses) return; // pas de ticket client pour une dépense
     const data = genererDonneesTicketDepuisEncaissement(enc);
-    setTicketAImprimer(data);
-    setTimeout(() => window.print(), 200);
+    genererPdfTicket(data);
   };
 
   const telechargerPdfTicket = (enc) => {
@@ -474,8 +473,6 @@ export default function Encaissements() {
           onChanged={load}
         />
       )}
-
-      <TicketImprimable data={ticketAImprimer} />
     </div>
   );
 }

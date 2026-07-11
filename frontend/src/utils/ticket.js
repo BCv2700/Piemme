@@ -119,7 +119,10 @@ function calculerMiseEnPage(largeurMm) {
   const largeurDispoCentre = largeurMm - 2 * marge;
   const largeurDispoLabel = largeurMm - 2 * marge;
   const hauteurLigne = 7;
-  const hauteurLigneEntete = 4; // environ moitié de hauteurLigne, pour un en-tête plus compact
+  // 5mm minimum pour une police de 12 : en dessous, le texte risque de se
+  // chevaucher visuellement d'une ligne à l'autre. Reste plus compact que
+  // hauteurLigne (7mm), utilisée seulement pour le corps du ticket.
+  const hauteurLigneEntete = 5;
   return { marge, xGauche, xCentre, xDroite, largeurDispoCentre, largeurDispoLabel, hauteurLigne, hauteurLigneEntete };
 }
 
@@ -131,7 +134,7 @@ function calculerMiseEnPage(largeurMm) {
 // final, donc les mesures sont exactes.
 function construireLignesTicket(data, mise, measureDoc) {
   const lignes = [];
-  let y = 4;
+  let y = 3;
 
   const ajouter = (texte, x, align) => { lignes.push({ texte, x, y, align }); };
   const ajouterMultiligne = (texte, x, align, largeurDispo, hauteurLigne = mise.hauteurLigne) => {
@@ -156,12 +159,11 @@ function construireLignesTicket(data, mise, measureDoc) {
     data.telephones.forEach(tel => ajouterMultiligne(tel, mise.xCentre, 'center', mise.largeurDispoCentre, mise.hauteurLigneEntete));
     ajouterMultiligne(data.tva, mise.xCentre, 'center', mise.largeurDispoCentre, mise.hauteurLigneEntete);
   }
-  y += 1;
   ajouterMultiligne(new Date(data.date).toLocaleDateString('fr-BE'), mise.xCentre, 'center', mise.largeurDispoCentre, mise.hauteurLigneEntete);
   if (data.table) {
     ajouterMultiligne(data.table, mise.xGauche, 'left', mise.largeurDispoLabel, mise.hauteurLigneEntete);
   }
-  y += 2;
+  y += 1;
 
   // Chaque article : quantité + nom sur une (ou plusieurs, si le nom est
   // long) ligne(s) pleine largeur, puis le prix seul sur la ligne suivante,
@@ -176,7 +178,7 @@ function construireLignesTicket(data, mise, measureDoc) {
 
   ajouterLabelPuisValeur('Total :', data.montantTotal.toFixed(2));
   ajouterLabelPuisValeur('à payer :', data.montantTotal.toFixed(2));
-  ajouterLabelPuisValeur(data.nbPersonnes + ' pers. - Prix/pers. :', data.prixParPersonne.toFixed(2));
+  ajouterLabelPuisValeur('Px/pers. (' + data.nbPersonnes + ') :', data.prixParPersonne.toFixed(2));
   if (data.montantCarte > 0) ajouterLabelPuisValeur('Bancontact :', data.montantCarte.toFixed(2));
   if (data.montantCash > 0) ajouterLabelPuisValeur('Cash :', data.montantCash.toFixed(2));
 
