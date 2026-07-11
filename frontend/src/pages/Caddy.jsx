@@ -473,6 +473,7 @@ export default function Caddy() {
       montantCarte: 0,
       montantTotal: total,
       nbPersonnes: 1,
+      inclureContact: false,
     });
     genererPdfTicket(data);
   };

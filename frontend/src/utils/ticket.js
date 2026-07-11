@@ -23,9 +23,13 @@ export function calculerTvaParTaux(lignes) {
   return totaux;
 }
 
+// inclureContact : true pour le ticket complet (après paiement — téléphones
+// et TVA affichés), false pour l'addition provisoire imprimée depuis le
+// Caddy avant paiement (ces infos n'y sont pas nécessaires).
 export function genererDonneesTicket({
   encaissementId, dateEncaissement, tableNom,
   lignes, montantCash, montantCarte, montantTotal, nbPersonnes,
+  inclureContact = true,
 }) {
   // Nombre de personnes : toujours au moins 1, pour ne jamais diviser par zéro
   // et pour rester cohérent même si la valeur n'a pas été transmise (anciens
@@ -47,13 +51,15 @@ export function genererDonneesTicket({
     tvaParTaux: calculerTvaParTaux(lignes),
     nbPersonnes: nb,
     prixParPersonne: Number(montantTotal) / nb,
+    inclureContact,
   };
 }
 
 // Construit les données de ticket directement à partir d'un encaissement tel
 // que renvoyé par l'API (GET /encaissements/ ou POST /encaissements/), sans
 // avoir besoin de recharger table/articles séparément. Utile pour réimprimer
-// un ticket depuis la liste des encaissements.
+// un ticket depuis la liste des encaissements. Ticket complet : téléphones
+// et TVA affichés (inclureContact reste à true par défaut).
 export function genererDonneesTicketDepuisEncaissement(enc) {
   return genererDonneesTicket({
     encaissementId: enc.id,
@@ -96,7 +102,7 @@ export function definirLargeurPapier(mm) {
   }
 }
 
-const TAILLE_POLICE = 15; // grande police, lisible de loin
+const TAILLE_POLICE = 12; // le gras + contour suffisent maintenant pour la netteté, plus besoin d'une police aussi grande
 const STYLE_POLICE = 'bold';
 
 // Calcule toutes les positions et largeurs disponibles à partir de la largeur
@@ -111,7 +117,7 @@ function calculerMiseEnPage(largeurMm) {
   const xDroite = largeurMm - marge;
   const largeurDispoCentre = largeurMm - 2 * marge;
   const largeurDispoLabel = largeurMm - 2 * marge;
-  const hauteurLigne = 8;
+  const hauteurLigne = 7;
   return { marge, xGauche, xCentre, xDroite, largeurDispoCentre, largeurDispoLabel, hauteurLigne };
 }
 
@@ -140,13 +146,14 @@ function construireLignesTicket(data, mise, measureDoc) {
     y += mise.hauteurLigne;
   };
 
-  // En-tête : nom du restaurant, ville, téléphones (sans le préfixe "Tel :",
-  // ce sont clairement des numéros de téléphone) et TVA. L'adresse (rue) n'est
-  // volontairement plus imprimée, pour un ticket plus court et plus lisible.
+  // En-tête : nom du restaurant, puis téléphones et TVA UNIQUEMENT sur le
+  // ticket complet (inclureContact). Ni l'adresse ni la ville ne sont
+  // imprimées, sur aucun des deux types de ticket.
   ajouterMultiligne(data.nom, mise.xCentre, 'center', mise.largeurDispoCentre);
-  ajouterMultiligne(data.codePostalVille, mise.xCentre, 'center', mise.largeurDispoCentre);
-  data.telephones.forEach(tel => ajouterMultiligne(tel, mise.xCentre, 'center', mise.largeurDispoCentre));
-  ajouterMultiligne(data.tva, mise.xCentre, 'center', mise.largeurDispoCentre);
+  if (data.inclureContact) {
+    data.telephones.forEach(tel => ajouterMultiligne(tel, mise.xCentre, 'center', mise.largeurDispoCentre));
+    ajouterMultiligne(data.tva, mise.xCentre, 'center', mise.largeurDispoCentre);
+  }
   y += 2;
   ajouterMultiligne(new Date(data.date).toLocaleDateString('fr-BE'), mise.xCentre, 'center', mise.largeurDispoCentre);
   if (data.table) {
@@ -178,16 +185,18 @@ function construireLignesTicket(data, mise, measureDoc) {
   ajouterMultiligne('ET A BIENTÔT.', mise.xCentre, 'center', mise.largeurDispoCentre);
   y += 2;
 
-  [6, 12, 21].forEach(taux => {
-    if (data.tvaParTaux[taux] > 0) {
-      ajouter('TVA ' + taux + '%', mise.xGauche, 'left');
-      ajouter(data.tvaParTaux[taux].toFixed(2), mise.xDroite, 'right');
-      y += mise.hauteurLigne;
-    }
-  });
+  if (data.inclureContact) {
+    [6, 12, 21].forEach(taux => {
+      if (data.tvaParTaux[taux] > 0) {
+        ajouter('TVA ' + taux + '%', mise.xGauche, 'left');
+        ajouter(data.tvaParTaux[taux].toFixed(2), mise.xDroite, 'right');
+        y += mise.hauteurLigne;
+      }
+    });
+  }
   y += 8; // marge de bas de page
 
-  return { lignes, hauteurTotale: Math.max(70, Math.round(y)) };
+  return { lignes, hauteurTotale: Math.max(60, Math.round(y)) };
 }
 
 // Génère le PDF du ticket et l'ouvre dans un nouvel onglet du navigateur.
