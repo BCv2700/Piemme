@@ -23,13 +23,15 @@ export function calculerTvaParTaux(lignes) {
   return totaux;
 }
 
-// inclureContact : true pour le ticket complet (après paiement — téléphones
-// et TVA affichés), false pour l'addition provisoire imprimée depuis le
-// Caddy avant paiement (ces infos n'y sont pas nécessaires).
+// estTicketFinal : true pour le ticket réel de paiement / sa réimpression
+// (téléphones, TVA, numéro de ticket et message de remerciement affichés) ;
+// false pour l'addition provisoire imprimée depuis le Caddy avant paiement
+// (ces infos n'y ont pas de sens : pas encore de vrai numéro de ticket, pas
+// encore de "merci pour votre visite" puisque le client n'a pas encore payé).
 export function genererDonneesTicket({
   encaissementId, dateEncaissement, tableNom,
   lignes, montantCash, montantCarte, montantTotal, nbPersonnes,
-  inclureContact = true,
+  estTicketFinal = true,
 }) {
   // Nombre de personnes : toujours au moins 1, pour ne jamais diviser par zéro
   // et pour rester cohérent même si la valeur n'a pas été transmise (anciens
@@ -51,15 +53,15 @@ export function genererDonneesTicket({
     tvaParTaux: calculerTvaParTaux(lignes),
     nbPersonnes: nb,
     prixParPersonne: Number(montantTotal) / nb,
-    inclureContact,
+    estTicketFinal,
   };
 }
 
 // Construit les données de ticket directement à partir d'un encaissement tel
 // que renvoyé par l'API (GET /encaissements/ ou POST /encaissements/), sans
 // avoir besoin de recharger table/articles séparément. Utile pour réimprimer
-// un ticket depuis la liste des encaissements. Ticket complet : téléphones
-// et TVA affichés (inclureContact reste à true par défaut).
+// un ticket depuis la liste des encaissements. Ticket final complet
+// (estTicketFinal reste à true par défaut).
 export function genererDonneesTicketDepuisEncaissement(enc) {
   return genererDonneesTicket({
     encaissementId: enc.id,
@@ -102,14 +104,13 @@ export function definirLargeurPapier(mm) {
   }
 }
 
-const TAILLE_POLICE = 12; // le gras + contour suffisent maintenant pour la netteté, plus besoin d'une police aussi grande
+const TAILLE_POLICE = 12; // le gras + contour suffisent maintenant pour la netteté
 const STYLE_POLICE = 'bold';
 
 // Calcule toutes les positions et largeurs disponibles à partir de la largeur
-// de papier choisie, pour ne jamais avoir de valeur écrite en dur pour une
-// largeur donnée. Les largeurs "disponibles" servent à replier automatiquement
-// tout texte trop long sur plusieurs lignes plutôt que de le tronquer ou de le
-// laisser déborder du papier.
+// de papier choisie. hauteurLigneEntete (en-tête) est volontairement plus
+// resserrée que hauteurLigne (corps du ticket), pour un haut de ticket
+// nettement plus court.
 function calculerMiseEnPage(largeurMm) {
   const marge = largeurMm >= 80 ? 4 : 3;
   const xGauche = marge;
@@ -118,7 +119,8 @@ function calculerMiseEnPage(largeurMm) {
   const largeurDispoCentre = largeurMm - 2 * marge;
   const largeurDispoLabel = largeurMm - 2 * marge;
   const hauteurLigne = 7;
-  return { marge, xGauche, xCentre, xDroite, largeurDispoCentre, largeurDispoLabel, hauteurLigne };
+  const hauteurLigneEntete = 4; // environ moitié de hauteurLigne, pour un en-tête plus compact
+  return { marge, xGauche, xCentre, xDroite, largeurDispoCentre, largeurDispoLabel, hauteurLigne, hauteurLigneEntete };
 }
 
 // Construit la liste complète des lignes de texte à imprimer, avec leur
@@ -129,13 +131,13 @@ function calculerMiseEnPage(largeurMm) {
 // final, donc les mesures sont exactes.
 function construireLignesTicket(data, mise, measureDoc) {
   const lignes = [];
-  let y = 8;
+  let y = 4;
 
   const ajouter = (texte, x, align) => { lignes.push({ texte, x, y, align }); };
-  const ajouterMultiligne = (texte, x, align, largeurDispo) => {
+  const ajouterMultiligne = (texte, x, align, largeurDispo, hauteurLigne = mise.hauteurLigne) => {
     measureDoc.splitTextToSize(String(texte), largeurDispo).forEach(morceau => {
       ajouter(morceau, x, align);
-      y += mise.hauteurLigne;
+      y += hauteurLigne;
     });
   };
   const ajouterLabelPuisValeur = (label, valeur) => {
@@ -146,18 +148,18 @@ function construireLignesTicket(data, mise, measureDoc) {
     y += mise.hauteurLigne;
   };
 
-  // En-tête : nom du restaurant, puis téléphones et TVA UNIQUEMENT sur le
-  // ticket complet (inclureContact). Ni l'adresse ni la ville ne sont
-  // imprimées, sur aucun des deux types de ticket.
-  ajouterMultiligne(data.nom, mise.xCentre, 'center', mise.largeurDispoCentre);
-  if (data.inclureContact) {
-    data.telephones.forEach(tel => ajouterMultiligne(tel, mise.xCentre, 'center', mise.largeurDispoCentre));
-    ajouterMultiligne(data.tva, mise.xCentre, 'center', mise.largeurDispoCentre);
+  // En-tête, resserré (hauteurLigneEntete) : nom du restaurant, puis
+  // téléphones et TVA uniquement sur le ticket final (pas sur l'addition).
+  // Ni l'adresse ni la ville ne sont imprimées, sur aucun des deux types.
+  ajouterMultiligne(data.nom, mise.xCentre, 'center', mise.largeurDispoCentre, mise.hauteurLigneEntete);
+  if (data.estTicketFinal) {
+    data.telephones.forEach(tel => ajouterMultiligne(tel, mise.xCentre, 'center', mise.largeurDispoCentre, mise.hauteurLigneEntete));
+    ajouterMultiligne(data.tva, mise.xCentre, 'center', mise.largeurDispoCentre, mise.hauteurLigneEntete);
   }
-  y += 2;
-  ajouterMultiligne(new Date(data.date).toLocaleDateString('fr-BE'), mise.xCentre, 'center', mise.largeurDispoCentre);
+  y += 1;
+  ajouterMultiligne(new Date(data.date).toLocaleDateString('fr-BE'), mise.xCentre, 'center', mise.largeurDispoCentre, mise.hauteurLigneEntete);
   if (data.table) {
-    ajouterMultiligne(data.table, mise.xGauche, 'left', mise.largeurDispoLabel);
+    ajouterMultiligne(data.table, mise.xGauche, 'left', mise.largeurDispoLabel, mise.hauteurLigneEntete);
   }
   y += 2;
 
@@ -177,15 +179,16 @@ function construireLignesTicket(data, mise, measureDoc) {
   ajouterLabelPuisValeur(data.nbPersonnes + ' pers. - Prix/pers. :', data.prixParPersonne.toFixed(2));
   if (data.montantCarte > 0) ajouterLabelPuisValeur('Bancontact :', data.montantCarte.toFixed(2));
   if (data.montantCash > 0) ajouterLabelPuisValeur('Cash :', data.montantCash.toFixed(2));
-  y += 2;
 
-  ajouterMultiligne('Ref ticket : ' + data.numeroTicket, mise.xGauche, 'left', mise.largeurDispoLabel);
-  y += 2;
-  ajouterMultiligne('MERCI POUR VOTRE VISITE', mise.xCentre, 'center', mise.largeurDispoCentre);
-  ajouterMultiligne('ET A BIENTÔT.', mise.xCentre, 'center', mise.largeurDispoCentre);
-  y += 2;
-
-  if (data.inclureContact) {
+  // Numéro de ticket + remerciement + détail TVA : uniquement sur le ticket
+  // final (après paiement réel). Inutiles sur l'addition provisoire.
+  if (data.estTicketFinal) {
+    y += 2;
+    ajouterMultiligne('Ref ticket : ' + data.numeroTicket, mise.xGauche, 'left', mise.largeurDispoLabel);
+    y += 2;
+    ajouterMultiligne('MERCI POUR VOTRE VISITE', mise.xCentre, 'center', mise.largeurDispoCentre);
+    ajouterMultiligne('ET A BIENTÔT.', mise.xCentre, 'center', mise.largeurDispoCentre);
+    y += 2;
     [6, 12, 21].forEach(taux => {
       if (data.tvaParTaux[taux] > 0) {
         ajouter('TVA ' + taux + '%', mise.xGauche, 'left');
@@ -196,7 +199,7 @@ function construireLignesTicket(data, mise, measureDoc) {
   }
   y += 8; // marge de bas de page
 
-  return { lignes, hauteurTotale: Math.max(60, Math.round(y)) };
+  return { lignes, hauteurTotale: Math.max(50, Math.round(y)) };
 }
 
 // Génère le PDF du ticket et l'ouvre dans un nouvel onglet du navigateur.
