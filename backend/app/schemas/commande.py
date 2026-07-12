@@ -17,7 +17,9 @@ class CommandeCreate(CommandeBase):
     pass
 
 class CommandeUpdate(BaseModel):
+    table_id: Optional[int] = None
     quantite: Optional[Decimal] = None
+    prix_unitaire: Optional[Decimal] = None
     imprime: Optional[bool] = None
     emporte: Optional[bool] = None
 

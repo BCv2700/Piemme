@@ -36,10 +36,35 @@ def update_commande(commande_id: int, commande: CommandeUpdate, db: Session = De
     db_commande = db.query(Commande).filter(Commande.id == commande_id).first()
     if not db_commande:
         raise HTTPException(status_code=404, detail="Ligne de commande introuvable")
-    for key, value in commande.dict(exclude_unset=True).items():
+
+    updates = commande.dict(exclude_unset=True)
+    ancien_table_id = db_commande.table_id
+    nouveau_table_id = updates.get("table_id")
+
+    for key, value in updates.items():
         setattr(db_commande, key, value)
     db.commit()
     db.refresh(db_commande)
+
+    # Si la ligne change de table (réattribution depuis le Caddy), on met à
+    # jour le statut occupée/libre des deux tables concernées : l'ancienne
+    # est libérée si elle n'a plus aucune ligne, la nouvelle passe occupée
+    # si elle était libre. Sans ça, une table pouvait rester "occupée" sur le
+    # plan de salle après en avoir déplacé tout le contenu ailleurs.
+    if nouveau_table_id is not None and nouveau_table_id != ancien_table_id:
+        lignes_restantes_ancienne = db.query(Commande).filter(Commande.table_id == ancien_table_id).count()
+        if lignes_restantes_ancienne == 0:
+            ancienne_table = db.query(Table).filter(Table.id == ancien_table_id).first()
+            if ancienne_table and ancienne_table.statut == 'occupee':
+                ancienne_table.statut = 'libre'
+
+        nouvelle_table = db.query(Table).filter(Table.id == nouveau_table_id).first()
+        if nouvelle_table and nouvelle_table.statut == 'libre':
+            nouvelle_table.statut = 'occupee'
+
+        db.commit()
+        db.refresh(db_commande)
+
     return db_commande
 
 @router.delete("/{commande_id}")
