@@ -771,6 +771,20 @@ export default function RecapMensuel() {
                     </tr>
                   </thead>
                   <tbody>
+                    <tr style={{ fontWeight: 700, background: '#fafaf8' }}>
+                      <td style={tdCell({ textAlign: 'left' })}>Totaux {MOIS_NOMS[mois - 1]}</td>
+                      <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.total)}</td>
+                      <td style={tdCell({ textAlign: 'right', color: '#0f766e' })}>{fmt(totaux.totalAnalyse)}</td>
+                      <td style={tdCell({ textAlign: 'right', color: '#b91c1c' })}>{fmt(totaux.depenses)}</td>
+                      <td style={tdCell({ textAlign: 'right', color: '#16a34a' })}>{fmt(totaux.cash)}</td>
+                      <td style={tdCell({ textAlign: 'right', color: '#2563eb' })}>{fmt(totaux.carte)}</td>
+                      <td style={tdCell({ textAlign: 'right', color: '#b45309' })}>{fmt(totaux.cashAnalyse)}</td>
+                      <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tva[6] + totaux.tva[12] + totaux.tva[21])}</td>
+                      <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tva[6])}</td>
+                      <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tva[12])}</td>
+                      <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tva[21])}</td>
+                      <td style={tdCell({ textAlign: 'right', color: '#6b7280' })}>{fmt(totalKm)}</td>
+                    </tr>
                     {jours.map(j => {
                       const d = parJour[j];
                       const aRecette = d.total !== 0;
@@ -856,6 +870,18 @@ export default function RecapMensuel() {
                     </tr>
                   </thead>
                   <tbody>
+                    <tr style={{ fontWeight: 700, background: '#fafaf8' }}>
+                      <td style={tdCell({ textAlign: 'left' })}>Totaux {MOIS_NOMS[mois - 1]}</td>
+                      <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.carte + totaux.cashAnalyse)}</td>
+                      <td style={tdCell({ textAlign: 'right', color: '#b91c1c' })}>{fmt(totaux.depenses)}</td>
+                      <td style={tdCell({ textAlign: 'right', color: '#2563eb' })}>{fmt(totaux.carte)}</td>
+                      <td style={tdCell({ textAlign: 'right', color: '#b45309' })}>{fmt(totaux.cashAnalyse)}</td>
+                      <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tva[6] + totaux.tva[12] + totaux.tva[21])}</td>
+                      <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tva[6])}</td>
+                      <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tva[12])}</td>
+                      <td style={tdCell({ textAlign: 'right' })}>{fmt(totaux.tva[21])}</td>
+                      <td style={tdCell({ textAlign: 'right', color: '#6b7280' })}>{fmt(totalKm)}</td>
+                    </tr>
                     {jours.map(j => {
                       const d = parJour[j];
                       const totalJour = d.carte + d.cashAnalyse;
