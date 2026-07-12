@@ -767,9 +767,11 @@ export default function Caddy() {
                               style={{ width: '100%', padding: '3px 4px', borderRadius: 5, border: '1px solid #ddd', fontSize: 11 }}
                               title="Déplacer cet article vers une autre table"
                             >
-                              {toutesLesTables.map(t => (
-                                <option key={t.id} value={t.id}>{t.nom}</option>
-                              ))}
+                              {[...toutesLesTables]
+                                .sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { numeric: true }))
+                                .map(t => (
+                                  <option key={t.id} value={t.id}>{t.nom}</option>
+                                ))}
                             </select>
                           </td>
                         )}
