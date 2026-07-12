@@ -101,14 +101,11 @@ export default function Paiement() {
   };
 
   const enregistrerEncaissement = async () => {
-    // Dès qu'il y a une part de cash dans le paiement, on considère les lignes
-    // comme "analysées" par défaut (comme le ferait le serveur manuellement
-    // dans la fenêtre de détail) : le cash analysé est alors calculé tout de
-    // suite, plafonné au cash réellement encaissé, jamais négatif — même règle
-    // que calculerCashAnalyse dans DetailEncaissementModal.jsx. Un paiement
-    // 100% carte n'a rien à analyser, donc reste à false/0.
-    const venteAnalyseeParDefaut = cash > 0;
-    const cashAnalyseInitial = venteAnalyseeParDefaut ? Math.max(0, Math.min(total, cash)) : 0;
+    // Toutes les lignes sont marquées "analysées" par défaut, quel que soit le
+    // mode de paiement (carte, cash ou mixte). Le cash analysé est plafonné au
+    // cash réellement encaissé, jamais négatif — même règle que
+    // calculerCashAnalyse dans DetailEncaissementModal.jsx.
+    const cashAnalyseInitial = Math.max(0, Math.min(total, cash));
     const res = await api.post('/encaissements/', {
       table_nom: table.nom,
       client_id: clientId,
@@ -131,7 +128,7 @@ export default function Paiement() {
         quantite: l.quantite,
         prix_vente: l.prix_unitaire,
         tva: l.tva,
-        vente_analysee: venteAnalyseeParDefaut,
+        vente_analysee: true,
       })),
     });
     return res.data;
