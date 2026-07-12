@@ -692,7 +692,15 @@ export default function Caddy() {
               </div>
             ) : (
               <div style={{ border: BORDURE, borderRadius: 8, overflow: 'auto', marginBottom: 16 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, tableLayout: 'fixed' }}>
+                  <colgroup>
+                    <col style={{ width: 'auto' }} />
+                    {!estEcranDepense && <col style={{ width: 78 }} />}
+                    <col style={{ width: 66 }} />
+                    {!estEcranDepense && <col style={{ width: 66 }} />}
+                    {!estEcranDepense && <col style={{ width: 52 }} />}
+                    <col style={{ width: 30 }} />
+                  </colgroup>
                   <thead>
                     <tr style={{ background: '#fafaf8', textAlign: 'left' }}>
                       <th style={thCell()}>Article</th>
@@ -746,7 +754,7 @@ export default function Caddy() {
                         </td>
 
                         {!estEcranDepense && (
-                          <td style={tdCell({ textAlign: 'right', fontWeight: 600 })}>
+                          <td style={tdCell({ textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' })}>
                             {(Number(ligne.prix_unitaire) * Number(ligne.quantite)).toFixed(2)} €
                           </td>
                         )}
