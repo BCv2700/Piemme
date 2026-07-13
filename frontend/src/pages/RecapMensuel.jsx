@@ -690,6 +690,16 @@ export default function RecapMensuel() {
               📆 Vue annuelle (km)
             </button>
             <button
+              onClick={() => navigate('/depenses-annuelles?annee=' + annee)}
+              style={{
+                padding: '6px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8,
+                border: '1px solid #ddd', background: 'white', color: '#333', cursor: 'pointer',
+              }}
+              title="Voir les dépenses par fournisseur sur l'année"
+            >
+              💰 Dépenses annuelles
+            </button>
+            <button
               className="btn"
               onClick={() => setAfficherTotaux(v => !v)}
               style={{ fontSize: 12, color: '#666' }}
