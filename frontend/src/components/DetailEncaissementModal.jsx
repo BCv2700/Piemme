@@ -39,6 +39,10 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
   const [msg, setMsg] = useState(null);
   const [dateSaisie, setDateSaisie] = useState('');
   const [heureSaisie, setHeureSaisie] = useState('');
+  // Confirmations en deux taps (remplace window.confirm, qui ne fonctionne
+  // pas toujours sur Safari iPad).
+  const [confirmDeleteEnc, setConfirmDeleteEnc] = useState(false);
+  const [confirmDeleteLigne, setConfirmDeleteLigne] = useState(null);
 
   const showMsg = (type, text) => {
     setMsg({ type, text });
@@ -83,9 +87,6 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
     }));
   };
 
-  // Sauvegarde les champs généraux de l'encaissement (table, réservation, montants).
-  // N'accepte jamais d'argument positionnel venant d'un événement DOM : on l'appelle
-  // toujours via onBlur={() => saveEncaissement()}, jamais onBlur={saveEncaissement}.
   const saveEncaissement = async () => {
     try {
       await api.patch('/encaissements/' + enc.id, {
@@ -106,8 +107,6 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
     }
   };
 
-  // Changement de client, enregistré immédiatement (pas besoin d'onBlur, comme
-  // les cases à cocher Emporté/Dépenses).
   const changerClient = async (nouveauClientId) => {
     majLocal('client_id', nouveauClientId);
     try {
@@ -215,8 +214,14 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
     }
   };
 
+  // Suppression d'une ligne en deux taps
   const deleteLigne = async (ligneId) => {
-    if (!window.confirm('Supprimer cette ligne ?')) return;
+    if (confirmDeleteLigne !== ligneId) {
+      setConfirmDeleteLigne(ligneId);
+      setTimeout(() => setConfirmDeleteLigne(prev => prev === ligneId ? null : prev), 4000);
+      return;
+    }
+    setConfirmDeleteLigne(null);
     try {
       await api.delete('/encaissements/lignes/' + ligneId);
       setEnc(prev => ({ ...prev, lignes: prev.lignes.filter(l => l.id !== ligneId) }));
@@ -227,8 +232,14 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
     }
   };
 
+  // Suppression de l'encaissement entier en deux taps
   const deleteEncaissement = async () => {
-    if (!window.confirm('Supprimer cet encaissement et toutes ses lignes ? Action irréversible.')) return;
+    if (!confirmDeleteEnc) {
+      setConfirmDeleteEnc(true);
+      setTimeout(() => setConfirmDeleteEnc(false), 4000);
+      return;
+    }
+    setConfirmDeleteEnc(false);
     try {
       await api.delete('/encaissements/' + enc.id);
       onChanged && onChanged();
@@ -274,13 +285,20 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
           {enc && (
             <button
               className="btn"
-              style={{ color: '#dc2626', borderColor: '#fca5a5', fontSize: 12, whiteSpace: 'nowrap', marginLeft: 'auto' }}
+              style={{
+                fontSize: 12, whiteSpace: 'nowrap', marginLeft: 'auto',
+                minHeight: 36, padding: '0 12px', cursor: 'pointer',
+                color: confirmDeleteEnc ? 'white' : '#dc2626',
+                background: confirmDeleteEnc ? '#dc2626' : 'transparent',
+                borderColor: '#fca5a5',
+                fontWeight: confirmDeleteEnc ? 700 : 400,
+              }}
               onClick={deleteEncaissement}
             >
-              Supprimer tout l'encaissement
+              {confirmDeleteEnc ? 'Confirmer la suppression ?' : 'Supprimer tout l\'encaissement'}
             </button>
           )}
-          <button className="btn" onClick={onClose} style={{ width: 28, height: 28, padding: 0 }}>✕</button>
+          <button className="btn" onClick={onClose} style={{ width: 28, height: 28, padding: 0, cursor: 'pointer' }}>✕</button>
         </div>
 
         {msg && (
@@ -466,9 +484,15 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
                       <td style={{ padding: '4px 10px', border: BORDURE }}>
                         <button
                           className="btn"
-                          style={{ width: 22, height: 22, padding: 0, fontSize: 11, color: '#dc2626', borderColor: '#fca5a5' }}
+                          style={{
+                            minWidth: 32, minHeight: 32, padding: '0 6px', fontSize: 11, cursor: 'pointer',
+                            color: confirmDeleteLigne === ligne.id ? 'white' : '#dc2626',
+                            background: confirmDeleteLigne === ligne.id ? '#dc2626' : 'transparent',
+                            borderColor: '#fca5a5',
+                            fontWeight: confirmDeleteLigne === ligne.id ? 700 : 400,
+                          }}
                           onClick={() => deleteLigne(ligne.id)}
-                        >✕</button>
+                        >{confirmDeleteLigne === ligne.id ? 'Sûr ?' : '✕'}</button>
                       </td>
                     </tr>
                   ))}

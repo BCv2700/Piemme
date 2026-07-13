@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../api/api';
 import DetailEncaissementModal from '../components/DetailEncaissementModal';
 import SelecteurClient from '../components/SelecteurClient';
-import { genererDonneesTicketDepuisEncaissement, genererPdfTicket } from '../utils/ticket';
+import { genererDonneesTicketDepuisEncaissement, genererPdfTicket, imprimerTicketDirect } from '../utils/ticket';
 
 function todayKey() {
   const d = new Date();
@@ -24,8 +24,6 @@ const BORDURE = '1px solid #e5e5e0';
 export default function Encaissements() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  // Lit la date transmise par le Plan de salle (NavBar) au montage du composant.
-  // S'il n'y en a pas (accès direct à /encaissements), on retombe sur aujourd'hui.
   const dateInitiale = searchParams.get('date') || todayKey();
 
   const [dateUnique, setDateUnique] = useState(dateInitiale);
@@ -34,8 +32,11 @@ export default function Encaissements() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
-  const [detailOuvert, setDetailOuvert] = useState(null); // id de l'encaissement affiché dans la modale, ou null
+  const [detailOuvert, setDetailOuvert] = useState(null);
   const [idsServicesLies, setIdsServicesLies] = useState(new Set());
+  // Confirmation de suppression en deux taps (remplace window.confirm, qui
+  // ne fonctionne pas sur Safari iPad dans certains contextes tactiles).
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -47,8 +48,6 @@ export default function Encaissements() {
       .then(([encRes, clientsRes, servicesRes]) => {
         setEncaissements(encRes.data);
         setClients(clientsRes.data);
-        // Encaissements déjà reliés à une fiche Personnel (sert à distinguer
-        // les "Service XXX" déjà corrigés de ceux qui restent à migrer).
         const ids = new Set(servicesRes.data.map(s => s.encaissement_id).filter(id => id != null));
         setIdsServicesLies(ids);
       })
@@ -71,12 +70,8 @@ export default function Encaissements() {
     return fallback;
   };
 
-  // Tous les totaux ci-dessous ne portent que sur les vraies recettes : les
-  // encaissements de type dépense (depenses=true, montants négatifs) sont
-  // exclus, pour ne pas polluer Cash/Carte/TVA avec des sorties de caisse.
   const recettes = useMemo(() => encaissements.filter(e => !e.depenses), [encaissements]);
 
-  // Répartition par taux de TVA, calculée à partir des lignes des seules recettes du jour
   const repartitionTva = useMemo(() => {
     const totaux = { 6: 0, 12: 0, 21: 0, autre: 0 };
     recettes.forEach(enc => {
@@ -133,8 +128,6 @@ export default function Encaissements() {
     }
   };
 
-  // Changement de client directement depuis le tableau, enregistré aussitôt
-  // (comme les cases à cocher Emporté/Dépenses), pas besoin d'onBlur.
   const changerClient = async (enc, nouveauClientId) => {
     majLocal(enc.id, 'client_id', nouveauClientId);
     try {
@@ -158,8 +151,16 @@ export default function Encaissements() {
     }
   };
 
+  // Suppression en deux taps : premier tap → le bouton passe en mode "Sûr ?",
+  // deuxième tap dans les 4 secondes → suppression effective. Évite
+  // window.confirm() qui ne fonctionne pas toujours sur Safari iPad.
   const deleteEncaissement = async (encId) => {
-    if (!window.confirm('Supprimer cet encaissement et toutes ses lignes ? Action irréversible.')) return;
+    if (confirmDelete !== encId) {
+      setConfirmDelete(encId);
+      setTimeout(() => setConfirmDelete(prev => prev === encId ? null : prev), 4000);
+      return;
+    }
+    setConfirmDelete(null);
     try {
       await api.delete('/encaissements/' + encId);
       showMsg('success', 'Encaissement supprimé');
@@ -169,28 +170,21 @@ export default function Encaissements() {
     }
   };
 
-  // Réimpression papier ET PDF passent désormais toutes les deux par le même
-  // modèle de ticket (genererPdfTicket dans utils/ticket.js) : un seul et
-  // même rendu, qu'on clique sur 🖨️ ou sur 📄. Auparavant, le bouton 🖨️
-  // utilisait un composant séparé (TicketImprimable.jsx + window.print()),
-  // ce qui causait des incohérences entre les deux boutons — supprimé ici.
+  // 🖨️ Impression directe (HTML + @page) — fonctionne sur imprimante thermique
+  // sans le problème de papier blanc causé par le PDF interprété en A4.
   const reimprimerTicket = (enc) => {
-    if (enc.depenses) return; // pas de ticket client pour une dépense
+    if (enc.depenses) return;
     const data = genererDonneesTicketDepuisEncaissement(enc);
-    genererPdfTicket(data);
+    imprimerTicketDirect(data);
   };
 
+  // 📄 Ouvre le ticket en PDF dans un nouvel onglet (pour voir / sauvegarder)
   const telechargerPdfTicket = (enc) => {
     if (enc.depenses) return;
     const data = genererDonneesTicketDepuisEncaissement(enc);
     genererPdfTicket(data);
   };
 
-  // Clic sur "⋯" : si la dépense provient d'une saisie de service personnel
-  // (module Personnel), on redirige vers cet écran pour corriger les heures,
-  // le taux ou le type de paiement — la fenêtre de détail générique ne gère
-  // pas ces champs, qui vivent dans la table service_personnel. Sinon, on
-  // ouvre la fenêtre de détail classique comme avant.
   const ouvrirDetailOuService = async (enc) => {
     if (enc.depenses) {
       try {
@@ -199,31 +193,20 @@ export default function Encaissements() {
         navigate('/personnel?date=' + service.date_service + '&service=' + service.id);
         return;
       } catch (e) {
-        // Pas de service personnel lié (ex: dépense nourriture/loyer) : on
-        // continue normalement vers le détail générique.
+        // Pas de service personnel lié : on continue vers le détail générique.
       }
     }
     setDetailOuvert(enc.id);
   };
 
-  // Repère les anciennes dépenses "Service XXX" encodées avant l'existence du
-  // module Personnel (bouton de migration temporaire, à retirer une fois
-  // l'historique repris).
   const estServiceMigrable = (enc) => {
     if (!enc.depenses || !enc.lignes || !enc.lignes[0]) return false;
     const nomArticle = (enc.lignes[0].article_nom || '').trim().toLowerCase();
     return nomArticle.startsWith('service ');
   };
 
-  // Un "Service XXX" déjà relié à une fiche Personnel (migré ou créé
-  // directement via le nouveau module) : plus besoin du bouton de migration,
-  // juste un indicateur visuel qu'il a déjà été corrigé.
   const estDejaCorrige = (enc) => idsServicesLies.has(enc.id);
 
-  // ⚠️ TEMPORAIRE : relie un ancien encaissement "Service XXX" à une nouvelle
-  // fiche du module Personnel (sans créer de nouvelle dépense), puis ouvre
-  // cette fiche pour corriger les heures et le taux horaire, inconnus dans
-  // l'ancien système. À retirer une fois la reprise de l'historique terminée.
   const migrerVersPersonnel = async (enc) => {
     try {
       const res = await api.post('/service-personnel/depuis-encaissement/' + enc.id);
@@ -235,8 +218,6 @@ export default function Encaissements() {
 
   const encaissementsTries = [...encaissements].sort((a, b) => new Date(a.date_encaissement) - new Date(b.date_encaissement));
 
-  // Styles de cellules avec quadrillage, resserrés pour laisser de la place à
-  // la nouvelle colonne Client sans faire déborder le tableau.
   const thCell = (extra = {}) => ({ padding: '5px 6px', border: BORDURE, ...extra });
   const tdCell = (extra = {}) => ({ padding: '3px 6px', border: BORDURE, ...extra });
 
@@ -337,7 +318,7 @@ export default function Encaissements() {
                     <td style={tdCell()}>
                       <button
                         className="btn"
-                        style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
+                        style={{ minWidth: 36, minHeight: 36, padding: 0, fontSize: 11, cursor: 'pointer' }}
                         title="Voir / corriger le détail"
                         onClick={() => ouvrirDetailOuService(enc)}
                       >⋯</button>
@@ -345,22 +326,28 @@ export default function Encaissements() {
                     <td style={tdCell()}>
                       <button
                         className="btn"
-                        style={{ width: 20, height: 20, padding: 0, fontSize: 11, color: '#dc2626', borderColor: '#fca5a5' }}
+                        style={{
+                          minWidth: 36, minHeight: 36, padding: '0 6px', fontSize: 11, cursor: 'pointer',
+                          color: confirmDelete === enc.id ? 'white' : '#dc2626',
+                          background: confirmDelete === enc.id ? '#dc2626' : 'transparent',
+                          borderColor: '#fca5a5',
+                          fontWeight: confirmDelete === enc.id ? 700 : 400,
+                        }}
                         onClick={() => deleteEncaissement(enc.id)}
-                      >✕</button>
+                      >{confirmDelete === enc.id ? 'Sûr ?' : '✕'}</button>
                     </td>
                     <td style={tdCell({ textAlign: 'center', whiteSpace: 'nowrap' })}>
                       {!enc.depenses ? (
                         <>
                           <button
                             className="btn"
-                            style={{ width: 20, height: 20, padding: 0, fontSize: 11, marginRight: 3 }}
+                            style={{ minWidth: 32, minHeight: 32, padding: 0, fontSize: 11, marginRight: 3, cursor: 'pointer' }}
                             title="Réimprimer le ticket"
                             onClick={() => reimprimerTicket(enc)}
                           >🖨️</button>
                           <button
                             className="btn"
-                            style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
+                            style={{ minWidth: 32, minHeight: 32, padding: 0, fontSize: 11, cursor: 'pointer' }}
                             title="Ticket en PDF"
                             onClick={() => telechargerPdfTicket(enc)}
                           >📄</button>
@@ -369,14 +356,14 @@ export default function Encaissements() {
                         estDejaCorrige(enc) ? (
                           <button
                             className="btn"
-                            style={{ width: 20, height: 20, padding: 0, fontSize: 11, color: '#16a34a', borderColor: '#86efac' }}
+                            style={{ minWidth: 32, minHeight: 32, padding: 0, fontSize: 11, color: '#16a34a', borderColor: '#86efac', cursor: 'pointer' }}
                             title="Déjà repris dans Personnel — cliquer pour ouvrir sa fiche"
                             onClick={() => ouvrirDetailOuService(enc)}
                           >✔</button>
                         ) : (
                           <button
                             className="btn"
-                            style={{ width: 20, height: 20, padding: 0, fontSize: 11, color: '#b45309', borderColor: '#fde68a' }}
+                            style={{ minWidth: 32, minHeight: 32, padding: 0, fontSize: 11, color: '#b45309', borderColor: '#fde68a', cursor: 'pointer' }}
                             title="Migrer (temporaire) vers le module Personnel"
                             onClick={() => migrerVersPersonnel(enc)}
                           >🔧</button>
