@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api/api';
 import TicketImprimable from '../components/TicketImprimable';
 import SelecteurClient from '../components/SelecteurClient';
-import { genererDonneesTicket, genererPdfTicket } from '../utils/ticket';
+import { genererDonneesTicket, genererPdfTicket, imprimerTicket } from '../utils/ticket';
 
 // Normalise un nom de table pour le comparer sans tenir compte de la casse ni
 // des accents : "DÉPENSES", "Dépenses", "depenses" donnent tous "depenses".
@@ -155,11 +155,8 @@ export default function Paiement() {
     setEnregistrement(true);
     try {
       const encaissementCree = await enregistrerEncaissement();
-      setTicketData(construireTicket(encaissementCree));
-      setTimeout(() => {
-        window.print();
-        navigate(urlRetourPlan);
-      }, 200);
+      imprimerTicket(construireTicket(encaissementCree));
+      navigate(urlRetourPlan);
     } catch (e) {
       setError(e.response?.data?.detail || "Erreur lors de l'enregistrement du paiement");
       setEnregistrement(false);
