@@ -142,7 +142,7 @@ function calculerHauteurTicket(data, estTicketFinal) {
   y += 6; // espace
   y += 6; // date
   if (data.table) y += 6;
-  y += data.lignes.length * 5;
+  y += data.lignes.length * 9; // 2 lignes par article (nom + prix)
   y += 2;
   y += 6; // total
   y += 8; // prix/pers
@@ -176,13 +176,11 @@ function creerDocPdf(data, estTicketFinal, largeur) {
   // Date + table
   doc.text(new Date(data.date).toLocaleDateString('fr-BE'), centre, y, { align: 'center' }); y += 6;
   if (data.table) { doc.text(data.table, 4, y); y += 6; }
-  // Articles
-  const maxCar = largeur <= 58 ? 20 : 28;
+  // Articles : quantité + nom sur une ligne, prix sur la ligne suivante
   data.lignes.forEach(l => {
-    const nom = l.nom.length > maxCar ? l.nom.substring(0, maxCar) : l.nom;
-    doc.text(String(l.quantite), 4, y);
-    doc.text(nom, 12, y);
-    doc.text(l.total.toFixed(2), droite, y, { align: 'right' });
+    doc.text(String(l.quantite) + '  ' + l.nom, 4, y);
+    y += 4;
+    doc.text(l.total.toFixed(2) + ' €', droite, y, { align: 'right' });
     y += 5;
   });
   y += 2;
