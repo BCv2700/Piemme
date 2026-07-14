@@ -176,9 +176,36 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
         vente_analysee: !!ligne.vente_analysee,
       });
       showMsg('success', 'Ligne mise à jour');
-      onChanged && onChanged();
+      // Recharger les données fraîches depuis l'API avant de recalculer
+      const res = await api.get('/encaissements/' + encaissementId);
+      await recalculerTotauxDepuis(res.data);
     } catch (e) {
       showMsg('error', errMsg(e, 'Erreur lors de la mise à jour'));
+      load();
+    }
+  };
+
+  // Recalcule montant_total (et montant_carte pour les dépenses) à partir
+  // des lignes fraîchement rechargées, puis sauvegarde et met à jour l'écran.
+  const recalculerTotauxDepuis = async (encFrais) => {
+    const nouveauTotal = (encFrais.lignes || []).reduce(
+      (s, l) => s + Number(l.prix_vente) * Number(l.quantite), 0
+    );
+    const updates = { montant_total: nouveauTotal };
+    if (encFrais.depenses) {
+      updates.montant_carte = nouveauTotal;
+      updates.montant_cash = 0;
+    }
+    updates.cash_analyse = calculerCashAnalyse(
+      encFrais.lignes,
+      updates.montant_cash !== undefined ? 0 : encFrais.montant_cash
+    );
+    try {
+      await api.patch('/encaissements/' + encFrais.id, updates);
+      setEnc({ ...encFrais, ...updates });
+      onChanged && onChanged();
+    } catch (e) {
+      showMsg('error', errMsg(e, 'Erreur lors de la mise à jour des totaux'));
       load();
     }
   };
@@ -224,9 +251,10 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
     setConfirmDeleteLigne(null);
     try {
       await api.delete('/encaissements/lignes/' + ligneId);
-      setEnc(prev => ({ ...prev, lignes: prev.lignes.filter(l => l.id !== ligneId) }));
       showMsg('success', 'Ligne supprimée');
-      onChanged && onChanged();
+      // Recharger et recalculer
+      const res = await api.get('/encaissements/' + encaissementId);
+      await recalculerTotauxDepuis(res.data);
     } catch (e) {
       showMsg('error', errMsg(e, 'Erreur lors de la suppression'));
     }
