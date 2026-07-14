@@ -22,7 +22,7 @@ export default function RecapDepensesAnnuel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   // Tri : { colonne: 'nom' | 'total', sens: 'asc' | 'desc' }
-  const [tri, setTri] = useState({ colonne: 'nom', sens: 'asc' });
+  const [tri, setTri] = useState({ colonne: 'total', sens: 'desc' });
 
   const changerAnnee = (a) => {
     setAnnee(a);
