@@ -21,6 +21,8 @@ export default function RecapDepensesAnnuel() {
   const [encaissements, setEncaissements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // Tri : { colonne: 'nom' | 'total', sens: 'asc' | 'desc' }
+  const [tri, setTri] = useState({ colonne: 'nom', sens: 'asc' });
 
   const changerAnnee = (a) => {
     setAnnee(a);
@@ -81,6 +83,30 @@ export default function RecapDepensesAnnuel() {
   const fmt = (n) => Number(n).toFixed(2);
   const fmtZ = (n) => { const v = Number(n); return Math.abs(v) < 0.005 ? '' : v.toFixed(2); };
 
+  // Liste triée selon le critère actif
+  const fournisseursTries = useMemo(() => {
+    return [...fournisseurs].sort((a, b) => {
+      if (tri.colonne === 'total') {
+        const diff = totauxFournisseur[a] - totauxFournisseur[b];
+        return tri.sens === 'asc' ? diff : -diff;
+      }
+      const cmp = a.localeCompare(b, 'fr');
+      return tri.sens === 'asc' ? cmp : -cmp;
+    });
+  }, [fournisseurs, totauxFournisseur, tri]);
+
+  const basculerTri = (colonne) => {
+    setTri(prev => ({
+      colonne,
+      sens: prev.colonne === colonne && prev.sens === 'asc' ? 'desc' : 'asc',
+    }));
+  };
+
+  const indicateurTri = (colonne) => {
+    if (tri.colonne !== colonne) return '';
+    return tri.sens === 'asc' ? ' ▲' : ' ▼';
+  };
+
   // Clic sur un montant → ouvrir l'historique filtré dépenses pour ce mois
   const ouvrirHistorique = (mois) => {
     const debut = dateKey(annee, mois, 1);
@@ -116,13 +142,23 @@ export default function RecapDepensesAnnuel() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ background: '#fafaf8' }}>
-                  <th style={thCell({ textAlign: 'left', position: 'sticky', left: 0, background: '#fafaf8', zIndex: 1, minWidth: 140 })}>
-                    Fournisseur / Catégorie
+                  <th
+                    style={thCell({ textAlign: 'left', position: 'sticky', left: 0, background: '#fafaf8', zIndex: 1, minWidth: 140, cursor: 'pointer', userSelect: 'none' })}
+                    onClick={() => basculerTri('nom')}
+                    title="Trier par nom"
+                  >
+                    Fournisseur / Catégorie{indicateurTri('nom')}
                   </th>
                   {MOIS_NOMS_COURTS.map((m, i) => (
                     <th key={i} style={thCell({ textAlign: 'right', minWidth: 68 })}>{m}</th>
                   ))}
-                  <th style={thCell({ textAlign: 'right', minWidth: 80 })}>Total</th>
+                  <th
+                    style={thCell({ textAlign: 'right', minWidth: 80, cursor: 'pointer', userSelect: 'none' })}
+                    onClick={() => basculerTri('total')}
+                    title="Trier par total"
+                  >
+                    Total{indicateurTri('total')}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -150,7 +186,7 @@ export default function RecapDepensesAnnuel() {
                 </tr>
 
                 {/* Lignes par fournisseur */}
-                {fournisseurs.map(f => (
+                {fournisseursTries.map(f => (
                   <tr key={f}>
                     <td style={tdCell({ textAlign: 'left', whiteSpace: 'nowrap', fontWeight: 500, position: 'sticky', left: 0, background: 'white', zIndex: 1 })}>
                       {f}
