@@ -294,7 +294,7 @@ export default function Caddy() {
     };
   };
 
-  const imprimerTicket = (contenu) => {
+  const imprimerTicketCuisine = (contenu) => {
     const fenetre = window.open('', '_blank', 'width=400,height=600');
     if (!fenetre) {
       setError("Impossible d'ouvrir la fenêtre d'impression (pop-up bloqué ?)");
@@ -357,7 +357,7 @@ export default function Caddy() {
       return;
     }
     setError('');
-    imprimerTicket(construireContenuTicket(lignesCuisineNonImprimees));
+    imprimerTicketCuisine(construireContenuTicket(lignesCuisineNonImprimees));
     await marquerImprimees(lignesCuisineNonImprimees);
   };
 
@@ -367,7 +367,7 @@ export default function Caddy() {
       return;
     }
     setError('');
-    imprimerTicket(construireContenuTicket(lignesCuisineTotales));
+    imprimerTicketCuisine(construireContenuTicket(lignesCuisineTotales));
   };
 
   const handleVoirPdf = () => {
@@ -443,6 +443,48 @@ export default function Caddy() {
 
   const total = lignes.reduce((sum, l) => sum + Number(l.prix_unitaire) * Number(l.quantite), 0);
 
+  // Paiement express pour les dépenses : crée l'encaissement automatiquement
+  // (tout en carte, sans ticket, sans passer par l'écran Paiement) puis
+  // retour au plan de salle.
+  const payerDepenseExpress = async () => {
+    if (lignes.length === 0) {
+      setError('Aucune dépense à enregistrer');
+      return;
+    }
+    setError('');
+    const todayStr = (() => {
+      const d = new Date();
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    })();
+    const dateEncodage = retourDate || todayStr;
+    try {
+      await api.post('/encaissements/', {
+        table_nom: table.nom,
+        client_id: null,
+        montant_carte: total,
+        montant_cash: 0,
+        montant_total: total,
+        cash_analyse: 0,
+        nb_personnes: 1,
+        emporte: false,
+        nom_reservation_archive: null,
+        date_encaissement: dateEncodage + 'T12:00:00',
+        depenses: true,
+        lignes: lignes.map(l => ({
+          article_id: l.article_id,
+          article_nom: nomArticle(l.article_id),
+          quantite: l.quantite,
+          prix_vente: l.prix_unitaire,
+          tva: l.tva,
+          vente_analysee: true,
+        })),
+      });
+      navigate(urlRetourPlan);
+    } catch (e) {
+      setError(errMsg(e, "Erreur lors de l'enregistrement de la dépense"));
+    }
+  };
+
   const thCell = (extra = {}) => ({ padding: '5px 6px', border: BORDURE, ...extra });
   const tdCell = (extra = {}) => ({ padding: '3px 6px', border: BORDURE, ...extra });
 
@@ -504,9 +546,12 @@ export default function Caddy() {
             <button
               className="btn"
               style={{ background: '#15803d', color: 'white', fontWeight: 600 }}
-              onClick={() => navigate('/paiement/' + tableId + (retourDate ? '?retourDate=' + retourDate : ''))}
+              onClick={estEcranDepense
+                ? payerDepenseExpress
+                : () => navigate('/paiement/' + tableId + (retourDate ? '?retourDate=' + retourDate : ''))
+              }
             >
-              Payer →
+              {estEcranDepense ? '✓ Enregistrer' : 'Payer →'}
             </button>
           </div>
         </div>
