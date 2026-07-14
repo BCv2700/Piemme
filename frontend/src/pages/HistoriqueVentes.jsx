@@ -19,27 +19,23 @@ const BORDURE = '1px solid #e5e5e0';
 
 export default function HistoriqueVentes() {
   const [searchParams] = useSearchParams();
-  // Lit la date transmise par le Plan de salle (NavBar) au montage du composant.
-  // S'il n'y en a pas (accès direct à /historique), on retombe sur aujourd'hui.
   const dateInitiale = searchParams.get('date') || todayKey();
-  // Plage de dates transmise depuis le récap mensuel (bouton "Dépenses") :
-  // si présente, on démarre directement en mode plage sur ce mois.
   const debutInitial = searchParams.get('debut');
   const finInitial = searchParams.get('fin');
   const modePlageInitial = !!(debutInitial && finInitial);
+  const fournisseurInitial = searchParams.get('fournisseur') || '';
 
   const [modePlage, setModePlage] = useState(modePlageInitial);
   const [dateUnique, setDateUnique] = useState(dateInitiale);
   const [dateDebut, setDateDebut] = useState(debutInitial || dateInitiale);
   const [dateFin, setDateFin] = useState(finInitial || dateInitiale);
-  // Filtre "Dépenses uniquement", activé depuis le bouton Dépenses du récap.
-  // Pré-rempli depuis l'URL (?depenses=1), mais modifiable ensuite via la case à cocher.
   const [filtreDepenses, setFiltreDepenses] = useState(searchParams.get('depenses') === '1');
+  const [filtreFournisseur, setFiltreFournisseur] = useState(fournisseurInitial);
   const [encaissements, setEncaissements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
-  const [detailOuvert, setDetailOuvert] = useState(null); // id de l'encaissement affiché dans la modale, ou null
+  const [detailOuvert, setDetailOuvert] = useState(null);
 
   const effectiveDebut = modePlage ? dateDebut : dateUnique;
   const effectiveFin = modePlage ? dateFin : dateUnique;
@@ -67,15 +63,13 @@ export default function HistoriqueVentes() {
     return fallback;
   };
 
-  // Déplie les encaissements + leurs lignes en une liste plate, une entrée par article vendu,
-  // triée par date d'encaissement puis par id de ligne (ordre d'ajout).
-  // Si filtreDepenses est actif, on ne garde que les lignes des encaissements de type dépense
-  // (enc.depenses === true) ; sinon, comportement habituel : tout est affiché.
   const lignesAPlat = useMemo(() => {
     const rows = [];
     encaissements.forEach(enc => {
       if (filtreDepenses && !enc.depenses) return;
       (enc.lignes || []).forEach(ligne => {
+        // Filtre par fournisseur (nom d'article) si actif
+        if (filtreFournisseur && (ligne.article_nom || '').trim() !== filtreFournisseur) return;
         rows.push({ enc, ligne });
       });
     });
@@ -86,7 +80,7 @@ export default function HistoriqueVentes() {
       return a.ligne.id - b.ligne.id;
     });
     return rows;
-  }, [encaissements, filtreDepenses]);
+  }, [encaissements, filtreDepenses, filtreFournisseur]);
 
   const majLigneLocal = (encId, ligneId, champ, valeur) => {
     setEncaissements(prev => prev.map(e => {
@@ -111,12 +105,6 @@ export default function HistoriqueVentes() {
     }
   };
 
-  // cash_analyse = part CASH des lignes cochées "Analysée".
-  // Règle (b1) : somme des lignes analysées (prix_vente × quantité), mais
-  // PLAFONNÉE au montant réellement payé en espèces (montant_cash), et jamais
-  // négative. Ainsi un ticket payé entièrement en carte donne 0, et le cash
-  // analysé ne dépasse jamais le cash encaissé. Identique à la règle de la
-  // modale de détail, pour rester cohérent où qu'on coche "Analysée".
   const syncCashAnalyse = async (encId, lignesMaj, montantCash) => {
     const sommeAnalysee = lignesMaj.reduce(
       (s, l) => s + (l.vente_analysee ? Number(l.prix_vente) * Number(l.quantite) : 0), 0
@@ -232,6 +220,16 @@ export default function HistoriqueVentes() {
             />
             Dépenses uniquement
           </label>
+          {filtreFournisseur && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#b45309', background: '#fef3c7', padding: '3px 10px', borderRadius: 6 }}>
+              {filtreFournisseur}
+              <button
+                onClick={() => setFiltreFournisseur('')}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: '#b45309', fontWeight: 700, padding: 0 }}
+                title="Retirer le filtre fournisseur"
+              >✕</button>
+            </span>
+          )}
           <span style={{ marginLeft: 'auto', fontSize: 13, color: '#888' }}>
             {lignesAPlat.length} ligne{lignesAPlat.length !== 1 ? 's' : ''} · Total : <strong style={{ color: '#111' }}>{totalPeriode.toFixed(2)} €</strong>
           </span>

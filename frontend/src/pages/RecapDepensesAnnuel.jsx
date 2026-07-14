@@ -108,10 +108,13 @@ export default function RecapDepensesAnnuel() {
   };
 
   // Clic sur un montant → ouvrir l'historique filtré dépenses pour ce mois
-  const ouvrirHistorique = (mois) => {
+  // Si fournisseur est spécifié, filtre aussi par nom d'article
+  const ouvrirHistorique = (mois, fournisseur) => {
     const debut = dateKey(annee, mois, 1);
     const fin = dateKey(annee, mois, joursDansMois(annee, mois));
-    navigate('/historique?debut=' + debut + '&fin=' + fin + '&depenses=1');
+    let url = '/historique?debut=' + debut + '&fin=' + fin + '&depenses=1';
+    if (fournisseur) url += '&fournisseur=' + encodeURIComponent(fournisseur);
+    navigate(url);
   };
 
   const thCell = (extra = {}) => ({ padding: '6px 8px', border: BORDURE, fontSize: 12, ...extra });
@@ -202,8 +205,8 @@ export default function RecapDepensesAnnuel() {
                             cursor: val > 0 ? 'pointer' : 'default',
                             textDecoration: val > 0 ? 'underline dotted' : 'none',
                           })}
-                          onClick={() => val > 0 && ouvrirHistorique(m)}
-                          title={val > 0 ? 'Voir le détail dans l\'historique' : ''}
+                          onClick={() => val > 0 && ouvrirHistorique(m, f)}
+                          title={val > 0 ? 'Voir les dépenses "' + f + '" de ce mois' : ''}
                         >
                           {fmtZ(val)}
                         </td>
