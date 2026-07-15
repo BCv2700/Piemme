@@ -108,7 +108,7 @@ export default function NavBar() {
     navigate('/login');
   };
 
-  const cheminsGestion = ['/articles', '/achats', '/clients', '/composants', '/encaissements-mois'];
+  const cheminsGestion = ['/articles', '/achats', '/clients', '/composants', '/encaissements-mois', '/controle'];
   const cheminsRapports = ['/cout-matiere', '/reservations', '/historique'];
   const cheminsStatistiques = ['/statistiques/montants-annuels', '/statistiques/plats-demandes', '/statistiques/frequentation'];
 
@@ -132,6 +132,7 @@ export default function NavBar() {
         <Link to="/composants" style={itemMenuStyle('/composants')}>Composants</Link>
         <Link to="/clients" style={itemMenuStyle('/clients')}>Clients</Link>
         <Link to="/encaissements-mois" style={itemMenuStyle('/encaissements-mois')}>Encaissements (mois)</Link>
+        <Link to="/controle" style={itemMenuStyle('/controle')}>🔍 Contrôle</Link>
       </MenuDeroulant>
 
       <MenuDeroulant label="Rapports" actif={cheminsRapports.includes(location.pathname)}>
