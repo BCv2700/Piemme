@@ -43,6 +43,7 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
   // pas toujours sur Safari iPad).
   const [confirmDeleteEnc, setConfirmDeleteEnc] = useState(false);
   const [confirmDeleteLigne, setConfirmDeleteLigne] = useState(null);
+  const [ajoutEnCours, setAjoutEnCours] = useState(false);
 
   const showMsg = (type, text) => {
     setMsg({ type, text });
@@ -207,6 +208,31 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
     } catch (e) {
       showMsg('error', errMsg(e, 'Erreur lors de la mise à jour des totaux'));
       load();
+    }
+  };
+
+  // Ajoute une ligne vide à compléter directement dans le tableau.
+  // Important : on ne recalcule PAS les totaux ici (la ligne vaut 0), sinon
+  // le Total de l'encaissement serait écrasé avant que la ligne soit remplie.
+  // Le recalcul se fera automatiquement dès que la ligne sera éditée.
+  const ajouterLigne = async () => {
+    if (ajoutEnCours) return;
+    setAjoutEnCours(true);
+    try {
+      await api.post('/encaissements/' + enc.id + '/lignes', {
+        article_nom: '',
+        quantite: 1,
+        prix_vente: 0,
+        tva: 21,
+        vente_analysee: true,
+      });
+      const res = await api.get('/encaissements/' + encaissementId);
+      setEnc(res.data);
+      showMsg('success', 'Ligne ajoutée — complétez le nom et le prix');
+    } catch (e) {
+      showMsg('error', errMsg(e, 'Erreur lors de l\'ajout de la ligne'));
+    } finally {
+      setAjoutEnCours(false);
     }
   };
 
@@ -428,7 +454,7 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6, fontSize: 13, color: '#888' }}>
               Total des lignes : <strong style={{ marginLeft: 4, color: '#111' }}>{total.toFixed(2)} €</strong>
             </div>
-            <div style={{ border: BORDURE, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
+            <div style={{ border: BORDURE, borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, tableLayout: 'fixed' }}>
                 <colgroup>
                   <col style={{ width: '29%' }} />
@@ -531,6 +557,17 @@ export default function DetailEncaissementModal({ encaissementId, onClose, onCha
                   )}
                 </tbody>
               </table>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <button
+                className="btn"
+                style={{ fontSize: 12, minHeight: 36, padding: '0 14px', cursor: 'pointer' }}
+                onClick={ajouterLigne}
+                disabled={ajoutEnCours}
+              >
+                {ajoutEnCours ? 'Ajout...' : '➕ Ajouter une ligne'}
+              </button>
             </div>
 
           </>
