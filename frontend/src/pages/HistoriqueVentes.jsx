@@ -67,9 +67,21 @@ export default function HistoriqueVentes() {
     const rows = [];
     encaissements.forEach(enc => {
       if (filtreDepenses && !enc.depenses) return;
-      (enc.lignes || []).forEach(ligne => {
-        // Filtre par fournisseur (nom d'article) si actif
-        if (filtreFournisseur && (ligne.article_nom || '').trim() !== filtreFournisseur) return;
+      const lignes = enc.lignes || [];
+
+      // Encaissement SANS lignes de détail → ligne synthétique.
+      // Il correspond à la catégorie "Autre" du récap annuel.
+      if (lignes.length === 0) {
+        if (filtreFournisseur && filtreFournisseur !== 'Autre') return;
+        rows.push({ enc, ligne: null });
+        return;
+      }
+
+      lignes.forEach(ligne => {
+        // Filtre par fournisseur (nom d'article) si actif.
+        // Les lignes au nom vide comptent comme "Autre".
+        const nomLigne = (ligne.article_nom || '').trim() || 'Autre';
+        if (filtreFournisseur && nomLigne !== filtreFournisseur) return;
         rows.push({ enc, ligne });
       });
     });
@@ -77,7 +89,7 @@ export default function HistoriqueVentes() {
       const dA = new Date(a.enc.date_encaissement).getTime();
       const dB = new Date(b.enc.date_encaissement).getTime();
       if (dA !== dB) return dA - dB;
-      return a.ligne.id - b.ligne.id;
+      return (a.ligne ? a.ligne.id : 0) - (b.ligne ? b.ligne.id : 0);
     });
     return rows;
   }, [encaissements, filtreDepenses, filtreFournisseur]);
@@ -148,7 +160,8 @@ export default function HistoriqueVentes() {
     }
   };
 
-  const totalPeriode = lignesAPlat.reduce((s, { ligne }) => s + Number(ligne.prix_vente) * Number(ligne.quantite), 0);
+  const totalPeriode = lignesAPlat.reduce((s, { enc, ligne }) =>
+    s + (ligne ? Number(ligne.prix_vente) * Number(ligne.quantite) : Math.abs(Number(enc.montant_total || 0))), 0);
 
   // Styles de cellules avec quadrillage
   const thCell = (extra = {}) => ({ padding: '6px 10px', border: BORDURE, ...extra });
@@ -258,7 +271,7 @@ export default function HistoriqueVentes() {
                 </tr>
               </thead>
               <tbody>
-                {lignesAPlat.map(({ enc, ligne }) => (
+                {lignesAPlat.map(({ enc, ligne }) => ligne ? (
                   <tr key={ligne.id}>
                     <td
                       style={tdCell({ color: '#2563eb', cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted' })}
@@ -327,6 +340,29 @@ export default function HistoriqueVentes() {
                         style={{ width: 15, height: 15, cursor: 'pointer' }}
                       />
                     </td>
+                    <td style={tdCell({ color: '#666' })}>{enc.table_nom || '—'}</td>
+                    <td style={tdCell({ color: '#666' })}>{enc.nom_reservation_archive || '—'}</td>
+                  </tr>
+                ) : (
+                  <tr key={'enc-' + enc.id} style={{ background: '#fffbeb' }}>
+                    <td
+                      style={tdCell({ color: '#2563eb', cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted' })}
+                      onClick={() => setDetailOuvert(enc.id)}
+                      title="Voir / corriger le détail de cet encaissement"
+                    >
+                      {enc.id}
+                    </td>
+                    <td style={tdCell()}></td>
+                    <td style={tdCell({ whiteSpace: 'nowrap', color: '#666' })}>
+                      {new Date(enc.date_encaissement).toLocaleString('fr-BE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </td>
+                    <td colSpan={4} style={tdCell({ color: '#b45309', fontStyle: 'italic' })}>
+                      Encaissement sans détail — cliquer sur la réf pour compléter
+                    </td>
+                    <td style={tdCell({ textAlign: 'right', fontWeight: 600 })}>
+                      {Math.abs(Number(enc.montant_total || 0)).toFixed(2)} €
+                    </td>
+                    <td style={tdCell()}></td>
                     <td style={tdCell({ color: '#666' })}>{enc.table_nom || '—'}</td>
                     <td style={tdCell({ color: '#666' })}>{enc.nom_reservation_archive || '—'}</td>
                   </tr>

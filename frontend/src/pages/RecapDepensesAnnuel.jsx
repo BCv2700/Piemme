@@ -55,8 +55,10 @@ export default function RecapDepensesAnnuel() {
       const d = new Date(enc.date_encaissement);
       if (d.getFullYear() !== annee) return;
       const mois = d.getMonth() + 1;
-      // Le nom du fournisseur/catégorie est le nom de l'article de la première ligne
-      const nomFournisseur = (enc.lignes && enc.lignes[0] ? enc.lignes[0].article_nom : 'Autre').trim();
+      // Le nom du fournisseur/catégorie est le nom de l'article de la première ligne.
+      // Encaissement sans lignes OU avec un nom vide → catégorie "Autre".
+      const premierNom = enc.lignes && enc.lignes[0] ? (enc.lignes[0].article_nom || '') : '';
+      const nomFournisseur = premierNom.trim() || 'Autre';
       const montant = Math.abs(Number(enc.montant_total || 0));
 
       if (!map[nomFournisseur]) {

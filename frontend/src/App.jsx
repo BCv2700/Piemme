@@ -15,6 +15,7 @@ import HistoriqueVentes from './pages/HistoriqueVentes';
 import Encaissements from './pages/Encaissements';
 import RecapMensuel from './pages/RecapMensuel';
 import RecapDepensesAnnuel from './pages/RecapDepensesAnnuel';
+import ControleEncaissements from './pages/ControleEncaissements';
 import MontantsAnnuels from './pages/MontantsAnnuels';
 import PlatsDemandes from './pages/PlatsDemandes';
 import Frequentation from './pages/Frequentation';
@@ -59,6 +60,7 @@ function App() {
         <Route path="/encaissements" element={<RouteProtegee><MiseEnPage><Encaissements /></MiseEnPage></RouteProtegee>} />
         <Route path="/recap" element={<RouteProtegee><MiseEnPage><RecapMensuel /></MiseEnPage></RouteProtegee>} />
         <Route path="/depenses-annuelles" element={<RouteProtegee><MiseEnPage><RecapDepensesAnnuel /></MiseEnPage></RouteProtegee>} />
+        <Route path="/controle" element={<RouteProtegee><MiseEnPage><ControleEncaissements /></MiseEnPage></RouteProtegee>} />
         <Route path="/statistiques/montants-annuels" element={<RouteProtegee><MiseEnPage><MontantsAnnuels /></MiseEnPage></RouteProtegee>} />
         <Route path="/statistiques/plats-demandes" element={<RouteProtegee><MiseEnPage><PlatsDemandes /></MiseEnPage></RouteProtegee>} />
         <Route path="/statistiques/frequentation" element={<RouteProtegee><MiseEnPage><Frequentation /></MiseEnPage></RouteProtegee>} />
