@@ -197,9 +197,9 @@ const validerSaisieDepense = async () => {
       await api.post('/encaissements/', {
         table_nom: table ? table.nom : 'DÉPENSES',
         client_id: null,
-        montant_carte: montant,
+        montant_carte: -montant,
         montant_cash: 0,
-        montant_total: montant,
+        montant_total: -montant,
         cash_analyse: 0,
         nb_personnes: 1,
         emporte: false,
