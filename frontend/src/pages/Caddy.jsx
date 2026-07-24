@@ -28,7 +28,10 @@ export default function Caddy() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const retourDate = searchParams.get('retourDate');
-  const urlRetourPlan = retourDate ? '/?date=' + retourDate : '/';
+  const retour = searchParams.get('retour');
+  const urlRetourPlan = retour === 'encaissements'
+    ? '/encaissements' + (retourDate ? '?date=' + retourDate : '')
+    : retourDate ? '/?date=' + retourDate : '/';
 
   const [table, setTable] = useState(null);
   const [toutesLesTables, setToutesLesTables] = useState([]);

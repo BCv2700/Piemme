@@ -259,7 +259,7 @@ export default function Encaissements() {
           <button
             className="btn"
             style={{ background: '#b91c1c', color: 'white', borderColor: '#b91c1c', fontWeight: 600 }}
-            onClick={() => navigate('/caddy/14')}
+            onClick={() => navigate('/caddy/14?retour=encaissements&retourDate=' + dateUnique)}
           >
             + Dépense
           </button>
