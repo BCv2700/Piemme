@@ -56,11 +56,16 @@ export default function Reservations() {
   }, []);
 
   // Charge les positions des tables quand le formulaire s'ouvre ou que la date change
+const [reservationsJourForm, setReservationsJourForm] = useState([]);
+
   useEffect(() => {
     if (!form) return;
     api.get('/table-positions-jour/', { params: { date_jour: form.date_reservation } })
       .then(r => setPositionsJour(r.data))
       .catch(() => setPositionsJour([]));
+    api.get('/reservations/', { params: { date_reservation: form.date_reservation } })
+      .then(r => setReservationsJourForm(r.data.filter(r => r.statut !== 'annulee')))
+      .catch(() => setReservationsJourForm([]));
   }, [form?.date_reservation]);
 
   useEffect(() => {
@@ -493,7 +498,11 @@ export default function Reservations() {
                         width,
                         height,
                         borderRadius: table.forme === 'rond' ? '50%' : 10,
-                        background: isSelected ? '#111' : '#e5e5e0',
+                        background: isSelected
+                        ? '#111'
+                        : reservationsJourForm.some(r => r.table_id === table.id && r.id !== form.id)
+                        ? '#f59e0b'
+                        : '#e5e5e0',
                         color: isSelected ? 'white' : '#333',
                         display: 'flex',
                         alignItems: 'center',
