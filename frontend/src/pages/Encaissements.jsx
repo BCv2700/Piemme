@@ -245,8 +245,8 @@ export default function Encaissements() {
 
         {error && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
-        {/* Navigation jour par jour */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+{/* Navigation + pastilles TVA sur une seule barre */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
           <button className="btn" onClick={() => setDateUnique(d => addDays(d, -1))}>−</button>
           <input
             type="date"
@@ -256,33 +256,37 @@ export default function Encaissements() {
           />
           <button className="btn" onClick={() => setDateUnique(d => addDays(d, 1))}>+</button>
           <button className="btn" onClick={() => setDateUnique(todayKey())} style={{ color: '#888' }}>Aujourd'hui</button>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 18, alignItems: 'baseline' }}>
-            <span style={{ fontSize: 13, color: '#888' }}>
-              Cash analysé : <strong style={{ fontSize: 14, color: '#b45309' }}>{totalCashAnalyse.toFixed(2)} €</strong>
-            </span>
-            <span style={{ fontSize: 14, fontWeight: 700 }}>{totalJour.toFixed(2)} €</span>
-          </div>
-        </div>
+          <button
+            className="btn"
+            style={{ background: '#b91c1c', color: 'white', borderColor: '#b91c1c', fontWeight: 600 }}
+            onClick={() => navigate('/caddy/14')}
+          >
+            + Dépense
+          </button>
 
-        {/* Répartition par TVA et paiement */}
-        <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-          {TAUX_TVA.map(taux => (
-            <div key={taux} style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '8px 14px', minWidth: 90 }}>
-              <div style={{ fontSize: 11, color: '#888' }}>TVA {taux}%</div>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>{repartitionTva[taux].toFixed(2)} €</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginLeft: 8 }}>
+            {TAUX_TVA.map(taux => (
+              <div key={taux} style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '4px 10px', minWidth: 70 }}>
+                <div style={{ fontSize: 10, color: '#888' }}>TVA {taux}%</div>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>{repartitionTva[taux].toFixed(2)} €</div>
+              </div>
+            ))}
+            <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '4px 10px', minWidth: 70 }}>
+              <div style={{ fontSize: 10, color: '#888' }}>Cash</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>{totalCash.toFixed(2)} €</div>
             </div>
-          ))}
-          <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '8px 14px', minWidth: 90 }}>
-            <div style={{ fontSize: 11, color: '#888' }}>Cash</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#16a34a' }}>{totalCash.toFixed(2)} €</div>
-          </div>
-          <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '8px 14px', minWidth: 90 }}>
-            <div style={{ fontSize: 11, color: '#888' }}>Carte</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#2563eb' }}>{totalCarte.toFixed(2)} €</div>
-          </div>
-          <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '8px 14px', minWidth: 90 }}>
-            <div style={{ fontSize: 11, color: '#888' }}>Cash analysé</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#b45309' }}>{totalCashAnalyse.toFixed(2)} €</div>
+            <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '4px 10px', minWidth: 70 }}>
+              <div style={{ fontSize: 10, color: '#888' }}>Carte</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#2563eb' }}>{totalCarte.toFixed(2)} €</div>
+            </div>
+            <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 8, padding: '4px 10px', minWidth: 70 }}>
+              <div style={{ fontSize: 10, color: '#888' }}>Cash analysé</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#b45309' }}>{totalCashAnalyse.toFixed(2)} €</div>
+            </div>
+            <div style={{ background: '#111', borderRadius: 8, padding: '4px 10px', minWidth: 70 }}>
+              <div style={{ fontSize: 10, color: '#aaa' }}>Total</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>{totalJour.toFixed(2)} €</div>
+            </div>
           </div>
         </div>
 
