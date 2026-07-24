@@ -45,6 +45,7 @@ export default function Reservations() {
   const [reservationsByDate, setReservationsByDate] = useState({});
   const [monthCounts, setMonthCounts] = useState({});
   const [tables, setTables] = useState([]);
+  const [positionsJour, setPositionsJour] = useState([]);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState(null);
   const [form, setForm] = useState(null);
@@ -54,7 +55,14 @@ export default function Reservations() {
     api.get('/tables/').then(r => setTables(r.data)).catch(() => {});
   }, []);
 
-  // Charge le total de couverts (personnes) par jour pour tout le mois affiché (pour les pastilles du calendrier)
+  // Charge les positions des tables quand le formulaire s'ouvre ou que la date change
+  useEffect(() => {
+    if (!form) return;
+    api.get('/table-positions-jour/', { params: { date_jour: form.date_reservation } })
+      .then(r => setPositionsJour(r.data))
+      .catch(() => setPositionsJour([]));
+  }, [form?.date_reservation]);
+
   useEffect(() => {
     const start = new Date(viewYear, viewMonth, 1);
     const end = new Date(viewYear, viewMonth + 1, 0);
@@ -98,7 +106,6 @@ export default function Reservations() {
 
   const calendarDays = useMemo(() => {
     const firstOfMonth = new Date(viewYear, viewMonth, 1);
-    // Lundi = 0 ... Dimanche = 6
     const startOffset = (firstOfMonth.getDay() + 6) % 7;
     const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
     const cells = [];
@@ -178,6 +185,24 @@ export default function Reservations() {
     const t = tables.find(t => t.id === id);
     return t ? t.nom : null;
   };
+
+  // Calcule la position effective de chaque table (exception du jour ou position de référence)
+  const tablesAvecPosition = tables
+    .filter(t => t.nom !== 'DÉPENSES')
+    .map(t => {
+      const exception = positionsJour.find(p => p.table_id === t.id);
+      return {
+        ...t,
+        pos_x: exception && exception.pos_x != null ? exception.pos_x : t.pos_x,
+        pos_y: exception && exception.pos_y != null ? exception.pos_y : t.pos_y,
+      };
+    });
+
+  // Dimensions du cadre du mini plan
+  const planDims = tablesAvecPosition.reduce((acc, t) => ({
+    width: Math.max(acc.width, t.pos_x + (t.forme === 'rond' ? 64 : t.capacite >= 6 ? 100 : 80) + 16),
+    height: Math.max(acc.height, t.pos_y + 64 + 16),
+  }), { width: 300, height: 200 });
 
   return (
     <div>
@@ -333,94 +358,161 @@ export default function Reservations() {
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
+          padding: 16,
         }}>
-          <div style={{ background: 'white', borderRadius: 10, padding: 24, width: 360 }}>
-            <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 16 }}>
-              {form.id ? 'Modifier la réservation' : 'Nouvelle réservation'}
-            </div>
+          <div style={{
+            background: 'white', borderRadius: 10, padding: 24,
+            display: 'flex', gap: 24, maxWidth: '95vw', maxHeight: '90vh',
+            overflowY: 'auto',
+          }}>
 
-            <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Nom du client</label>
-            <input
-              type="text"
-              value={form.nom_client}
-              onChange={(e) => setForm({ ...form, nom_client: e.target.value })}
-              placeholder="Ex: Dupont"
-              style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, marginBottom: 14, boxSizing: 'border-box' }}
-            />
+            {/* Colonne gauche : formulaire */}
+            <div style={{ flex: '0 0 340px' }}>
+              <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 16 }}>
+                {form.id ? 'Modifier la réservation' : 'Nouvelle réservation'}
+              </div>
 
-            <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Date</label>
-                <input
-                  type="date"
-                  value={form.date_reservation}
-                  onChange={(e) => setForm({ ...form, date_reservation: e.target.value })}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, boxSizing: 'border-box' }}
-                />
-              </div>
-              <div style={{ width: 100 }}>
-                <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Heure</label>
-                <input
-                  type="time"
-                  value={form.heure}
-                  onChange={(e) => setForm({ ...form, heure: e.target.value })}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, boxSizing: 'border-box' }}
-                />
-              </div>
-            </div>
+              <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Nom du client</label>
+              <input
+                type="text"
+                value={form.nom_client}
+                onChange={(e) => setForm({ ...form, nom_client: e.target.value })}
+                placeholder="Ex: Dupont"
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, marginBottom: 14, boxSizing: 'border-box' }}
+              />
 
-            <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
-              <div style={{ width: 100 }}>
-                <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Personnes</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={form.nb_personnes}
-                  onChange={(e) => setForm({ ...form, nb_personnes: e.target.value })}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, boxSizing: 'border-box' }}
-                />
+              <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Date</label>
+                  <input
+                    type="date"
+                    value={form.date_reservation}
+                    onChange={(e) => setForm({ ...form, date_reservation: e.target.value })}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div style={{ width: 100 }}>
+                  <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Heure</label>
+                  <input
+                    type="time"
+                    value={form.heure}
+                    onChange={(e) => setForm({ ...form, heure: e.target.value })}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, boxSizing: 'border-box' }}
+                  />
+                </div>
               </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Table (optionnel)</label>
-                <select
-                  value={form.table_id}
-                  onChange={(e) => setForm({ ...form, table_id: e.target.value })}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, boxSizing: 'border-box' }}
+
+              <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+                <div style={{ width: 100 }}>
+                  <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Personnes</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={form.nb_personnes}
+                    onChange={(e) => setForm({ ...form, nb_personnes: e.target.value })}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Table sélectionnée</label>
+                  <div style={{
+                    padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd',
+                    fontSize: 13, background: '#f9f9f9', color: form.table_id ? '#111' : '#aaa',
+                  }}>
+                    {form.table_id ? (tableNomById(Number(form.table_id)) || '—') : '— Cliquez sur le plan —'}
+                  </div>
+                </div>
+              </div>
+
+              <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Remarque</label>
+              <input
+                type="text"
+                value={form.remarque}
+                onChange={(e) => setForm({ ...form, remarque: e.target.value })}
+                placeholder="Ex: allergie noix, anniversaire..."
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, marginBottom: 14, boxSizing: 'border-box' }}
+              />
+
+              <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Statut</label>
+              <select
+                value={form.statut}
+                onChange={(e) => setForm({ ...form, statut: e.target.value })}
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, marginBottom: 20, boxSizing: 'border-box' }}
+              >
+                {Object.entries(STATUT_LABEL).map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn" style={{ flex: 1 }} onClick={() => setForm(null)}>Annuler</button>
+                <button
+                  className="btn"
+                  style={{ flex: 1, background: '#22c55e', color: 'white', borderColor: '#22c55e' }}
+                  onClick={saveForm}
                 >
-                  <option value="">— Aucune —</option>
-                  {tables.slice().sort((a, b) => a.nom.localeCompare(b.nom, undefined, { numeric: true })).map(t => (
-                    <option key={t.id} value={t.id}>{t.nom}</option>
-                  ))}
-                </select>
+                  Enregistrer
+                </button>
               </div>
             </div>
 
-            <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Remarque</label>
-            <input
-              type="text"
-              value={form.remarque}
-              onChange={(e) => setForm({ ...form, remarque: e.target.value })}
-              placeholder="Ex: allergie noix, anniversaire..."
-              style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, marginBottom: 14, boxSizing: 'border-box' }}
-            />
-
-            <label style={{ fontSize: 12, color: '#888', display: 'block', marginBottom: 4 }}>Statut</label>
-            <select
-              value={form.statut}
-              onChange={(e) => setForm({ ...form, statut: e.target.value })}
-              style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, marginBottom: 20, boxSizing: 'border-box' }}
-            >
-              {Object.entries(STATUT_LABEL).map(([key, label]) => (
-                <option key={key} value={key}>{label}</option>
-              ))}
-            </select>
-
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn" style={{ flex: 1 }} onClick={() => setForm(null)}>Annuler</button>
-              <button className="btn" style={{ flex: 1, background: '#22c55e', color: 'white', borderColor: '#22c55e' }} onClick={saveForm}>
-                Enregistrer
-              </button>
+            {/* Colonne droite : mini plan de salle cliquable */}
+            <div style={{ flex: '1 1 auto' }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: '#888', marginBottom: 8 }}>
+                Choisir une table · cliquez pour sélectionner
+                {form.table_id && (
+                  <button
+                    onClick={() => setForm({ ...form, table_id: '' })}
+                    style={{ marginLeft: 10, fontSize: 11, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Effacer
+                  </button>
+                )}
+              </div>
+              <div style={{
+                position: 'relative',
+                width: planDims.width,
+                height: planDims.height,
+                background: '#f9f9f7',
+                border: '1px solid #e5e5e0',
+                borderRadius: 10,
+                overflow: 'hidden',
+              }}>
+                {tablesAvecPosition.map(table => {
+                  const isSelected = String(form.table_id) === String(table.id);
+                  const width = table.forme === 'rond' ? 64 : (table.capacite >= 6 ? 100 : 80);
+                  const height = table.forme === 'rond' ? 64 : 44;
+                  return (
+                    <div
+                      key={table.id}
+                      onClick={() => setForm({ ...form, table_id: isSelected ? '' : String(table.id) })}
+                      style={{
+                        position: 'absolute',
+                        left: table.pos_x,
+                        top: table.pos_y,
+                        width,
+                        height,
+                        borderRadius: table.forme === 'rond' ? '50%' : 10,
+                        background: isSelected ? '#111' : '#e5e5e0',
+                        color: isSelected ? 'white' : '#333',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        boxShadow: isSelected ? '0 0 0 3px #22c55e' : '0 1px 3px rgba(0,0,0,0.1)',
+                        userSelect: 'none',
+                        transition: 'background 0.15s',
+                      }}
+                    >
+                      {table.nom}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
+
           </div>
         </div>
       )}
