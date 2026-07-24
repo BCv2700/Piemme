@@ -10,7 +10,7 @@ export const COORDONNEES_RESTAURANT = {
 
 // ─── Largeur de papier mémorisée par poste (localStorage) ──────────────────
 const CLE_LARGEUR = 'lolive_largeur_papier';
-const LARGEUR_PAR_DEFAUT = 58;
+const LARGEUR_PAR_DEFAUT = 80;
 
 export function obtenirLargeurPapier() {
   try { const v = localStorage.getItem(CLE_LARGEUR); if (v === '80' || v === '72') return Number(v); } catch (e) {}
@@ -235,8 +235,9 @@ export async function imprimerTicket(data, estTicketFinal = true) {
     const config = qz.configs.create(imprimante, {
       margins: 0,
       scaleContent: false,
+      size: { width: largeur, units: 'mm' },
     });
-    await qz.print(config, [{ type: 'pixel', format: 'pdf', flavor: 'base64', data: base64 }]);
+    await qz.print(config, [{ type: 'pixel', format: 'pdf', flavor: 'base64', data: base64, options: { pageWidth: largeur, pageHeight: hauteur, units: 'mm' } }]
   } catch (err) {
     console.warn('QZ Tray indisponible, ouverture PDF :', err.message || err);
     // Fallback : ouvrir le PDF dans un nouvel onglet (Mac + mPOP10)
@@ -249,8 +250,9 @@ export async function imprimerTicket(data, estTicketFinal = true) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export function genererPdfTicket(data, estTicketFinal = true) {
-  const largeur = obtenirLargeurPapier();
-  const doc = creerDocPdf(data, estTicketFinal, largeur);
-  const blobUrl = doc.output('bloburl');
+const hauteur = calculerHauteurTicket(data, estTicketFinal);
+const doc = creerDocPdf(data, estTicketFinal, largeur);
+const dataUri = doc.output('datauristring');
+const base64 = dataUri.split(',')[1];
   window.open(blobUrl, '_blank');
 }
