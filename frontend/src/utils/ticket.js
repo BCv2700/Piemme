@@ -237,7 +237,8 @@ export async function imprimerTicket(data, estTicketFinal = true) {
       scaleContent: false,
       size: { width: largeur, units: 'mm' },
     });
-    await qz.print(config, [{ type: 'pixel', format: 'pdf', flavor: 'base64', data: base64, options: { pageWidth: largeur, pageHeight: hauteur, units: 'mm' } }]
+    const hauteur = calculerHauteurTicket(data, estTicketFinal);
+    await qz.print(config, [{ type: 'pixel', format: 'pdf', flavor: 'base64', data: base64, options: { pageWidth: largeur, pageHeight: hauteur, units: 'mm' } }]);
   } catch (err) {
     console.warn('QZ Tray indisponible, ouverture PDF :', err.message || err);
     // Fallback : ouvrir le PDF dans un nouvel onglet (Mac + mPOP10)
@@ -250,9 +251,8 @@ export async function imprimerTicket(data, estTicketFinal = true) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export function genererPdfTicket(data, estTicketFinal = true) {
-const hauteur = calculerHauteurTicket(data, estTicketFinal);
-const doc = creerDocPdf(data, estTicketFinal, largeur);
-const dataUri = doc.output('datauristring');
-const base64 = dataUri.split(',')[1];
+  const largeur = obtenirLargeurPapier();
+  const doc = creerDocPdf(data, estTicketFinal, largeur);
+  const blobUrl = doc.output('bloburl');
   window.open(blobUrl, '_blank');
 }
