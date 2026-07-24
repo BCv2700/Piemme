@@ -177,7 +177,7 @@ export default function Caddy() {
     setSaisieDepense({ article, montant: '' });
   };
 
-  const validerSaisieDepense = async () => {
+const validerSaisieDepense = async () => {
     if (!saisieDepense) return;
     const montant = Number(String(saisieDepense.montant).replace(',', '.'));
     if (!Number.isFinite(montant) || montant <= 0) {
@@ -185,19 +185,37 @@ export default function Caddy() {
       return;
     }
     setError('');
+    const todayStr = (() => {
+      const d = new Date();
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    })();
+    const dateEncodage = retourDate || todayStr;
     try {
-      const res = await api.post('/commandes/', {
-        table_id: Number(tableId),
-        article_id: saisieDepense.article.id,
-        quantite: -1,
-        prix_unitaire: montant,
-        tva: saisieDepense.article.tva,
+      await api.post('/encaissements/', {
+        table_nom: table ? table.nom : 'DÉPENSES',
+        client_id: null,
+        montant_carte: montant,
+        montant_cash: 0,
+        montant_total: montant,
+        cash_analyse: 0,
+        nb_personnes: 1,
         emporte: false,
+        nom_reservation_archive: null,
+        date_encaissement: dateEncodage + 'T12:00:00',
+        depenses: true,
+        lignes: [{
+          article_id: saisieDepense.article.id,
+          article_nom: saisieDepense.article.nom,
+          quantite: -1,
+          prix_vente: montant,
+          tva: saisieDepense.article.tva,
+          vente_analysee: true,
+        }],
       });
-      setLignes(prev => [...prev, res.data]);
       setSaisieDepense(null);
+      navigate(urlRetourPlan);
     } catch (e) {
-      setError(errMsg(e, "Erreur lors de l'ajout de la dépense"));
+      setError(errMsg(e, "Erreur lors de l'enregistrement de la dépense"));
     }
   };
 
