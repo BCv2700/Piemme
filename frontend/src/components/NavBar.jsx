@@ -109,7 +109,7 @@ export default function NavBar() {
   };
 
   const cheminsGestion = ['/articles', '/achats', '/clients', '/composants', '/encaissements-mois', '/controle'];
-  const cheminsRapports = ['/cout-matiere', '/reservations', '/historique'];
+  const cheminsRapports = ['/cout-matiere', '/historique'];
   const cheminsStatistiques = ['/statistiques/montants-annuels', '/statistiques/plats-demandes', '/statistiques/frequentation'];
 
   return (
@@ -122,8 +122,8 @@ export default function NavBar() {
       background: 'white',
     }}>
       <Link to={urlPlanSalle} style={linkStyle('/')}>Plan de salle</Link>
-      <Link to={'/encaissements' + suffixeDate} style={linkStyle('/encaissements')}>Encaissements</Link>
-      <Link to={'/recap' + suffixeDate} style={linkStyle('/recap')}>Récap</Link>
+      <Link to="/reservations" style={linkStyle('/reservations')}>Réservations</Link>
+      <Link to={'/encaissements' + suffixeDate} style={linkStyle('/encaissements')}>Encaissements</Link>      <Link to={'/recap' + suffixeDate} style={linkStyle('/recap')}>Récap</Link>
       <Link to="/personnel" style={linkStyle('/personnel')}>Personnel</Link>
 
       <MenuDeroulant label="Gestion" actif={cheminsGestion.includes(location.pathname)}>
@@ -136,10 +136,9 @@ export default function NavBar() {
       </MenuDeroulant>
 
       <MenuDeroulant label="Rapports" actif={cheminsRapports.includes(location.pathname)}>
-        <Link to="/cout-matiere" style={itemMenuStyle('/cout-matiere')}>Coût matière</Link>
-        <Link to="/reservations" style={itemMenuStyle('/reservations')}>Réservations</Link>
-        <Link to={'/historique' + suffixeDate} style={itemMenuStyle('/historique')}>Historique</Link>
-      </MenuDeroulant>
+<Link to="/cout-matiere" style={itemMenuStyle('/cout-matiere')}>Coût matière</Link>
+<Link to={'/historique' + suffixeDate} style={itemMenuStyle('/historique')}>Historique</Link> 
+     </MenuDeroulant>
 
       <MenuDeroulant label="Statistiques" actif={cheminsStatistiques.includes(location.pathname)}>
         <Link to="/statistiques/montants-annuels" style={itemMenuStyle('/statistiques/montants-annuels')}>Montants annuels</Link>
