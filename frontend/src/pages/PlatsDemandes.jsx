@@ -4,14 +4,23 @@ import api from '../api/api';
 const MOIS_ABR = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
 const BORDURE = '1px solid #e5e5e0';
 
+const CATEGORIES = [
+  { label: 'Tout', codes: null },
+  { label: 'Nourriture', codes: [7002] },
+  { label: 'Boissons', codes: [7001, 7003, 7004] },
+  { label: 'Divers', codes: [7005] },
+  { label: 'Non classé', codes: [null] },
+];
+
 const thCell = (extra = {}) => ({ padding: '5px 8px', border: BORDURE, ...extra });
 const tdCell = (extra = {}) => ({ padding: '3px 8px', border: BORDURE, ...extra });
 const fmtQte = (n) => (Number(n) % 1 === 0 ? Number(n).toString() : Number(n).toFixed(2));
 
 export default function PlatsDemandes() {
   const [annee, setAnnee] = useState(new Date().getFullYear());
-  const [donnees, setDonnees] = useState([]); // [{ nom, mois, total }]
+  const [donnees, setDonnees] = useState([]);
   const [recherche, setRecherche] = useState('');
+  const [categorie, setCategorie] = useState('Tout');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -24,25 +33,35 @@ export default function PlatsDemandes() {
       .finally(() => setLoading(false));
   }, [annee]);
 
+  const donneesFiltrees = useMemo(() => {
+    let result = donnees;
+    const cat = CATEGORIES.find(c => c.label === categorie);
+    if (cat && cat.codes !== null) {
+      result = result.filter(d => {
+        if (cat.codes.includes(null)) return d.code_vente == null;
+        return cat.codes.includes(d.code_vente);
+      });
+    }
+    if (recherche.trim()) {
+      const r = recherche.toLowerCase();
+      result = result.filter(d => d.nom.toLowerCase().includes(r));
+    }
+    return result;
+  }, [donnees, recherche, categorie]);
+
   const totauxParMois = useMemo(() => {
     const t = {};
     for (let m = 1; m <= 12; m++) t[m] = 0;
-    donnees.forEach(d => {
+    donneesFiltrees.forEach(d => {
       for (let m = 1; m <= 12; m++) t[m] += Number(d.mois[m] || 0);
     });
     return t;
-  }, [donnees]);
+  }, [donneesFiltrees]);
 
   const grandTotal = useMemo(
-    () => donnees.reduce((acc, d) => acc + Number(d.total || 0), 0),
-    [donnees]
+    () => donneesFiltrees.reduce((acc, d) => acc + Number(d.total || 0), 0),
+    [donneesFiltrees]
   );
-
-  const donneesFiltrees = useMemo(() => {
-    if (!recherche.trim()) return donnees;
-    const r = recherche.toLowerCase();
-    return donnees.filter(d => d.nom.toLowerCase().includes(r));
-  }, [donnees, recherche]);
 
   return (
     <div>
@@ -53,6 +72,24 @@ export default function PlatsDemandes() {
             Plats les plus demandés {annee}
           </h2>
           <button className="btn" onClick={() => setAnnee(a => a + 1)}>+</button>
+
+          <div style={{ display: 'flex', gap: 6, marginLeft: 8 }}>
+            {CATEGORIES.map(cat => (
+              <button
+                key={cat.label}
+                className="btn"
+                onClick={() => setCategorie(cat.label)}
+                style={{
+                  background: categorie === cat.label ? '#111' : 'white',
+                  color: categorie === cat.label ? 'white' : '#333',
+                  fontWeight: categorie === cat.label ? 600 : 400,
+                }}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
           <input
             type="text"
             placeholder="Filtrer par nom..."
@@ -60,7 +97,7 @@ export default function PlatsDemandes() {
             onChange={(e) => setRecherche(e.target.value)}
             style={{
               padding: '6px 12px', borderRadius: 8, border: '1px solid #ddd',
-              fontSize: 13, marginLeft: 12, minWidth: 200,
+              fontSize: 13, minWidth: 200,
             }}
           />
           <span style={{ fontSize: 13, color: '#888' }}>

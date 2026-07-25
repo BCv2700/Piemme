@@ -45,48 +45,44 @@ def plats_demandes(
     db: Session = Depends(get_db),
     utilisateur: Utilisateur = Depends(get_current_user),
 ):
-    """
-    Quantité vendue par plat et par mois, pour l'année demandée.
-    Regroupé par article_nom (texte archivé sur la ligne), car article_id
-    n'a été renseigné systématiquement qu'à partir de mai/juin 2026 : un
-    regroupement par article_id exclurait silencieusement tout l'historique
-    antérieur. Les encaissements de type dépenses sont exclus.
-    Retourne une liste triée par quantité totale décroissante :
-    [{ nom, mois: { "1": qte, ..., "12": qte }, total }]
-    """
+    from app.models.article import Article
     lignes = (
         db.query(
             EncaissementLigne.article_nom,
             extract("month", Encaissement.date_encaissement).label("mois"),
             func.sum(EncaissementLigne.quantite).label("quantite"),
+            Article.code_vente.label("code_vente"),
         )
         .join(Encaissement, EncaissementLigne.encaissement_id == Encaissement.id)
+        .outerjoin(Article, EncaissementLigne.article_id == Article.id)
         .filter(
             extract("year", Encaissement.date_encaissement) == annee,
             Encaissement.depenses == False,  # noqa: E712
             EncaissementLigne.article_nom.isnot(None),
         )
-        .group_by(EncaissementLigne.article_nom, "mois")
+        .group_by(EncaissementLigne.article_nom, "mois", Article.code_vente)
         .all()
     )
 
     data = {}
-    for nom, mois, quantite in lignes:
+    for nom, mois, quantite, code_vente in lignes:
         if nom not in data:
-            data[nom] = {m: 0.0 for m in range(1, 13)}
-        data[nom][int(mois)] = float(quantite or 0)
+            data[nom] = {"mois": {m: 0.0 for m in range(1, 13)}, "code_vente": code_vente}
+        data[nom]["mois"][int(mois)] = float(quantite or 0)
+        if data[nom]["code_vente"] is None and code_vente is not None:
+            data[nom]["code_vente"] = code_vente
 
     resultat = []
-    for nom, mois_dict in data.items():
-        total = sum(mois_dict.values())
+    for nom, info in data.items():
+        total = sum(info["mois"].values())
         resultat.append({
             "nom": nom,
-            "mois": mois_dict,
+            "mois": info["mois"],
             "total": total,
+            "code_vente": info["code_vente"],
         })
     resultat.sort(key=lambda x: x["total"], reverse=True)
     return resultat
-
 
 @router.get("/frequentation/{annee}")
 def frequentation(
