@@ -6,6 +6,10 @@ import os
 load_dotenv()
 
 from app.routers import auth, piemme
+from app.database import Base, engine
+from app.models import utilisateur, piemme as piemme_model
+
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title=os.getenv("APP_NAME", "Piemme"),
