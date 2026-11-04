@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text, extract
 from decimal import Decimal
 from datetime import date, datetime
 import calendar
+import os
 
 from app.database import get_db
 from app.deps import get_current_user
@@ -439,8 +440,11 @@ def tva_trimestre(annee: int, trimestre: int, db: Session = Depends(get_db)):
 
 # ── Crons ─────────────────────────────────────────────────────
 
-@router.get("/check-echeances-factures")
-def check_echeances_factures(db: Session = Depends(get_db)):
+@router.get("/check-echeances-factures", dependencies=[])
+def check_echeances_factures(x_cron_secret: str = Header(default=None), db: Session = Depends(get_db)):
+    cron_secret = os.getenv("CRON_SECRET", "")
+    if not cron_secret or x_cron_secret != cron_secret:
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
     from datetime import date as date_type
     aujourd_hui = date_type.today()
     factures_depassees = (db.query(PiemmeFactureRetard)
@@ -460,8 +464,11 @@ def check_echeances_factures(db: Session = Depends(get_db)):
             "total": sum(f["montant"] for f in liste), "mail_envoye": mail_envoye}
 
 
-@router.get("/check-recurrentes-dues")
-def check_recurrentes_dues(db: Session = Depends(get_db)):
+@router.get("/check-recurrentes-dues", dependencies=[])
+def check_recurrentes_dues(x_cron_secret: str = Header(default=None), db: Session = Depends(get_db)):
+    cron_secret = os.getenv("CRON_SECRET", "")
+    if not cron_secret or x_cron_secret != cron_secret:
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
     from datetime import date as date_type
     aujourd_hui = date_type.today()
     mois_actuel = aujourd_hui.strftime("%Y-%m")
@@ -484,8 +491,11 @@ def check_recurrentes_dues(db: Session = Depends(get_db)):
             "nb": len(a_notifier), "total": sum(i["montant"] for i in liste), "mail_envoye": mail_envoye}
 
 
-@router.get("/check-recette-du-jour")
-def check_recette_du_jour(db: Session = Depends(get_db)):
+@router.get("/check-recette-du-jour", dependencies=[])
+def check_recette_du_jour(x_cron_secret: str = Header(default=None), db: Session = Depends(get_db)):
+    cron_secret = os.getenv("CRON_SECRET", "")
+    if not cron_secret or x_cron_secret != cron_secret:
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
     from datetime import date as date_type
     aujourd_hui = date_type.today()
     if aujourd_hui.weekday() >= 5:
