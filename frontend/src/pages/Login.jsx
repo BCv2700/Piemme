@@ -18,6 +18,7 @@ export default function Login() {
       const res = await api.post('/auth/login', { username, mot_de_passe: motDePasse });
       localStorage.setItem('piemme_token', res.data.access_token);
       localStorage.setItem('piemme_username', res.data.username);
+      localStorage.setItem('piemme_role', res.data.role);
       navigate('/');
     } catch {
       setError("Nom d'utilisateur ou mot de passe incorrect");

@@ -49,6 +49,30 @@ def creer_utilisateur(payload: UtilisateurCreate, db: Session = Depends(get_db),
     return u
 
 
+@router.post("/reset-mot-de-passe")
+def reset_mot_de_passe(payload: dict, db: Session = Depends(get_db), _: Utilisateur = Depends(require_admin)):
+    username = (payload.get("username") or "").strip()
+    nouveau = payload.get("nouveau", "")
+    if not username or not nouveau: raise HTTPException(400, "Champs requis: username, nouveau")
+    if len(nouveau) < 4: raise HTTPException(400, "Le nouveau mot de passe doit faire au moins 4 caractères")
+    utilisateur = db.query(Utilisateur).filter(Utilisateur.username == username).first()
+    if not utilisateur: raise HTTPException(404, "Utilisateur introuvable")
+    utilisateur.mot_de_passe = hasher_mot_de_passe(nouveau); db.commit()
+    return {"ok": True, "message": f"Mot de passe de '{username}' réinitialisé"}
+
+
+@router.put("/utilisateurs/{utilisateur_id}")
+def modifier_utilisateur(utilisateur_id: int, payload: dict, db: Session = Depends(get_db), _: Utilisateur = Depends(require_admin)):
+    u = db.query(Utilisateur).filter(Utilisateur.id == utilisateur_id).first()
+    if not u: raise HTTPException(404, "Utilisateur introuvable")
+    if "actif" in payload: u.actif = payload["actif"]
+    if "role" in payload:
+        if payload["role"] not in ('admin', 'serveur'): raise HTTPException(400, "Rôle: 'admin' ou 'serveur'")
+        u.role = payload["role"]
+    db.commit(); db.refresh(u)
+    return {"ok": True}
+
+
 @router.delete("/utilisateurs/{utilisateur_id}")
 def supprimer_utilisateur(utilisateur_id: int, db: Session = Depends(get_db),
                           current: Utilisateur = Depends(require_admin)):

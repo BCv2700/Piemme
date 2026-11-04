@@ -3,9 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
 
-load_dotenv()
+env_file = os.getenv("ENV_FILE", ".env")
+load_dotenv(env_file)
 
-from app.routers import auth, piemme
+from app.routers import auth, piemme, admin
 from app.database import Base, engine
 from app.models import utilisateur, piemme as piemme_model
 
@@ -26,6 +27,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(piemme.router)
+app.include_router(admin.router)
 
 @app.get("/")
 def root():

@@ -37,6 +37,8 @@ export default function PiemmeMensuel() {
   };
 
   const pct=data?.pct_economie||15, r=data?.resume||{}, e=data?.enveloppes||{}, weeks=buildWeeks();
+  const role = localStorage.getItem('piemme_role');
+  const isLocal = (import.meta.env.VITE_API_URL||'').includes('localhost');
 
   const getPdf = async (url, filename, inline=false) => {
     const base = import.meta.env.VITE_API_URL || 'http://localhost:8001';
@@ -61,6 +63,8 @@ export default function PiemmeMensuel() {
         {[{id:'calendrier',l:'Calendrier'},{id:'graphique_mois',l:'📈 Mois'},{id:'graphique_annuel',l:'📈 Année'},{id:'depenses_mois',l:'Dépenses'},{id:'factures',l:'Factures'},{id:'annuel',l:'Année'},{id:'tva',l:'TVA'},{id:'depenses',l:'Récurr.'},{id:'enveloppes',l:'Enveloppes'}].map(o=>(
           <button key={o.id} onClick={()=>setOnglet(o.id)} style={{padding:'3px 8px',borderRadius:4,border:'none',fontSize:10,fontWeight:onglet===o.id?700:400,background:onglet===o.id?'#1d4ed8':'#e5e7eb',color:onglet===o.id?'white':'#555',cursor:'pointer'}}>{o.l}</button>
         ))}
+        {isLocal && <span style={{padding:'2px 7px',borderRadius:4,background:'#fef3c7',color:'#92400e',fontSize:10,fontWeight:700,border:'1px solid #fcd34d',letterSpacing:'0.05em'}}>LOCAL</span>}
+        {role==='admin' && <button onClick={()=>window.location.href='/administration'} style={{padding:'3px 8px',borderRadius:4,border:'1px solid #6b7280',fontSize:10,background:'white',color:'#374151',cursor:'pointer',fontWeight:600}}>⚙️ Admin</button>}
         <button onClick={()=>nav(-1)} style={sNav}>◀</button>
         <span style={{fontSize:12,fontWeight:700,color:'#0D1B2A',minWidth:90,textAlign:'center'}}>{MOIS[mois]} {annee}</span>
         <button onClick={()=>nav(1)} style={sNav}>▶</button>
