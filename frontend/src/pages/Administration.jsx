@@ -216,6 +216,9 @@ export default function Administration() {
 
   return (
     <div style={{ padding: '20px 24px', maxWidth: 700 }}>
+      <div style={{ marginBottom: 12 }}>
+        <button onClick={() => window.location.href='/'} style={{ padding:'4px 12px', borderRadius:6, border:'1px solid #ddd', background:'white', color:'#374151', fontSize:12, fontWeight:600, cursor:'pointer' }}>← Retour au calendrier</button>
+      </div>
       <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>⚙️ Administration — Piemme</h2>
 
       {/* Badge environnement */}

@@ -39,6 +39,7 @@ export default function PiemmeMensuel() {
   const pct=data?.pct_economie||15, r=data?.resume||{}, e=data?.enveloppes||{}, weeks=buildWeeks();
   const role = localStorage.getItem('piemme_role');
   const isLocal = (import.meta.env.VITE_API_URL||'').includes('localhost');
+  const deconnecter = () => { localStorage.clear(); window.location.href = '/login'; };
 
   const getPdf = async (url, filename, inline=false) => {
     const base = import.meta.env.VITE_API_URL || 'http://localhost:8001';
@@ -65,6 +66,7 @@ export default function PiemmeMensuel() {
         ))}
         {isLocal && <span style={{padding:'2px 7px',borderRadius:4,background:'#fef3c7',color:'#92400e',fontSize:10,fontWeight:700,border:'1px solid #fcd34d',letterSpacing:'0.05em'}}>LOCAL</span>}
         {role==='admin' && <button onClick={()=>window.location.href='/administration'} style={{padding:'3px 8px',borderRadius:4,border:'1px solid #6b7280',fontSize:10,background:'white',color:'#374151',cursor:'pointer',fontWeight:600}}>⚙️ Admin</button>}
+        <button onClick={deconnecter} style={{padding:'3px 8px',borderRadius:4,border:'1px solid #fca5a5',fontSize:10,background:'white',color:'#dc2626',cursor:'pointer',fontWeight:600}}>⎋ Déco</button>
         <button onClick={()=>nav(-1)} style={sNav}>◀</button>
         <span style={{fontSize:12,fontWeight:700,color:'#0D1B2A',minWidth:90,textAlign:'center'}}>{MOIS[mois]} {annee}</span>
         <button onClick={()=>nav(1)} style={sNav}>▶</button>
