@@ -27,6 +27,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(piemme.router)
+app.include_router(piemme.cron_router)
 app.include_router(admin.router)
 
 @app.get("/")

@@ -15,6 +15,9 @@ from app.services.email_service import envoyer_mail_recette, envoyer_mail_factur
 
 router = APIRouter(prefix="/piemme", tags=["Piemme"], dependencies=[Depends(get_current_user)])
 
+# Router séparé pour les crons : pas de JWT, vérification par X-Cron-Secret en interne
+cron_router = APIRouter(prefix="/piemme", tags=["Piemme Crons"])
+
 TVA_PCT = Decimal("21")
 NB_JOURS_ENVELOPPE = 20
 
@@ -440,7 +443,7 @@ def tva_trimestre(annee: int, trimestre: int, db: Session = Depends(get_db)):
 
 # ── Crons ─────────────────────────────────────────────────────
 
-@router.get("/check-echeances-factures", dependencies=[])
+@cron_router.get("/check-echeances-factures")
 def check_echeances_factures(x_cron_secret: str = Header(default=None), db: Session = Depends(get_db)):
     cron_secret = os.getenv("CRON_SECRET", "")
     if not cron_secret or x_cron_secret != cron_secret:
@@ -464,7 +467,7 @@ def check_echeances_factures(x_cron_secret: str = Header(default=None), db: Sess
             "total": sum(f["montant"] for f in liste), "mail_envoye": mail_envoye}
 
 
-@router.get("/check-recurrentes-dues", dependencies=[])
+@cron_router.get("/check-recurrentes-dues")
 def check_recurrentes_dues(x_cron_secret: str = Header(default=None), db: Session = Depends(get_db)):
     cron_secret = os.getenv("CRON_SECRET", "")
     if not cron_secret or x_cron_secret != cron_secret:
@@ -491,7 +494,7 @@ def check_recurrentes_dues(x_cron_secret: str = Header(default=None), db: Sessio
             "nb": len(a_notifier), "total": sum(i["montant"] for i in liste), "mail_envoye": mail_envoye}
 
 
-@router.get("/check-recette-du-jour", dependencies=[])
+@cron_router.get("/check-recette-du-jour")
 def check_recette_du_jour(x_cron_secret: str = Header(default=None), db: Session = Depends(get_db)):
     cron_secret = os.getenv("CRON_SECRET", "")
     if not cron_secret or x_cron_secret != cron_secret:
