@@ -17,6 +17,112 @@ body { font-family: sans-serif; background: #f5f5f0; color: #333; }
 .stat-card span { font-size: 24px; font-weight: 600; color: #1a1a1a; }
 .ticket-caisse { display: none; }
 
+/* ── Layout sidebar ── */
+.layout {
+  min-height: 100vh;
+}
+
+/* Topbar toujours visible (hamburger + titre) */
+.mobile-topbar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 48px;
+  background: white;
+  border-bottom: 1px solid #e5e5e0;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 12px;
+  z-index: 198;
+}
+
+.mobile-topbar-titre {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.hamburger {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px;
+  color: #374151;
+  line-height: 1;
+}
+
+/* Sidebar : cachée par défaut, ouverte sur clic hamburger */
+.sidebar {
+  width: 240px;
+  background: white;
+  border-right: 1px solid #e5e5e0;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0;
+  height: 100vh;
+  z-index: 200;
+  transform: translateX(-100%);
+  transition: transform 0.25s ease;
+  overflow-y: auto;
+}
+
+.sidebar.ouverte {
+  transform: translateX(0);
+}
+
+.sidebar-logo {
+  padding: 16px 16px 10px;
+  border-bottom: 1px solid #e5e5e0;
+}
+
+.nav-section {
+  font-size: 10px;
+  font-weight: 700;
+  color: #aaa;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 14px 16px 4px;
+}
+
+.nav-item {
+  padding: 8px 16px;
+  font-size: 13px;
+  color: #374151;
+  cursor: pointer;
+  border-radius: 6px;
+  margin: 1px 8px;
+  transition: background 0.15s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-item:hover { background: #f3f4f6; }
+.nav-item.active { background: #eff6ff; color: #1d4ed8; font-weight: 600; }
+
+/* Overlay sombre derrière la sidebar ouverte */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.3);
+  z-index: 199;
+}
+
+.sidebar-overlay.visible {
+  display: block;
+}
+
+/* Contenu principal : décalé sous la topbar */
+.main-content {
+  padding-top: 58px;
+  padding-left: 10px;
+  padding-right: 10px;
+  min-width: 0;
+}
+
 @media print {
   body * { visibility: hidden; }
   .ticket-caisse, .ticket-caisse * { visibility: visible; }

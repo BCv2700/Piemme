@@ -5,24 +5,27 @@ const MOIS = ['','Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','
 const JS = ['L','M','M','J','V','S','D'];
 const fmt = (n) => Number(n||0).toFixed(2);
 
-export default function PiemmeMensuel() {
+export default function PiemmeMensuel({ onglet = 'calendrier', setOnglet = () => {}, annee, mois, nav }) {
   const now = new Date();
-  const [annee, setAnnee] = useState(now.getFullYear());
-  const [mois, setMois] = useState(now.getMonth()+1);
+  const [anneeLocal, setAnneeLocal] = useState(now.getFullYear());
+  const [moisLocal, setMoisLocal] = useState(now.getMonth()+1);
+
+  // Si annee/mois/nav sont passés en props, on les utilise, sinon état local
+  const anneeEff = annee ?? anneeLocal;
+  const moisEff  = mois  ?? moisLocal;
+  const navEff   = nav   ?? ((d) => { let m=moisLocal+d, a=anneeLocal; if(m>12){m=1;a++} if(m<1){m=12;a--} setMoisLocal(m);setAnneeLocal(a);setEditCell(null); });
+
   const [data, setData] = useState(null);
   const [editCell, setEditCell] = useState(null);
   const [editVal, setEditVal] = useState('');
-  const [onglet, setOnglet] = useState('calendrier');
 
   const charger = useCallback(async () => {
-    try { setData((await api.get(`/piemme/mois/${annee}/${mois}`)).data); } catch(e) { console.error(e); }
-  }, [annee, mois]);
+    try { setData((await api.get(`/piemme/mois/${anneeEff}/${moisEff}`)).data); } catch(e) { console.error(e); }
+  }, [anneeEff, moisEff]);
   useEffect(() => { charger(); }, [charger]);
-
-  const nav = (d) => { let m=mois+d, a=annee; if(m>12){m=1;a++} if(m<1){m=12;a--} setMois(m);setAnnee(a);setEditCell(null); };
   const getJ = (d) => data?.jours.find(j=>j.jour===d);
   const sauver = async (jour, field, value) => {
-    const ds=`${annee}-${String(mois).padStart(2,'0')}-${String(jour).padStart(2,'0')}`;
+    const ds=`${anneeEff}-${String(moisEff).padStart(2,'0')}-${String(jour).padStart(2,'0')}`;
     const e=getJ(jour);
     await api.post('/piemme/jour',{date:ds,recette:field==='recette'?(parseFloat(value)||0):(e?.recette||0),depense:field==='depense'?(parseFloat(value)||0):(e?.depense||0)});
     setEditCell(null); charger();
@@ -30,51 +33,17 @@ export default function PiemmeMensuel() {
 
   const buildWeeks = () => {
     if(!data) return [];
-    const fd=new Date(annee,mois-1,1).getDay(), off=fd===0?6:fd-1, nb=data.nb_jours;
+    const fd=new Date(anneeEff,moisEff-1,1).getDay(), off=fd===0?6:fd-1, nb=data.nb_jours;
     const ws=[]; let w=Array(7).fill(null);
     for(let d=1;d<=nb;d++){const p=(off+d-1)%7;if(d>1&&p===0){ws.push(w);w=Array(7).fill(null)}w[p]=d}
     ws.push(w); return ws;
   };
 
   const pct=data?.pct_economie||15, r=data?.resume||{}, e=data?.enveloppes||{}, weeks=buildWeeks();
-  const role = localStorage.getItem('piemme_role');
-  const isLocal = (import.meta.env.VITE_API_URL||'').includes('localhost');
-  const deconnecter = () => { localStorage.clear(); window.location.href = '/login'; };
 
-  const getPdf = async (url, filename, inline=false) => {
-    const base = import.meta.env.VITE_API_URL || 'http://localhost:8001';
-    const token = localStorage.getItem('piemme_token');
-    const rep = await fetch(`${base}${url}`, { headers: { Authorization: `Bearer ${token}` } });
-    if (!rep.ok) return;
-    const blob = await rep.blob();
-    const objUrl = URL.createObjectURL(blob);
-    if (inline) {
-      window.open(objUrl, '_blank');
-      setTimeout(() => URL.revokeObjectURL(objUrl), 60000);
-    } else {
-      const a = document.createElement('a'); a.href = objUrl; a.download = filename;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      URL.revokeObjectURL(objUrl);
-    }
-  };
 
   return (
     <div style={{padding:'0.25rem 0.5rem'}}>
-      <div style={{display:'flex',gap:4,marginBottom:4,alignItems:'center',flexWrap:'wrap'}}>
-        {[{id:'calendrier',l:'Calendrier'},{id:'graphique_mois',l:'📈 Mois'},{id:'graphique_annuel',l:'📈 Année'},{id:'depenses_mois',l:'Dépenses'},{id:'factures',l:'Factures'},{id:'annuel',l:'Année'},{id:'tva',l:'TVA'},{id:'depenses',l:'Récurr.'},{id:'enveloppes',l:'Enveloppes'}].map(o=>(
-          <button key={o.id} onClick={()=>setOnglet(o.id)} style={{padding:'3px 8px',borderRadius:4,border:'none',fontSize:10,fontWeight:onglet===o.id?700:400,background:onglet===o.id?'#1d4ed8':'#e5e7eb',color:onglet===o.id?'white':'#555',cursor:'pointer'}}>{o.l}</button>
-        ))}
-        {isLocal && <span style={{padding:'2px 7px',borderRadius:4,background:'#fef3c7',color:'#92400e',fontSize:10,fontWeight:700,border:'1px solid #fcd34d',letterSpacing:'0.05em'}}>LOCAL</span>}
-        {role==='admin' && <button onClick={()=>window.location.href='/administration'} style={{padding:'3px 8px',borderRadius:4,border:'1px solid #6b7280',fontSize:10,background:'white',color:'#374151',cursor:'pointer',fontWeight:600}}>⚙️ Admin</button>}
-        <button onClick={deconnecter} style={{padding:'3px 8px',borderRadius:4,border:'1px solid #fca5a5',fontSize:10,background:'white',color:'#dc2626',cursor:'pointer',fontWeight:600}}>⎋ Déco</button>
-        <button onClick={()=>nav(-1)} style={sNav}>◀</button>
-        <span style={{fontSize:12,fontWeight:700,color:'#0D1B2A',minWidth:90,textAlign:'center'}}>{MOIS[mois]} {annee}</span>
-        <button onClick={()=>nav(1)} style={sNav}>▶</button>
-        <button onClick={()=>getPdf(`/piemme/mois/${annee}/${mois}/pdf?inline=true`,``,true)} style={{padding:'3px 8px',borderRadius:4,border:'1px solid #1d4ed8',fontSize:10,background:'white',color:'#1d4ed8',cursor:'pointer',fontWeight:600}}>👁 Mois</button>
-        <button onClick={()=>getPdf(`/piemme/mois/${annee}/${mois}/pdf`,`piemme_${annee}_${String(mois).padStart(2,'0')}.pdf`)} style={{padding:'3px 8px',borderRadius:4,border:'1px solid #1d4ed8',fontSize:10,background:'#1d4ed8',color:'white',cursor:'pointer',fontWeight:600}}>⬇ Mois</button>
-        <button onClick={()=>getPdf(`/piemme/annuel/${annee}/pdf?inline=true`,``,true)} style={{padding:'3px 8px',borderRadius:4,border:'1px solid #d97706',fontSize:10,background:'white',color:'#d97706',cursor:'pointer',fontWeight:600}}>👁 Année</button>
-        <button onClick={()=>getPdf(`/piemme/annuel/${annee}/pdf`,`piemme_annuel_${annee}.pdf`)} style={{padding:'3px 8px',borderRadius:4,border:'1px solid #d97706',fontSize:10,background:'#d97706',color:'white',cursor:'pointer',fontWeight:600}}>⬇ Année</button>
-      </div>
 
       {onglet==='calendrier' && data && <>
         <div style={{fontSize:13,padding:'5px 10px',marginBottom:6,background:'#f9fafb',borderRadius:4,display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
@@ -130,18 +99,18 @@ export default function PiemmeMensuel() {
           <div style={{marginTop:6,fontSize:10,display:'flex',alignItems:'center',gap:6}}>
             <span>% épargne :</span>
             <input type="number" step="0.5" value={pct}
-              onChange={ev=>api.post('/piemme/config',{annee,mois,pct_economie:parseFloat(ev.target.value)||15}).then(charger)}
+              onChange={ev=>api.post('/piemme/config',{annee:anneeEff,mois:moisEff,pct_economie:parseFloat(ev.target.value)||15}).then(charger)}
               style={{width:45,padding:'2px 4px',border:'1px solid #ddd',borderRadius:3,fontSize:10}} />%
           </div>
         </div>
       </>}
 
-      {onglet==='graphique_mois' && <GraphiqueMois annee={annee} moisActif={mois} dataMois={data} />}
-      {onglet==='graphique_annuel' && <GraphiqueAnnuel annee={annee} moisActif={mois} />}
-      {onglet==='depenses_mois' && data && <DepensesMois data={data} annee={annee} mois={mois} onSaved={charger} />}
+      {onglet==='graphique_mois' && <GraphiqueMois annee={anneeEff} moisActif={moisEff} dataMois={data} />}
+      {onglet==='graphique_annuel' && <GraphiqueAnnuel annee={anneeEff} moisActif={moisEff} />}
+      {onglet==='depenses_mois' && data && <DepensesMois data={data} annee={anneeEff} mois={moisEff} onSaved={charger} />}
       {onglet==='factures' && <FacturesEnRetard onPaye={charger} />}
       {onglet==='tva' && data && <TVA data={data} />}
-      {onglet==='annuel' && <Annuel annee={annee} />}
+      {onglet==='annuel' && <Annuel annee={anneeEff} />}
       {onglet==='depenses' && <Recurrentes onSaved={charger} />}
       {onglet==='enveloppes' && <Enveloppes />}
     </div>
