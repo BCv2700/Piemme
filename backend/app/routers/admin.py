@@ -11,6 +11,7 @@ from datetime import datetime
 from app.database import get_db
 from app.deps import get_current_user, require_admin
 from app.models.utilisateur import Utilisateur
+from app.models.piemme import PiemmeParametres
 
 router = APIRouter(prefix="/admin", tags=["Administration"])
 
@@ -22,7 +23,38 @@ TABLES = [
     "piemme_depense_detail",
     "piemme_enveloppe",
     "piemme_facture_retard",
+    "piemme_parametres",
 ]
+
+CLE_EMAILS = "emails_automatiques_actifs"
+
+
+def _get_emails_actifs(db: Session) -> bool:
+    """Retourne True si les mails automatiques sont activés (défaut : True)."""
+    p = db.query(PiemmeParametres).filter(PiemmeParametres.cle == CLE_EMAILS).first()
+    return p is None or p.valeur.lower() == "true"
+
+
+@router.get("/parametres/emails")
+def get_emails_actifs(db: Session = Depends(get_db), _: Utilisateur = Depends(get_current_user)):
+    """Retourne l'état d'activation des mails automatiques."""
+    return {"emails_automatiques_actifs": _get_emails_actifs(db)}
+
+
+@router.put("/parametres/emails")
+def set_emails_actifs(payload: dict, db: Session = Depends(get_db), _: Utilisateur = Depends(require_admin)):
+    """Active ou désactive l'envoi automatique des mails (contrôle dépenses & factures en retard)."""
+    actif = payload.get("emails_automatiques_actifs")
+    if not isinstance(actif, bool):
+        raise HTTPException(status_code=422, detail="Le champ 'emails_automatiques_actifs' doit être un booléen.")
+    p = db.query(PiemmeParametres).filter(PiemmeParametres.cle == CLE_EMAILS).first()
+    if p:
+        p.valeur = "true" if actif else "false"
+    else:
+        p = PiemmeParametres(cle=CLE_EMAILS, valeur="true" if actif else "false")
+        db.add(p)
+    db.commit()
+    return {"emails_automatiques_actifs": actif}
 
 
 @router.get("/info")

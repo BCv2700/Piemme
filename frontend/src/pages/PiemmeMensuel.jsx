@@ -588,6 +588,12 @@ function FacturesEnRetard({ onPaye }) {
   const stopEdit=()=>{setEditId(null);setEditField(null);};
   const isEditing=(id,f)=>editId===id&&editField===f;
 
+  const facturesTri=[...factures].sort((a,b)=>{
+    if(!a.date_echeance&&!b.date_echeance) return 0;
+    if(!a.date_echeance) return 1;
+    if(!b.date_echeance) return -1;
+    return new Date(a.date_echeance)-new Date(b.date_echeance);
+  });
   const total=factures.reduce((s,f)=>s+f.montant,0);
   const sEd={fontSize:11,padding:'2px 4px',border:'1px solid #93c5fd',borderRadius:3,boxSizing:'border-box'};
   const sNI={padding:'2px 4px',fontSize:10,border:'1px solid #ccc',borderRadius:3,boxSizing:'border-box'};
@@ -619,7 +625,7 @@ function FacturesEnRetard({ onPaye }) {
             <th style={{padding:'3px 2px',fontSize:10,width:46}}></th>
           </tr></thead>
           <tbody>
-            {factures.map((f,i)=>{
+            {facturesTri.map((f,i)=>{
               const d=new Date(f.date);
               const dateStr=String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
               const today=new Date();today.setHours(0,0,0,0);

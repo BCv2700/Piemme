@@ -10,13 +10,21 @@ import os
 from app.database import get_db
 from app.deps import get_current_user
 from app.models.utilisateur import Utilisateur
-from app.models.piemme import PiemmeJour, PiemmeDepenseRecurrente, PiemmeConfig, PiemmeDepenseDetail, PiemmeFactureRetard, PiemmeEnveloppe
+from app.models.piemme import PiemmeJour, PiemmeDepenseRecurrente, PiemmeConfig, PiemmeDepenseDetail, PiemmeFactureRetard, PiemmeEnveloppe, PiemmeParametres
 from app.services.email_service import envoyer_mail_recette, envoyer_mail_facture, envoyer_mail_recette_manquante, envoyer_mail_echeances_depassees, envoyer_mail_recurrentes_dues
 
 router = APIRouter(prefix="/piemme", tags=["Piemme"], dependencies=[Depends(get_current_user)])
 
 # Router séparé pour les crons : pas de JWT, vérification par X-Cron-Secret en interne
 cron_router = APIRouter(prefix="/piemme", tags=["Piemme Crons"])
+
+_CLE_EMAILS = "emails_automatiques_actifs"
+
+
+def _get_emails_actifs(db: Session) -> bool:
+    """Retourne True si l'envoi automatique de mails est activé (défaut : True)."""
+    p = db.query(PiemmeParametres).filter(PiemmeParametres.cle == _CLE_EMAILS).first()
+    return p is None or p.valeur.lower() == "true"
 
 TVA_PCT = Decimal("21")
 NB_JOURS_ENVELOPPE = 20
@@ -456,6 +464,8 @@ def check_echeances_factures(x_cron_secret: str = Header(default=None), db: Sess
         .order_by(PiemmeFactureRetard.date_echeance).all())
     if not factures_depassees:
         return {"ok": True, "echeances_depassees": False, "date": str(aujourd_hui)}
+    if not _get_emails_actifs(db):
+        return {"ok": True, "echeances_depassees": True, "nb_factures": len(factures_depassees), "mail_envoye": False, "emails_desactives": True}
     liste = [{"id": f.id, "date": str(f.date), "montant": float(f.montant),
               "fournisseur": f.fournisseur, "remarque": f.remarque,
               "date_echeance": str(f.date_echeance), "aujourd_hui": str(aujourd_hui)}
@@ -482,6 +492,8 @@ def check_recurrentes_dues(x_cron_secret: str = Header(default=None), db: Sessio
     a_notifier = [i for i in candidates if i.email_envoye_mois != mois_actuel]
     if not a_notifier:
         return {"ok": True, "recurrentes_dues": False, "mois": mois_actuel}
+    if not _get_emails_actifs(db):
+        return {"ok": True, "recurrentes_dues": True, "mois": mois_actuel, "nb": len(a_notifier), "mail_envoye": False, "emails_desactives": True}
     liste = [{"id": i.id, "libelle": i.libelle, "montant": float(i.montant),
               "jour_du_mois": i.jour_du_mois, "mois_actuel": mois_actuel} for i in a_notifier]
     try: mail_envoye = envoyer_mail_recurrentes_dues(liste)
@@ -506,6 +518,8 @@ def check_recette_du_jour(x_cron_secret: str = Header(default=None), db: Session
     jour = db.query(PiemmeJour).filter(PiemmeJour.date == aujourd_hui).first()
     if jour and float(jour.recette) > 0:
         return {"ok": True, "recette_encodee": True, "date": str(aujourd_hui), "montant": float(jour.recette)}
+    if not _get_emails_actifs(db):
+        return {"ok": True, "recette_encodee": False, "date": str(aujourd_hui), "mail_envoye": False, "emails_desactives": True}
     try: envoyer_mail_recette_manquante(date_str=str(aujourd_hui)); mail_envoye = True
     except Exception as e:
         import logging; logging.getLogger(__name__).error(f"[PIEMME] Erreur mail: {e}"); mail_envoye = False

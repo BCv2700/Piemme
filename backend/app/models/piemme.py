@@ -69,3 +69,12 @@ class PiemmeFactureRetard(Base):
     fournisseur = Column(String(200), nullable=True)
     remarque = Column(String(255), nullable=True)
     date_echeance = Column(Date, nullable=True)
+
+
+class PiemmeParametres(Base):
+    """Table de paramètres globaux (clé / valeur texte)."""
+    __tablename__ = "piemme_parametres"
+
+    id = Column(Integer, primary_key=True, index=True)
+    cle = Column(String(100), nullable=False, unique=True, index=True)
+    valeur = Column(String(255), nullable=False)

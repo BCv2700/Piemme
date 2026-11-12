@@ -16,6 +16,9 @@ export default function Administration() {
   const [showMdp, setShowMdp] = useState({ ancien: false, nouveau: false, nouveau2: false });
   const [showReset, setShowReset] = useState({ nouveau: false, nouveau2: false });
   const [credsProd, setCredsProd] = useState({ username: '', password: '', visible: false });
+  const [emailsActifs, setEmailsActifs] = useState(null);
+  const [loadingEmails, setLoadingEmails] = useState(false);
+  const [emailsMsg, setEmailsMsg] = useState('');
 
   // ── Utilisateurs ────────────────────────────────────────────────────────
   const [utilisateurs, setUtilisateurs] = useState([]);
@@ -83,6 +86,28 @@ export default function Administration() {
   useEffect(() => {
     api.get('/admin/info').then(r => setInfoEnv(r.data)).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    api.get('/admin/parametres/emails')
+      .then(r => setEmailsActifs(r.data.emails_automatiques_actifs))
+      .catch(() => {});
+  }, []);
+
+  const toggleEmails = async () => {
+    setLoadingEmails(true);
+    setEmailsMsg('');
+    const nouvelEtat = !emailsActifs;
+    try {
+      await api.put('/admin/parametres/emails', { emails_automatiques_actifs: nouvelEtat });
+      setEmailsActifs(nouvelEtat);
+      setEmailsMsg(nouvelEtat ? '✅ Mails automatiques activés.' : '✅ Mails automatiques désactivés.');
+    } catch (e) {
+      setEmailsMsg('❌ ' + (e.response?.data?.detail || e.message));
+    } finally {
+      setLoadingEmails(false);
+      setTimeout(() => setEmailsMsg(''), 3000);
+    }
+  };
 
   const estLocal = infoEnv?.env === 'local';
 
@@ -239,6 +264,30 @@ export default function Administration() {
         ) : (
           <span style={{ fontSize: 12, color: '#aaa' }}>Chargement…</span>
         )}
+      </div>
+
+      {/* ── Carte Mails automatiques ── */}
+      <div style={{ background: 'white', border: '1px solid #e5e5e0', borderRadius: 10, padding: '16px 20px', marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>📧 Mails automatiques</div>
+        <div style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>
+          Active ou désactive l'envoi automatique des mails de contrôle&nbsp;: dépenses récurrentes dues, factures en retard, recette manquante.
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <button
+            onClick={toggleEmails}
+            disabled={loadingEmails || emailsActifs === null}
+            style={{
+              padding: '8px 20px', borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: 'pointer',
+              border: emailsActifs ? '1px solid #16a34a' : '1px solid #dc2626',
+              background: emailsActifs ? '#dcfce7' : '#fee2e2',
+              color: emailsActifs ? '#16a34a' : '#dc2626',
+              opacity: (loadingEmails || emailsActifs === null) ? 0.6 : 1,
+            }}
+          >
+            {emailsActifs === null ? '…' : emailsActifs ? '✅ Mails activés — cliquer pour désactiver' : '🔕 Mails désactivés — cliquer pour activer'}
+          </button>
+        </div>
+        {emailsMsg && <div style={{ marginTop: 10, fontSize: 12, color: emailsMsg.startsWith('✅') ? '#16a34a' : '#dc2626' }}>{emailsMsg}</div>}
       </div>
 
       {/* ── Carte Backup ── */}
