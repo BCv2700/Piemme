@@ -100,7 +100,7 @@ def upsert_jour(payload: dict, db: Session = Depends(get_db)):
         db.add(jour)
     db.commit()
     db.refresh(jour)
-    if "recette" in payload and float(payload["recette"]) > 0:
+    if "recette" in payload and float(payload["recette"]) > 0 and _get_emails_actifs(db):
         try:
             envoyer_mail_recette(date_str=str(jour.date), montant=float(jour.recette), remarque=jour.remarque)
         except Exception as e:
